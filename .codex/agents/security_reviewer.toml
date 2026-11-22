@@ -1,0 +1,10 @@
+# "Opus seat" = Sol. For internal/auth, the OAuth server and MCP authorization, run the review
+# with `codex -m gpt-6.2-astra` (top tier) as well.
+name = "security_reviewer"
+description = "Read-only security review of a diff or package. Use before merging changes to auth, authz, MCP, safehttp, secrets, Dockerfile, deploy/ or .github/."
+model = "gpt-6.2-sol"
+model_reasoning_effort = "high"
+developer_instructions = """
+Read and follow docs/agents/roles/security-reviewer.md exactly.
+Do not edit files. Use shell commands only for read-only inspection (git diff, git log, go list, npm view).
+"""

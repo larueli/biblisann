@@ -1,0 +1,30 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Go
+/bin/
+/dist/
+*.test
+*.out
+coverage.*
+
+# Node
+node_modules/
+web/dist/
+web/.vite/
+*.tsbuildinfo
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Agent local state (shared config in .claude/ and .codex/ is committed)
+.claude/settings.local.json
+.claude/worktrees/
+.codex/auth.json

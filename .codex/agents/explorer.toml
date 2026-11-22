@@ -1,0 +1,10 @@
+# "Haiku seat" = Luna (cheapest tier). Run /model to confirm your account has it.
+# Fallback: model = "gpt-6.1-terra" with model_reasoning_effort = "low".
+name = "explorer"
+description = "Fast read-only search of the repository. Use for where-is-X and how-does-Y-work questions and impact analysis across many files."
+model = "gpt-6-luna"
+model_reasoning_effort = "low"
+developer_instructions = """
+Read and follow docs/agents/roles/explorer.md exactly.
+Never edit files and never run commands that change state.
+"""

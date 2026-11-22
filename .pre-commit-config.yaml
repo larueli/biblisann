@@ -1,0 +1,94 @@
+# Hook runner: prek (https://github.com/j178/prek). This file is pre-commit compatible, so the
+# original `pre-commit` can run it too (no lock-in).
+#
+#   make hooks   install git hooks once per clone (pre-commit, commit-msg, pre-push)
+#   make check   run every hook at both stages; this is exactly what CI runs
+#
+# Stages: fast checks run on commit; slow checks (tests, vulnerability scan, web build) run on push.
+# TODO(Slice 0): freeze every `rev` to a commit SHA with `prek update --freeze`, then enable zizmor.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+  # Conventional Commits (see docs/dev/versioning.md). Also used by CI to check PR titles.
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.5.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, perf, refactor, docs, test, build, ci, chore, revert]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  # Workflow security audit. Manual until Slice 0 pins every Action by SHA (it flags tag pins).
+  # Run it with: prek run --hook-stage manual zizmor
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.32.0
+    hooks:
+      - id: zizmor
+        stages: [manual]
+
+  # Project checks live in the Makefile so humans, agents and CI call the same commands.
+  - repo: local
+    hooks:
+      - id: docs-check
+        name: agent docs consistency
+        entry: scripts/check-docs.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: lint
+        name: lint (Go and web)
+        entry: make lint
+        language: system
+        pass_filenames: false
+        files: '(\.(go|ts|tsx|js|jsx|css)$|^go\.(mod|sum)$|^web/package\.json$)'
+
+      - id: test
+        name: Go tests
+        entry: make test
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: vuln
+        name: Go vulnerability scan
+        entry: make vuln
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: web-check
+        name: web typecheck, tests, build
+        entry: make web-check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

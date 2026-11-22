@@ -1,0 +1,94 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege by default. TODO(Slice 0): pin every action below by commit SHA
+# (for example with `pinact`) and keep them current through Dependabot.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # One command for everything, identical to local use: `make check` (prek, both stages).
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - if: hashFiles('go.mod') != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - if: hashFiles('web/package.json') != ''
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - if: hashFiles('web/package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
+        with:
+          install-only: true
+          prek-version: "0.5.11"
+      - run: make check
+
+  # The squash-merge commit is the PR title, and the releaser reads it: it must be a
+  # Conventional Commit. The title goes through the environment, never into the shell command.
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
+        with:
+          install-only: true
+          prek-version: "0.5.11"
+      - run: make commit-lint
+        env:
+          MSG: ${{ github.event.pull_request.title }}
+
+  image:
+    # Build only (no push) to catch Dockerfile breakage in PRs. Publishing is in publish.yml.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - if: hashFiles('Dockerfile') != ''
+        uses: docker/setup-buildx-action@v3
+      - if: hashFiles('Dockerfile') != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  helm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - if: hashFiles('deploy/helm/biblisann/Chart.yaml') != ''
+        uses: azure/setup-helm@v4
+      - if: hashFiles('deploy/helm/biblisann/Chart.yaml') != ''
+        run: |
+          helm lint deploy/helm/biblisann
+          helm template biblisann deploy/helm/biblisann > /dev/null

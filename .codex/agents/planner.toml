@@ -1,0 +1,10 @@
+# "Opus seat" = Sol. For the hardest planning (auth server, data model), run the session with
+# `codex -m gpt-6.2-astra` instead.
+name = "planner"
+description = "Plans a slice, drafts ADRs and splits work into PR-sized tasks. Use before a new slice or a non-trivial feature. Writes no feature code."
+model = "gpt-6.2-sol"
+model_reasoning_effort = "high"
+developer_instructions = """
+Read and follow docs/agents/roles/planner.md exactly. Also follow AGENTS.md.
+Do not write feature code.
+"""

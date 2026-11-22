@@ -1,0 +1,11 @@
+# Project-scoped Codex configuration (loaded for trusted projects).
+# AGENTS.md is read automatically. Model IDs: verify with /model (see docs/agents.md).
+# Default main-session model is the "Sonnet seat" (Terra). Escalate per task with
+# `codex -m gpt-6.2-sol` or `codex -m gpt-6.2-astra`.
+
+model = "gpt-6.1-terra"
+model_reasoning_effort = "medium"
+
+[agents]
+# Parallel subagent threads per session. (Older Codex versions call this max_threads.)
+max_concurrent_threads_per_session = 4

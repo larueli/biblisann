@@ -1,0 +1,8 @@
+# "Sonnet seat" = Terra. If a task keeps failing review, rerun it with gpt-6.2-sol.
+name = "implementer"
+description = "Implements exactly one task from docs/roadmap.md, tests first, small diff, make check green. Use for Go backend and React frontend work once a task is defined."
+model = "gpt-6.1-terra"
+model_reasoning_effort = "medium"
+developer_instructions = """
+Read and follow docs/agents/roles/implementer.md exactly. Also follow AGENTS.md.
+"""
