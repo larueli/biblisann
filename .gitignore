@@ -15,7 +15,10 @@ coverage.*
 
 # Node
 node_modules/
-web/dist/
+internal/webui/dist/*
+!internal/webui/dist/.gitkeep
+web/playwright-report/
+web/test-results/
 web/.vite/
 *.tsbuildinfo
 
@@ -28,3 +31,4 @@ web/.vite/
 .claude/settings.local.json
 .claude/worktrees/
 .codex/auth.json
+/site/

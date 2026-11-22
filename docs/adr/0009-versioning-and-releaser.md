@@ -12,7 +12,8 @@ Several humans and AI agents commit to the repository. Versions, tags, changelog
 - SemVer 2.0.0, Conventional Commits 1.0.0, squash merges with the PR title as the commit message.
 - **release-please** (manifest mode) is the releaser: it keeps one release PR with the next version and `CHANGELOG.md`; merging it creates the tag and the GitHub Release. It runs in GitHub Actions but only reads Conventional Commits and writes plain files and tags, so another CI could replace it.
 - The release workflow calls `publish.yml` (reusable workflow, also runnable by hand) to build and push the image and Helm chart to GHCR. Publishing is chained from the release run rather than triggered by the tag, because tags created with the default `GITHUB_TOKEN` do not start other workflows.
-- Pre-1.0: breaking changes bump MINOR.
+- Pre-1.0: breaking changes bump MINOR. The project stays on `0.x` until Slice 3 is delivered; the `1.0.0` release is then cut on purpose with a `Release-As: 1.0.0` footer.
+- The releaser authenticates as a **GitHub App** (installation token minted in the workflow with `actions/create-github-app-token`), not a personal token.
 
 ## Alternatives considered
 
@@ -23,5 +24,5 @@ Several humans and AI agents commit to the repository. Versions, tags, changelog
 ## Consequences
 
 - The release decision is a human merge of the release PR.
-- A token other than `GITHUB_TOKEN` (GitHub App or fine-grained PAT) is needed so CI runs on the release PR. Tracked as an open decision in the roadmap.
+- A token other than `GITHUB_TOKEN` is needed so CI runs on the release PR: a GitHub App (decided). Setup steps are in `docs/dev/github.md`.
 - Bad commit messages produce bad changelogs, hence the commit-msg hook and the `pr-title` CI check.

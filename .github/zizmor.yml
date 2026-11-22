@@ -1,0 +1,6 @@
+rules:
+  self-repository:
+    ignore:
+      # The documented ./ form for a reusable workflow in the same repository is kept: the
+      # "$/" shorthand is not yet supported by actionlint.
+      - release-please.yml

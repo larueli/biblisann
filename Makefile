@@ -6,10 +6,14 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 # Pin tool versions (AGENTS.md: no floating versions).
-GOVULNCHECK_VERSION ?= v1.1.4
+GOVULNCHECK_VERSION ?= v1.10.0
+SQLC_VERSION ?= v1.31.1
+GOLANGCI_LINT_VERSION ?= v2.15.0
 IMAGE ?= biblisann:dev
+VERSION ?= dev
+ZENSICAL_VERSION ?= 0.1.3
 
-.PHONY: help hooks task check commit-lint docs-check fmt lint test vuln generate web-check dev docker
+.PHONY: help hooks task check commit-lint docs-check fmt lint test vuln generate generate-check web-check build dev dev-down docker docs docs-serve
 
 help: ## List targets
 > @grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -41,23 +45,43 @@ fmt: ## Format Go and web code
 > @if [ -f web/package.json ]; then cd web && pnpm exec biome format --write .; fi
 
 lint: ## Lint Go and web code
-> @if [ -f go.mod ]; then golangci-lint run ./...; else echo "lint: no go.mod yet, skipped"; fi
+> @if [ -f go.mod ]; then go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./...; else echo "lint: no go.mod yet, skipped"; fi
 > @if [ -f web/package.json ]; then cd web && pnpm exec biome check .; fi
 
 test: ## Run Go tests with the race detector (Docker needed for testcontainers)
 > @if [ -f go.mod ]; then go test -race -count=1 ./...; else echo "test: no go.mod yet, skipped"; fi
 
-vuln: ## Scan Go dependencies for known vulnerabilities
+vuln: ## Scan Go and web dependencies for known vulnerabilities
 > @if [ -f go.mod ]; then go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...; else echo "vuln: no go.mod yet, skipped"; fi
+> @if [ -f web/package.json ]; then cd web && pnpm audit --prod --audit-level high; fi
 
-generate: ## Regenerate sqlc, the OpenAPI spec and the web API client (wired in Slice 0)
-> @echo "generate: not wired yet (Slice 0)"
+generate: ## Regenerate sqlc code, the OpenAPI spec and the web API client
+> go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate
+> go run ./cmd/biblisann openapi > api/openapi.json
+> cd web && pnpm install --frozen-lockfile && pnpm run generate:api
+
+generate-check: generate ## Fail when generated files are not committed up to date
+> git diff --exit-code -- api internal/db/sqlc web/src/api
 
 web-check: ## Typecheck, test and build the web app
 > @if [ -f web/package.json ]; then cd web && pnpm install --frozen-lockfile && pnpm run typecheck && pnpm run test && pnpm run build; else echo "web-check: no web/ yet, skipped"; fi
 
-dev: ## Start the local dev stack (Compose, wired in Slice 0)
-> @echo "dev: not wired yet (Slice 0)"
+build: ## Build the web app, then the static binary into bin/biblisann
+> cd web && pnpm install --frozen-lockfile && pnpm run build
+> CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/larueli/biblisann/internal/version.version=$(VERSION)" -o bin/biblisann ./cmd/biblisann
+
+dev: ## Start PostgreSQL and the app with Compose (http://localhost:8080)
+> @scripts/dev-secrets.sh
+> docker compose -f deploy/compose/compose.yaml up --build
+
+dev-down: ## Stop the Compose stack (keeps the data volume)
+> docker compose -f deploy/compose/compose.yaml down
 
 docker: ## Build the container image locally
-> @if [ -f Dockerfile ]; then docker build -t $(IMAGE) .; else echo "docker: no Dockerfile yet, skipped"; fi
+> docker build --build-arg VERSION=$(VERSION) -t $(IMAGE) .
+
+docs: ## Build the documentation site into site/
+> uvx --from "zensical==$(ZENSICAL_VERSION)" zensical build --clean
+
+docs-serve: ## Serve the documentation site locally
+> uvx --from "zensical==$(ZENSICAL_VERSION)" zensical serve

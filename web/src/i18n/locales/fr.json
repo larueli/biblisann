@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "Biblisann",
+    "tagline": "Votre bibliothèque papier, dans votre poche."
+  },
+  "home": {
+    "welcome": "Bienvenue",
+    "intro": "Biblisann garde la trace des livres que vous possédez, de leur emplacement, de ceux que vous avez lus et de ceux qui sont prêtés.",
+    "server": "Version du serveur : {{version}}",
+    "serverLoading": "Connexion au serveur…",
+    "serverError": "Le serveur est injoignable."
+  },
+  "language": {
+    "label": "Langue",
+    "en": "English",
+    "fr": "Français"
+  },
+  "notFound": {
+    "title": "Page introuvable",
+    "back": "Retour à l'accueil"
+  }
+}

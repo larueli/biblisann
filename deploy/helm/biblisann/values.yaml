@@ -1,0 +1,72 @@
+# Default values. Everything here passes the "restricted" Pod Security Standard.
+
+image:
+  repository: ghcr.io/larueli/biblisann
+  # Empty: use the chart appVersion. Prefer pinning a digest in production.
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+replicaCount: 1
+
+# Public origin of the service (scheme and host only). Required for cookies, OAuth and passkeys.
+baseUrl: http://localhost:8080
+# CIDRs of reverse proxies allowed to set X-Forwarded-For (for example the ingress controller).
+trustedProxies: []
+
+logLevel: info
+logFormat: json
+
+database:
+  # "external": a PostgreSQL you run. "cnpg": a CloudNativePG Cluster created by this chart
+  # (the CloudNativePG operator must be installed).
+  mode: external
+  external:
+    # Secret holding the connection URL, mounted as a file (BIBLISANN_DATABASE_URL_FILE).
+    existingSecret: ""
+    key: database-url
+  cnpg:
+    instances: 1
+    storage:
+      size: 5Gi
+      storageClassName: ""
+    imageName: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: books.example.org
+  tls:
+    secretName: ""
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+networkPolicy:
+  # Ingress to the app only from the namespaces/pods you select. Disabled by default because
+  # selectors depend on the cluster.
+  enabled: false
+  ingressFrom: []
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

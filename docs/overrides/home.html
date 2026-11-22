@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="bb-hero">
+  <div class="bb-hero__inner">
+    <img class="bb-hero__logo" src="{{ 'assets/logo.svg' | url }}" alt="" width="96" height="96">
+    <h1>Biblisann</h1>
+    <p class="bb-hero__tagline">Where are my books? Do I already own this one? Who has it?</p>
+    <p class="bb-hero__sub">A self-hosted manager for your physical library, with an offline barcode-scanning app, a REST API and an MCP server.</p>
+    <p class="bb-hero__cta">
+      <a class="md-button md-button--primary" href="{{ 'user/' | url }}">Get started</a>
+      <a class="md-button" href="https://github.com/larueli/biblisann">Source on GitHub</a>
+    </p>
+  </div>
+</section>
+
+<section class="bb-features">
+  <article><h2>Scan and own</h2><p>Scan a barcode in a shop, even offline, and know at once whether you already own the book, in any edition.</p></article>
+  <article><h2>Organise and lend</h2><p>Places, shelves, reading status, lists, series, and loans with reminders.</p></article>
+  <article><h2>Yours to run</h2><p>One static binary and PostgreSQL. Docker, Compose or Kubernetes. AGPL-3.0, no lock-in.</p></article>
+  <article><h2>Open by design</h2><p>OpenAPI 3.1 API, an MCP server for your AI tools, OIDC and passkeys.</p></article>
+</section>
+{% endblock %}

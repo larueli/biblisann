@@ -5,13 +5,13 @@
 #   make check   run every hook at both stages; this is exactly what CI runs
 #
 # Stages: fast checks run on commit; slow checks (tests, vulnerability scan, web build) run on push.
-# TODO(Slice 0): freeze every `rev` to a commit SHA with `prek update --freeze`, then enable zizmor.
+# Every `rev` is frozen to a commit SHA (`prek update --freeze`).
 default_install_hook_types: [pre-commit, commit-msg, pre-push]
 default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-case-conflict
@@ -19,6 +19,8 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
+        # Helm templates are Go templates, pnpm-lock.yaml is multi-document: both are valid for their tools.
+        exclude: '^(deploy/helm/[^/]+/templates/|web/pnpm-lock\.yaml$)'
       - id: detect-private-key
       - id: end-of-file-fixer
       - id: mixed-line-ending
@@ -28,29 +30,27 @@ repos:
 
   # Conventional Commits (see docs/dev/versioning.md). Also used by CI to check PR titles.
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.5.0
+    rev: 33b50eb042bee26eac0ee96ad84aa9c1b4dccdd8  # frozen: v4.5.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
         args: [feat, fix, perf, refactor, docs, test, build, ci, chore, revert]
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.1
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
     hooks:
       - id: gitleaks
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # frozen: v1.7.12
     hooks:
       - id: actionlint
 
-  # Workflow security audit. Manual until Slice 0 pins every Action by SHA (it flags tag pins).
-  # Run it with: prek run --hook-stage manual zizmor
+  # Workflow security audit (all Actions are pinned by SHA).
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.32.0
+    rev: 0eb9e4a60caf04df64b499ed1e8bef55f4440eae  # frozen: v1.33.0
     hooks:
       - id: zizmor
-        stages: [manual]
 
   # Project checks live in the Makefile so humans, agents and CI call the same commands.
   - repo: local
@@ -68,6 +68,14 @@ repos:
         language: system
         pass_filenames: false
         files: '(\.(go|ts|tsx|js|jsx|css)$|^go\.(mod|sum)$|^web/package\.json$)'
+
+      - id: generate-check
+        name: generated files are up to date
+        entry: make generate-check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
 
       - id: test
         name: Go tests

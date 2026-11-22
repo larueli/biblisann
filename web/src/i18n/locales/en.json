@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "Biblisann",
+    "tagline": "Your physical library, in your pocket."
+  },
+  "home": {
+    "welcome": "Welcome",
+    "intro": "Biblisann keeps track of the books you own, where they are, whether you read them and who borrowed them.",
+    "server": "Server version: {{version}}",
+    "serverLoading": "Contacting the server…",
+    "serverError": "The server cannot be reached."
+  },
+  "language": {
+    "label": "Language",
+    "en": "English",
+    "fr": "Français"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "back": "Back to the home page"
+  }
+}

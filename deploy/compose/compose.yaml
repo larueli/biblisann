@@ -1,0 +1,52 @@
+# Biblisann with PostgreSQL. Start: docker compose -f deploy/compose/compose.yaml up --build
+# Secrets are Compose secrets (files), never plain environment values.
+name: biblisann
+
+services:
+  app:
+    build:
+      context: ../..
+    image: biblisann:dev
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"   # publish behind a reverse proxy in production
+    environment:
+      BIBLISANN_BASE_URL: http://localhost:8080
+      BIBLISANN_DATABASE_URL_FILE: /run/secrets/database_url
+      BIBLISANN_LOG_FORMAT: text
+    secrets:
+      - database_url
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  db:
+    image: postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
+    environment:
+      POSTGRES_DB: biblisann
+      POSTGRES_USER: biblisann
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biblisann -d biblisann"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+# Development-only credentials. Generate your own for any real deployment (see docs/user/install.md).
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  database_url:
+    file: ./secrets/database_url

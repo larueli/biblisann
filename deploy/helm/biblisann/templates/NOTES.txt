@@ -1,0 +1,6 @@
+Biblisann {{ .Chart.AppVersion }} is installed.
+Public URL: {{ .Values.baseUrl }}
+{{- if not .Values.ingress.enabled }}
+No ingress is configured. Try it with:
+  kubectl port-forward svc/{{ include "biblisann.fullname" . }} 8080:{{ .Values.service.port }}
+{{- end }}

@@ -1,0 +1,22 @@
+/* Landing page only. Placeholder styling: replace with the designed page when it exists. */
+.bb-hero {
+  background: linear-gradient(135deg, #1f3a5f, #2d5a8a);
+  color: #fff;
+  padding: 4rem 1rem;
+  text-align: center;
+}
+.bb-hero__inner { margin: 0 auto; max-width: 40rem; }
+.bb-hero h1 { color: #fff; font-size: 2.6rem; margin: 0.5rem 0; }
+.bb-hero__tagline { font-size: 1.3rem; margin: 0.5rem 0; }
+.bb-hero__sub { opacity: 0.85; }
+.bb-hero__cta .md-button { color: #fff; border-color: #fff; margin: 0.25rem; }
+.bb-hero__cta .md-button--primary { background: #e0b35a; border-color: #e0b35a; color: #1f1f1f; }
+.bb-features {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  margin: 0 auto;
+  max-width: 61rem;
+  padding: 2.5rem 1rem;
+}
+.bb-features h2 { font-size: 1.1rem; margin-top: 0; }

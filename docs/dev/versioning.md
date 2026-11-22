@@ -57,7 +57,7 @@ To republish an existing tag (for example after a registry outage), run the `pub
 
 ## Version in the binary
 
-The build receives the tag through the `VERSION` build argument and injects it with `-ldflags "-X"`. The same value is returned by `/version`, used as the OpenAPI `info.version`, and written to the Helm chart `appVersion` (Slice 0 task).
+The build receives the tag through the `VERSION` build argument and injects it with `-ldflags "-X"`. The same value is returned by `/v1/version`, used as the OpenAPI `info.version`, and written to the Helm chart `appVersion` (Slice 0 task).
 
 ## Local workflow
 
@@ -71,4 +71,4 @@ make check                              # the same gates as CI
 
 - Merge method: squash only, default commit message = **pull request title**.
 - Protect `main`: require the `check` and `pr-title` jobs, no direct pushes, linear history.
-- Secret `RELEASE_PLEASE_TOKEN` (GitHub App token or fine-grained PAT with contents and pull-requests write). Without it the release PR is created, but GitHub does not run CI on it.
+- GitHub App (variable `RELEASE_APP_ID`, secret `RELEASE_APP_PRIVATE_KEY`, setup in `docs/dev/github.md`). Without it the release PR is created, but GitHub does not run CI on it.

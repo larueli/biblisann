@@ -1,0 +1,47 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - gosec
+    - bodyclose
+    - noctx
+    - errorlint
+    - forbidigo
+    - revive
+    - misspell
+    - gocritic
+  settings:
+    forbidigo:
+      forbid:
+        # AGENTS.md: all outbound HTTP goes through internal/safehttp (SSRF protection).
+        - pattern: ^http\.(DefaultClient|Get|Post|PostForm|Head)$
+          msg: use internal/safehttp for outbound requests
+        - pattern: ^http\.Client$
+          msg: use internal/safehttp for outbound requests
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+  exclusions:
+    paths:
+      - internal/db/sqlc
+    rules:
+      - path: internal/safehttp/
+        linters: [forbidigo]
+      - path: _test\.go
+        linters: [gosec, noctx]
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/larueli/biblisann

@@ -1,0 +1,2 @@
+# Supply-chain policy (AGENTS.md): never install a release younger than 24 hours.
+minimumReleaseAge: 1440

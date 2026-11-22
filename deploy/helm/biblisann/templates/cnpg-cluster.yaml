@@ -1,0 +1,21 @@
+{{- if eq .Values.database.mode "cnpg" }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "biblisann.cnpgName" . }}
+  labels: {{- include "biblisann.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.database.cnpg.instances }}
+  {{- with .Values.database.cnpg.imageName }}
+  imageName: {{ . | quote }}
+  {{- end }}
+  bootstrap:
+    initdb:
+      database: biblisann
+      owner: biblisann
+  storage:
+    size: {{ .Values.database.cnpg.storage.size }}
+    {{- with .Values.database.cnpg.storage.storageClassName }}
+    storageClass: {{ . }}
+    {{- end }}
+{{- end }}
