@@ -112,6 +112,13 @@ type IdempotencyKey struct {
 	CreatedAt      time.Time
 }
 
+type Identity struct {
+	Issuer    string
+	Subject   string
+	UserID    uuid.UUID
+	CreatedAt time.Time
+}
+
 type Instance struct {
 	ID         uuid.UUID
 	LibraryID  uuid.UUID
@@ -214,6 +221,13 @@ type NotificationChannel struct {
 	Config    []byte
 	Enabled   bool
 	CreatedAt time.Time
+}
+
+type OidcFlow struct {
+	StateHash []byte
+	Nonce     string
+	Verifier  string
+	ExpiresAt time.Time
 }
 
 type PasswordReset struct {

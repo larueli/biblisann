@@ -28,11 +28,13 @@ import (
 	"github.com/larueli/biblisann/internal/loans"
 	"github.com/larueli/biblisann/internal/mcpserver"
 	"github.com/larueli/biblisann/internal/notify"
+	"github.com/larueli/biblisann/internal/oidc"
 	"github.com/larueli/biblisann/internal/providers"
 	"github.com/larueli/biblisann/internal/ratelimit"
 	"github.com/larueli/biblisann/internal/reading"
 	"github.com/larueli/biblisann/internal/safehttp"
 	"github.com/larueli/biblisann/internal/scan"
+	"github.com/larueli/biblisann/internal/scim"
 	"github.com/larueli/biblisann/internal/storage"
 	"github.com/larueli/biblisann/internal/tokens"
 	"github.com/larueli/biblisann/internal/version"
@@ -149,7 +151,13 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	if err != nil {
 		return nil, nil, err
 	}
-	h, _ := api.New(api.Deps{
+	var oidcSvc *oidc.Service
+	if cfg.OIDCIssuer != "" {
+		oidcSvc = oidc.New(oidc.Config{Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret.Reveal(),
+			RedirectURL: cfg.BaseURL.String() + "/v1/auth/oidc/callback", Scopes: cfg.OIDCScopes, GroupsClaim: cfg.OIDCGroupsClaim,
+			AdminGroup: cfg.OIDCAdminGroup, AutoCreate: cfg.OIDCAutoCreate, Label: cfg.OIDCLabel}, pool, authSvc, fetcher.Std())
+	}
+	h, _ := api.New(api.Deps{OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
 		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
 		Auth: authSvc, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
 		Lists: listsSvc, Loans: loansSvc,

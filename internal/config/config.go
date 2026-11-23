@@ -32,6 +32,16 @@ type Config struct {
 	// provider (air-gapped instances, curated data, tests).
 	StaticProviderFile string
 
+	// Single sign-on (optional): enabled when OIDCIssuer is set.
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret Secret
+	OIDCScopes       []string
+	OIDCGroupsClaim  string
+	OIDCAdminGroup   string
+	OIDCAutoCreate   bool
+	OIDCLabel        string
+
 	// SecretKey (base64, 32 bytes) seals secrets at rest (TOTP). Without it two-factor is off.
 	// Generate with: openssl rand -base64 32
 	SecretKey Secret
@@ -83,6 +93,13 @@ func Load(src Sources, opts Options) (Config, error) {
 		Providers:          r.list("PROVIDERS", []string{"bnf", "openlibrary"}),
 		DisabledProviders:  r.list("DISABLED_PROVIDERS", nil),
 		StaticProviderFile: r.str("STATIC_PROVIDER_FILE", ""),
+		OIDCIssuer:         r.str("OIDC_ISSUER", ""),
+		OIDCClientID:       r.str("OIDC_CLIENT_ID", ""),
+		OIDCScopes:         r.list("OIDC_SCOPES", nil),
+		OIDCGroupsClaim:    r.str("OIDC_GROUPS_CLAIM", "groups"),
+		OIDCAdminGroup:     r.str("OIDC_ADMIN_GROUP", ""),
+		OIDCAutoCreate:     r.boolean("OIDC_AUTO_CREATE", true),
+		OIDCLabel:          r.str("OIDC_LABEL", ""),
 		StorageBackend:     r.oneOf("STORAGE_BACKEND", "local", "local", "s3"),
 		S3Endpoint:         r.str("S3_ENDPOINT", ""),
 		S3Bucket:           r.str("S3_BUCKET", ""),
@@ -103,6 +120,12 @@ func Load(src Sources, opts Options) (Config, error) {
 	}
 	if v, ok := r.lookup("SMTP_PASSWORD", true); ok {
 		c.SMTPPassword = Secret(v)
+	}
+	if v, ok := r.lookup("OIDC_CLIENT_SECRET", true); ok {
+		c.OIDCClientSecret = Secret(v)
+	}
+	if c.OIDCIssuer != "" && (c.OIDCClientID == "" || c.OIDCClientSecret == "") {
+		r.fail("%sOIDC_ISSUER needs OIDC_CLIENT_ID and OIDC_CLIENT_SECRET (or OIDC_CLIENT_SECRET_FILE)", prefix)
 	}
 	if v, ok := r.lookup("SECRET_KEY", true); ok {
 		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v))

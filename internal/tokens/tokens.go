@@ -24,8 +24,10 @@ import (
 const (
 	KindPAT    = "pat"
 	KindFeed   = "feed"
+	KindSCIM   = "scim"
 	prefixPAT  = "bb_pat_"
 	prefixFeed = "bb_feed_"
+	prefixSCIM = "bb_scim_"
 )
 
 // Errors.
@@ -60,7 +62,7 @@ func (s *Service) Create(ctx context.Context, kind, name string, scopes []string
 		return Created{}, authz.ErrForbidden // tokens cannot mint tokens
 	}
 	name = strings.TrimSpace(name)
-	if name == "" || len(name) > 100 || (kind != KindPAT && kind != KindFeed) {
+	if name == "" || len(name) > 100 || (kind != KindPAT && kind != KindFeed && kind != KindSCIM) {
 		return Created{}, ErrInvalid
 	}
 	if kind == KindPAT {
@@ -74,6 +76,9 @@ func (s *Service) Create(ctx context.Context, kind, name string, scopes []string
 		}
 	} else {
 		scopes = []string{}
+		if kind == KindSCIM && !p.IsAdmin {
+			return Created{}, authz.ErrForbidden // provisioning tokens are an administrator tool
+		}
 	}
 	if expires != nil && !expires.After(time.Now()) {
 		return Created{}, ErrInvalid
@@ -83,8 +88,11 @@ func (s *Service) Create(ctx context.Context, kind, name string, scopes []string
 		return Created{}, fmt.Errorf("tokens: random: %w", err)
 	}
 	prefix := prefixPAT
-	if kind == KindFeed {
+	switch kind {
+	case KindFeed:
 		prefix = prefixFeed
+	case KindSCIM:
+		prefix = prefixSCIM
 	}
 	secret := prefix + base64.RawURLEncoding.EncodeToString(raw)
 	meta, err := s.q.CreateToken(ctx, dbsqlc.CreateTokenParams{UserID: p.UserID, Name: name, Kind: kind,
@@ -157,4 +165,17 @@ func (s *Service) Revoke(ctx context.Context, id uuid.UUID) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ValidSCIM reports whether secret is a live SCIM provisioning token.
+func (s *Service) ValidSCIM(ctx context.Context, secret string) bool {
+	if !strings.HasPrefix(secret, prefixSCIM) || len(secret) > 100 {
+		return false
+	}
+	t, err := s.q.GetTokenByHash(ctx, hash(secret))
+	if err != nil || t.Kind != KindSCIM || t.DisabledAt != nil || !t.IsAdmin {
+		return false
+	}
+	_ = s.q.TouchToken(ctx, t.ID)
+	return true
 }

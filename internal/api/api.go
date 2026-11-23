@@ -19,9 +19,11 @@ import (
 	"github.com/larueli/biblisann/internal/lists"
 	"github.com/larueli/biblisann/internal/loans"
 	"github.com/larueli/biblisann/internal/notify"
+	"github.com/larueli/biblisann/internal/oidc"
 	"github.com/larueli/biblisann/internal/ratelimit"
 	"github.com/larueli/biblisann/internal/reading"
 	"github.com/larueli/biblisann/internal/scan"
+	"github.com/larueli/biblisann/internal/scim"
 	"github.com/larueli/biblisann/internal/tokens"
 )
 
@@ -51,6 +53,8 @@ type Deps struct {
 	Limiter  ratelimit.Limiter // login and registration throttling
 	Tokens   TokenResolver
 	Importer *importer.Importer
+	OIDC     *oidc.Service                                // nil: single sign-on is off
+	SCIM     *scim.Handler                                // nil: SCIM provisioning is off
 	Backup   func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
 	MCP      http.Handler                                 // the MCP endpoint, mounted at /mcp (nil: disabled)
 	Extra    func(huma.API, *Server)                      // hook for later slices to register operations
@@ -98,12 +102,16 @@ func New(d Deps) (http.Handler, huma.API) {
 	srv.registerSharing(a)
 	srv.registerTokens(a)
 	srv.registerExtras(a)
+	srv.registerOIDC(a, mux)
 	mux.HandleFunc("/v1/admin/backup", srv.serveBackup)
 	mux.HandleFunc("GET /v1/feeds/loans.ics", srv.serveLoansFeed)
 	if d.Extra != nil {
 		d.Extra(a, srv)
 	}
 	mux.HandleFunc("GET /v1/covers/{id}", srv.serveCover)
+	if d.SCIM != nil {
+		d.SCIM.Routes(mux)
+	}
 	if d.MCP != nil {
 		mux.Handle("/mcp", d.MCP)
 	}

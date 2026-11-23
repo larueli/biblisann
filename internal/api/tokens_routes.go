@@ -20,7 +20,7 @@ import (
 type tokenBody struct {
 	ID         uuid.UUID   `json:"id"`
 	Name       string      `json:"name"`
-	Kind       string      `json:"kind" enum:"pat,feed"`
+	Kind       string      `json:"kind" enum:"pat,feed,scim"`
 	Scopes     []string    `json:"scopes" nullable:"false"`
 	LibraryIDs []uuid.UUID `json:"library_ids,omitempty" doc:"When set, the token only reaches these libraries."`
 	ExpiresAt  *time.Time  `json:"expires_at,omitempty"`
@@ -57,7 +57,7 @@ func (s *Server) registerTokens(a huma.API) {
 		func(ctx context.Context, in *struct {
 			Body struct {
 				Name       string      `json:"name" minLength:"1" maxLength:"100"`
-				Kind       string      `json:"kind,omitempty" enum:"pat,feed" default:"pat"`
+				Kind       string      `json:"kind,omitempty" enum:"pat,feed,scim" default:"pat"`
 				Scopes     []string    `json:"scopes,omitempty" doc:"read and/or write (personal access tokens)."`
 				LibraryIDs []uuid.UUID `json:"library_ids,omitempty"`
 				ExpiresAt  *time.Time  `json:"expires_at,omitempty"`
