@@ -37,6 +37,12 @@ Supply-chain attacks (typosquatting, hallucinated package names, abandoned packa
 | `vitest`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom` | Unit and component tests | MIT | Jest | Slice 0 |
 | `@playwright/test` | End-to-end smoke tests | Apache-2.0 | Cypress | Slice 0 |
 | `@biomejs/biome` | Lint and format | MIT OR Apache-2.0 | ESLint + Prettier | Slice 0 |
+| `github.com/google/uuid` | UUID type used by sqlc-generated code and the API | BSD-3-Clause | `pgtype.UUID` (awkward), own type | Slice 1 |
+| `golang.org/x/crypto` (argon2) | Argon2id password hashing | BSD-3-Clause | stdlib has none; `alexedwards/argon2id` (thin wrapper, not needed) | Slice 1 |
+| `golang.org/x/image` (draw) | Cover resizing (CatmullRom) | BSD-3-Clause | stdlib `image` has no scaler | Slice 1 |
+| `dexie`, `dexie-react-hooks` | IndexedDB offline index and scan outbox | Apache-2.0 | `idb` (lower level), raw IndexedDB | Slice 1 |
+| `barcode-detector`, `zxing-wasm` | `BarcodeDetector` polyfill (WASM decoder served by the app, not a CDN) | MIT | `@zxing/library` (older, JS-only, slower), native API only (not on Firefox/iOS) | Slice 1 |
+| `fake-indexeddb` (dev) | IndexedDB in unit tests | Apache-2.0 | browser tests only | Slice 1 |
 | `zensical` (docs build tool, run with `uvx`, not part of the product) | Documentation site | MIT | MkDocs Material (see ADR 0012) | Slice 0 |
 
 ## Consequences

@@ -9,3 +9,7 @@ data:
   BIBLISANN_TRUSTED_PROXIES: {{ join "," .Values.trustedProxies | quote }}
   BIBLISANN_LOG_LEVEL: {{ .Values.logLevel | quote }}
   BIBLISANN_LOG_FORMAT: {{ .Values.logFormat | quote }}
+  BIBLISANN_REGISTRATION: {{ .Values.registration | quote }}
+  BIBLISANN_PROVIDERS: {{ join "," .Values.providers | quote }}
+  BIBLISANN_DISABLED_PROVIDERS: {{ join "," .Values.disabledProviders | quote }}
+  BIBLISANN_COVERS_DIR: /data/covers

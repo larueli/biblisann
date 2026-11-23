@@ -87,19 +87,11 @@ jobs:
           helm template biblisann deploy/helm/biblisann --set database.external.existingSecret=db > /dev/null
           helm template biblisann deploy/helm/biblisann --set database.mode=cnpg --set ingress.enabled=true > /dev/null
 
-  # Smoke test of the real binary with PostgreSQL: Playwright drives the built web app.
+  # Smoke test of the real binary with PostgreSQL: Playwright drives the built web app
+  # (scripts/e2e.sh starts its own PostgreSQL container).
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71
-        env:
-          POSTGRES_PASSWORD: ci
-          POSTGRES_DB: biblisann
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -115,12 +107,5 @@ jobs:
           node-version-file: web/.nvmrc
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
-      - run: make build VERSION=ci
-      - run: cd web && pnpm exec playwright install --with-deps chromium
-      - name: Run the server and the smoke test
-        env:
-          BIBLISANN_DATABASE_URL: postgres://postgres:ci@localhost:5432/biblisann?sslmode=disable
-        run: |
-          ./bin/biblisann serve &
-          for _ in $(seq 1 30); do curl -fs localhost:8080/readyz && break; sleep 1; done
-          cd web && pnpm run e2e
+      - run: cd web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
+      - run: make e2e VERSION=ci

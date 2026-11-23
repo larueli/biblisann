@@ -20,6 +20,16 @@ type Config struct {
 	LogFormat       string // "json" or "text"
 	ShutdownTimeout time.Duration
 	MigrateOnStart  bool
+	// Registration is "first-user", "open" or "closed".
+	Registration string
+	CoversDir    string
+	// Providers is the default ordered list of metadata providers; DisabledProviders are off
+	// for everyone (ADR 0013).
+	Providers         []string
+	DisabledProviders []string
+	// StaticProviderFile is an optional JSON file of ISBN -> metadata served by the "static"
+	// provider (air-gapped instances, curated data, tests).
+	StaticProviderFile string
 }
 
 // Options select which values are mandatory for the command being run.
@@ -33,13 +43,18 @@ func Load(src Sources, opts Options) (Config, error) {
 	r.loadConfigFile()
 
 	c := Config{
-		ListenAddr:      r.str("LISTEN_ADDR", ":8080"),
-		BaseURL:         r.baseURL("BASE_URL", "http://localhost:8080"),
-		TrustedProxies:  r.prefixes("TRUSTED_PROXIES"),
-		LogLevel:        r.level("LOG_LEVEL", slog.LevelInfo),
-		LogFormat:       r.oneOf("LOG_FORMAT", "json", "json", "text"),
-		ShutdownTimeout: r.duration("SHUTDOWN_TIMEOUT", 20*time.Second),
-		MigrateOnStart:  r.boolean("MIGRATE_ON_START", true),
+		ListenAddr:         r.str("LISTEN_ADDR", ":8080"),
+		BaseURL:            r.baseURL("BASE_URL", "http://localhost:8080"),
+		TrustedProxies:     r.prefixes("TRUSTED_PROXIES"),
+		LogLevel:           r.level("LOG_LEVEL", slog.LevelInfo),
+		LogFormat:          r.oneOf("LOG_FORMAT", "json", "json", "text"),
+		ShutdownTimeout:    r.duration("SHUTDOWN_TIMEOUT", 20*time.Second),
+		MigrateOnStart:     r.boolean("MIGRATE_ON_START", true),
+		Registration:       r.oneOf("REGISTRATION", "first-user", "first-user", "open", "closed"),
+		CoversDir:          r.str("COVERS_DIR", "data/covers"),
+		Providers:          r.list("PROVIDERS", []string{"bnf", "openlibrary"}),
+		DisabledProviders:  r.list("DISABLED_PROVIDERS", nil),
+		StaticProviderFile: r.str("STATIC_PROVIDER_FILE", ""),
 	}
 	if v, ok := r.lookup("DATABASE_URL", true); ok {
 		c.DatabaseURL = Secret(v)
@@ -68,6 +83,9 @@ func (c Config) LogValue() slog.Value {
 		slog.String("log_format", c.LogFormat),
 		slog.Duration("shutdown_timeout", c.ShutdownTimeout),
 		slog.Bool("migrate_on_start", c.MigrateOnStart),
+		slog.String("registration", c.Registration),
+		slog.String("covers_dir", c.CoversDir),
+		slog.Any("providers", c.Providers),
 	)
 }
 
@@ -169,6 +187,21 @@ func (r *reader) prefixes(name string) []netip.Prefix {
 			continue
 		}
 		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+	return out
+}
+
+// list parses a comma-separated list.
+func (r *reader) list(name string, def []string) []string {
+	v, ok := r.lookup(name, false)
+	if !ok {
+		return def
+	}
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		if item = strings.ToLower(strings.TrimSpace(item)); item != "" {
+			out = append(out, item)
+		}
 	}
 	return out
 }

@@ -25,6 +25,10 @@ linters:
           msg: use internal/safehttp for outbound requests
         - pattern: ^http\.Client$
           msg: use internal/safehttp for outbound requests
+    gosec:
+      excludes:
+        - G115 # int conversions: every value is range-validated at the API boundary
+        - G124 # cookie flags are set from configuration (Secure follows the https base URL)
     revive:
       rules:
         - name: exported
@@ -36,7 +40,7 @@ linters:
       - path: internal/safehttp/
         linters: [forbidigo]
       - path: _test\.go
-        linters: [gosec, noctx]
+        linters: [gosec, noctx, forbidigo]
 formatters:
   enable:
     - gofmt

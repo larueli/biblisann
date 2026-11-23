@@ -3,10 +3,18 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+
+	"github.com/larueli/biblisann/internal/auth"
+	"github.com/larueli/biblisann/internal/catalog"
+	"github.com/larueli/biblisann/internal/library"
+	"github.com/larueli/biblisann/internal/ratelimit"
 )
 
 // Pinger reports whether a dependency (the database) is reachable.
@@ -14,12 +22,26 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
-// Deps are the collaborators of the HTTP surface.
+// Deps are the collaborators of the HTTP surface. Services may be nil in spec-export mode.
 type Deps struct {
 	Version string
-	DB      Pinger         // nil in spec-export mode
-	Web     http.Handler   // the SPA; nil answers 404
-	Extra   func(huma.API) // hook for later slices to register operations
+	DB      Pinger       // nil in spec-export mode
+	Web     http.Handler // the SPA; nil answers 404
+
+	Log     *slog.Logger
+	BaseURL *url.URL
+	Auth    *auth.Service
+	Library *library.Service
+	Catalog *catalog.Service
+	Limiter ratelimit.Limiter // login and registration throttling
+	Tokens  TokenResolver
+	Extra   func(huma.API, *Server) // hook for later slices to register operations
+}
+
+// Server holds what route handlers share.
+type Server struct {
+	Deps
+	secure bool
 }
 
 // New returns the root handler (without middleware) and the Huma API for introspection.
@@ -40,10 +62,22 @@ func New(d Deps) (http.Handler, huma.API) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
-	registerVersion(a, d.Version)
-	if d.Extra != nil {
-		d.Extra(a)
+	if d.Log == nil {
+		d.Log = slog.Default()
 	}
+	if d.BaseURL == nil {
+		d.BaseURL = &url.URL{Scheme: "http", Host: "localhost:8080"}
+	}
+	srv := &Server{Deps: d, secure: d.BaseURL.Scheme == "https"}
+	registerVersion(a, d.Version)
+	srv.registerAuth(a)
+	srv.registerLibraries(a)
+	srv.registerCatalog(a)
+	srv.registerSync(a)
+	if d.Extra != nil {
+		d.Extra(a, srv)
+	}
+	mux.HandleFunc("GET /v1/covers/{id}", srv.serveCover)
 
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, _ *http.Request) {
 		writeProblem(w, http.StatusNotFound, "no such API operation")
@@ -51,7 +85,21 @@ func New(d Deps) (http.Handler, huma.API) {
 	if d.Web != nil {
 		mux.Handle("/", d.Web)
 	}
-	return mux, a
+	var h http.Handler = mux
+	if d.Auth != nil {
+		h = (&Authenticator{Auth: d.Auth, BaseURL: d.BaseURL, Secure: srv.secure, Tokens: d.Tokens}).Middleware(h)
+	}
+	return noStoreAPI(h), a
+}
+
+// noStoreAPI keeps API responses out of shared caches: they are per-user.
+func noStoreAPI(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/v1/") && !strings.HasPrefix(r.URL.Path, "/v1/covers/") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func config(version string) huma.Config {

@@ -3,13 +3,6 @@
     "name": "Biblisann",
     "tagline": "Votre bibliothèque papier, dans votre poche."
   },
-  "home": {
-    "welcome": "Bienvenue",
-    "intro": "Biblisann garde la trace des livres que vous possédez, de leur emplacement, de ceux que vous avez lus et de ceux qui sont prêtés.",
-    "server": "Version du serveur : {{version}}",
-    "serverLoading": "Connexion au serveur…",
-    "serverError": "Le serveur est injoignable."
-  },
   "language": {
     "label": "Langue",
     "en": "English",
@@ -18,5 +11,50 @@
   "notFound": {
     "title": "Page introuvable",
     "back": "Retour à l'accueil"
+  },
+  "common": {
+    "loading": "Chargement…"
+  },
+  "auth": {
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "createAccount": "Créer un compte",
+    "name": "Nom",
+    "email": "Adresse e-mail",
+    "password": "Mot de passe",
+    "passwordHint": "10 caractères minimum. Choisissez une phrase de passe, pas un mot.",
+    "switchToRegister": "Pas encore de compte ? En créer un",
+    "switchToLogin": "J'ai déjà un compte"
+  },
+  "library": {
+    "search": "Rechercher titre, auteur, ISBN…",
+    "scan": "Scanner",
+    "empty": "Aucun livre pour l'instant. Scannez le premier !",
+    "noResults": "Aucun livre ne correspond.",
+    "choose": "Bibliothèque",
+    "firstRun": "Créez votre première bibliothèque pour ajouter des livres.",
+    "name": "Nom de la bibliothèque",
+    "namePlaceholder": "Ma bibliothèque",
+    "create": "Créer la bibliothèque"
+  },
+  "scan": {
+    "title": "Scanner des livres",
+    "back": "Retour à la bibliothèque",
+    "cameraError": "La caméra n'est pas disponible. Saisissez l'ISBN.",
+    "cameraLabel": "Aperçu de la caméra",
+    "manualPlaceholder": "ISBN",
+    "add": "Ajouter",
+    "notIsbn": "Ce n'est pas un code-barres de livre (ISBN).",
+    "alreadyOwned": "Vous possédez déjà « {{title}} ».",
+    "queued": "Ajouté à la file : {{isbn}}",
+    "outbox": "Scans récents",
+    "status": {
+      "pending": "En attente du réseau",
+      "sending": "Envoi…",
+      "added": "Ajouté",
+      "already_owned": "Déjà possédé",
+      "not_found": "Livre inconnu",
+      "failed": "Échec"
+    }
   }
 }

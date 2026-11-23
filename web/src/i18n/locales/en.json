@@ -3,13 +3,6 @@
     "name": "Biblisann",
     "tagline": "Your physical library, in your pocket."
   },
-  "home": {
-    "welcome": "Welcome",
-    "intro": "Biblisann keeps track of the books you own, where they are, whether you read them and who borrowed them.",
-    "server": "Server version: {{version}}",
-    "serverLoading": "Contacting the server…",
-    "serverError": "The server cannot be reached."
-  },
   "language": {
     "label": "Language",
     "en": "English",
@@ -18,5 +11,50 @@
   "notFound": {
     "title": "Page not found",
     "back": "Back to the home page"
+  },
+  "common": {
+    "loading": "Loading…"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "createAccount": "Create an account",
+    "name": "Name",
+    "email": "Email",
+    "password": "Password",
+    "passwordHint": "At least 10 characters. Pick a passphrase, not a word.",
+    "switchToRegister": "No account yet? Create one",
+    "switchToLogin": "I already have an account"
+  },
+  "library": {
+    "search": "Search title, author, ISBN…",
+    "scan": "Scan",
+    "empty": "No books yet. Scan your first one!",
+    "noResults": "No book matches.",
+    "choose": "Library",
+    "firstRun": "Create your first library to start adding books.",
+    "name": "Library name",
+    "namePlaceholder": "My home library",
+    "create": "Create library"
+  },
+  "scan": {
+    "title": "Scan books",
+    "back": "Back to the library",
+    "cameraError": "The camera is not available. Type the ISBN instead.",
+    "cameraLabel": "Camera preview",
+    "manualPlaceholder": "ISBN",
+    "add": "Add",
+    "notIsbn": "This is not a book barcode (ISBN).",
+    "alreadyOwned": "You already own “{{title}}”.",
+    "queued": "Added to the queue: {{isbn}}",
+    "outbox": "Recent scans",
+    "status": {
+      "pending": "Waiting for network",
+      "sending": "Sending…",
+      "added": "Added",
+      "already_owned": "Already owned",
+      "not_found": "Unknown book",
+      "failed": "Failed"
+    }
   }
 }

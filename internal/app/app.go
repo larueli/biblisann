@@ -9,10 +9,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/larueli/biblisann/internal/api"
+	"github.com/larueli/biblisann/internal/auth"
+	"github.com/larueli/biblisann/internal/catalog"
 	"github.com/larueli/biblisann/internal/config"
 	"github.com/larueli/biblisann/internal/db"
 	"github.com/larueli/biblisann/internal/httpmw"
+	"github.com/larueli/biblisann/internal/library"
+	"github.com/larueli/biblisann/internal/providers"
+	"github.com/larueli/biblisann/internal/ratelimit"
+	"github.com/larueli/biblisann/internal/safehttp"
+	"github.com/larueli/biblisann/internal/storage"
 	"github.com/larueli/biblisann/internal/version"
 	"github.com/larueli/biblisann/internal/webui"
 )
@@ -34,7 +43,10 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		}
 	}
 
-	root, _ := api.New(api.Deps{Version: version.Version(), DB: pool, Web: webui.Handler()})
+	root, err := Build(ctx, cfg, log, pool)
+	if err != nil {
+		return err
+	}
 	handler := Wrap(root, cfg, log)
 
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.ListenAddr)
@@ -43,6 +55,61 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 	log.InfoContext(ctx, "listening", "addr", ln.Addr().String(), "version", version.Version())
 	return Serve(ctx, ln, handler, cfg.ShutdownTimeout, log)
+}
+
+// Build constructs the services and the HTTP handler (without the shared middleware).
+func Build(ctx context.Context, cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handler, error) {
+	authSvc, err := auth.NewService(pool, auth.RegistrationMode(cfg.Registration))
+	if err != nil {
+		return nil, err
+	}
+	covers, err := storage.NewLocal(cfg.CoversDir)
+	if err != nil {
+		return nil, err
+	}
+	fetcher := safehttp.New(safehttp.Options{UserAgent: "Biblisann/" + version.Version() + " (+https://github.com/larueli/biblisann)"})
+	provs := []providers.Provider{providers.BnF{Fetcher: fetcher}, providers.OpenLibrary{Fetcher: fetcher}}
+	if cfg.StaticProviderFile != "" {
+		sp, err := providers.LoadStatic(cfg.StaticProviderFile)
+		if err != nil {
+			return nil, err
+		}
+		provs = append(provs, sp)
+	}
+	catSvc := catalog.NewService(pool, catalog.Config{
+		Providers:         provs,
+		DefaultProviders:  cfg.Providers,
+		DisabledProviders: cfg.DisabledProviders,
+		Covers:            covers,
+		Fetcher:           fetcher,
+		Log:               log,
+	})
+	go purgeLoop(ctx, authSvc, log)
+
+	h, _ := api.New(api.Deps{
+		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
+		Auth: authSvc, Library: library.NewService(pool), Catalog: catSvc,
+		Limiter: ratelimit.NewMemory(10, 6*time.Second),
+	})
+	return h, nil
+}
+
+// purgeLoop removes expired sessions hourly until ctx ends.
+func purgeLoop(ctx context.Context, a *auth.Service, log *slog.Logger) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n, err := a.PurgeExpired(ctx); err != nil {
+				log.Warn("session purge failed", "error", err)
+			} else if n > 0 {
+				log.Info("expired sessions removed", "count", n)
+			}
+		}
+	}
 }
 
 // Wrap applies the shared middleware chain.

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current slice: **0 (Foundations)**, code complete; the remaining unchecked items need the GitHub repository (see `docs/dev/github.md`). Update this line and the checkboxes in the same PR as the work.
+Current slice: **2 (Organise and lend)** in progress; Slice 0 and Slice 1 are code complete (Slice 0 items that need the GitHub repository are still open, see `docs/dev/github.md`). Update this line and the checkboxes in the same PR as the work.
 
 Rule for every slice: demoable end to end, tested, documented, `make check` green, ADRs written for decisions taken.
 
@@ -25,15 +25,15 @@ Rule for every slice: demoable end to end, tested, documented, `make check` gree
 
 ## Slice 1: Scan and own (MVP)
 
-- [ ] **Spike first (one day):** PWA scan page with `BarcodeDetector` + WASM fallback tested on a real Android phone against real book backs. Record the result in an ADR. If poor, plan the Capacitor wrapper.
-- [ ] Schema: users, libraries, works, editions, instances, places (flat for now)
-- [ ] Local auth: Argon2id, cookie sessions, CSRF, rate limiting, password policy
-- [ ] ISBN normalization and validation, ISBN-less manual entry
-- [ ] Provider interface, BnF (SRU, UNIMARC) and Open Library, per-field merge with provenance, cache, jobs
-- [ ] Covers: storage interface (local first), re-encoding, thumbnails
-- [ ] Add by scan, list, search (FTS + trigram + unaccent), "do I own this?" at Work level
-- [ ] Offline index sync (cursor + tombstones) and scan outbox with idempotency keys
-- [ ] Playwright e2e of the scan-to-list flow; user docs for first run
+- [~] **Spike:** PWA scan page with `BarcodeDetector` + WASM fallback implemented (ADR 0015). **Still to do by a human:** test on a real Android phone against real book backs and record the result in ADR 0015.
+- [x] Schema: users, libraries, works, editions, instances, places (flat for now)
+- [x] Local auth: Argon2id, cookie sessions, CSRF, rate limiting, password policy
+- [x] ISBN normalization and validation, ISBN-less manual entry
+- [x] Provider interface, BnF (SRU, UNIMARC) and Open Library, per-field merge with provenance, cache. Cover download is synchronous for now; the PostgreSQL job queue (River) arrives in Slice 2 with notifications
+- [x] Covers: storage interface (local first), re-encoding, thumbnails
+- [x] Add by scan, list, search (FTS + trigram + unaccent), "do I own this?" at Work level
+- [x] Offline index sync (cursor + tombstones) and scan outbox with idempotency keys
+- [x] Playwright e2e of the scan-to-list flow; user docs for first run
 
 ## Slice 2: Organise and lend
 

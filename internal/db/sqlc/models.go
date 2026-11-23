@@ -5,11 +5,139 @@
 package dbsqlc
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
+
+	"github.com/google/uuid"
 )
+
+type Change struct {
+	Seq       int64
+	LibraryID uuid.UUID
+	Entity    string
+	EntityID  uuid.UUID
+	Op        string
+	CreatedAt time.Time
+}
+
+type Cover struct {
+	ID        uuid.UUID
+	Sha256    []byte
+	Width     int32
+	Height    int32
+	CreatedAt time.Time
+}
+
+type Edition struct {
+	ID             uuid.UUID
+	WorkID         uuid.UUID
+	Isbn13         *string
+	Isbn10         *string
+	Ean            *string
+	Title          string
+	Subtitle       string
+	Authors        []string
+	Publisher      string
+	PublishedYear  *int32
+	Language       string
+	Pages          *int32
+	Description    string
+	SeriesName     string
+	SeriesPosition *float64
+	CoverID        *uuid.UUID
+	Provenance     []byte
+	LockedFields   []string
+	SearchText     string
+	CreatedBy      *uuid.UUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type IdempotencyKey struct {
+	UserID         uuid.UUID
+	Key            string
+	RequestHash    []byte
+	ResponseStatus int32
+	ResponseBody   []byte
+	CreatedAt      time.Time
+}
+
+type Instance struct {
+	ID         uuid.UUID
+	LibraryID  uuid.UUID
+	EditionID  uuid.UUID
+	PlaceID    *uuid.UUID
+	Kind       string
+	Condition  string
+	Notes      string
+	AcquiredOn *time.Time
+	CreatedBy  *uuid.UUID
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  *time.Time
+}
 
 type InstanceSetting struct {
 	Key       string
 	Value     []byte
-	UpdatedAt pgtype.Timestamptz
+	UpdatedAt time.Time
+}
+
+type Library struct {
+	ID        uuid.UUID
+	Name      string
+	Settings  []byte
+	CreatedAt time.Time
+}
+
+type LibraryMember struct {
+	LibraryID uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+}
+
+type Place struct {
+	ID        uuid.UUID
+	LibraryID uuid.UUID
+	ParentID  *uuid.UUID
+	Name      string
+	Kind      string
+	Position  int32
+	CreatedAt time.Time
+}
+
+type ProviderCache struct {
+	Provider  string
+	Key       string
+	Found     bool
+	Payload   []byte
+	FetchedAt time.Time
+}
+
+type Session struct {
+	TokenHash []byte
+	UserID    uuid.UUID
+	CsrfToken string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	LastSeen  time.Time
+	UserAgent string
+}
+
+type User struct {
+	ID           uuid.UUID
+	Email        string
+	DisplayName  string
+	PasswordHash *string
+	IsAdmin      bool
+	Locale       string
+	Settings     []byte
+	CreatedAt    time.Time
+	DisabledAt   *time.Time
+}
+
+type Work struct {
+	ID        uuid.UUID
+	Title     string
+	Authors   []string
+	CreatedAt time.Time
 }

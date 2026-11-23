@@ -21,7 +21,8 @@ COPY . .
 COPY --from=web /src/internal/webui/dist ./internal/webui/dist
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
     -ldflags "-s -w -X github.com/larueli/biblisann/internal/version.version=${VERSION}" \
-    -o /out/biblisann ./cmd/biblisann
+    -o /out/biblisann ./cmd/biblisann \
+ && mkdir -p /out/data/covers
 
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:8ce6dd87e9823c5b48dcfb2c8604714ccb351ce59607327bcc4957448da279b5
 ARG VERSION=dev
@@ -31,6 +32,10 @@ LABEL org.opencontainers.image.title="Biblisann" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later" \
       org.opencontainers.image.version="${VERSION}"
 COPY --from=build /out/biblisann /biblisann
+# Writable data directory (covers). Mount a volume here; everything else is read-only.
+COPY --from=build --chown=65532:65532 /out/data /data
+VOLUME /data
+ENV BIBLISANN_COVERS_DIR=/data/covers
 # Non-root (65532 "nonroot"), no shell, no package manager. Run with a read-only root filesystem.
 USER 65532:65532
 EXPOSE 8080

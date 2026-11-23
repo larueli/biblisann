@@ -33,6 +33,20 @@ database:
       storageClassName: ""
     imageName: ""
 
+# Covers are stored under /data. Without persistence they live in an emptyDir and are lost when
+# the pod is replaced: enable it, or use S3-compatible storage once available.
+persistence:
+  enabled: false
+  size: 2Gi
+  storageClassName: ""
+  existingClaim: ""
+
+# Who may register: first-user (only the first account), open, closed.
+registration: first-user
+# Default ordered metadata providers and providers disabled for everyone.
+providers: [bnf, openlibrary]
+disabledProviders: []
+
 service:
   type: ClusterIP
   port: 80

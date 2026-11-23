@@ -18,6 +18,8 @@ services:
       BIBLISANN_LOG_FORMAT: text
     secrets:
       - database_url
+    volumes:
+      - appdata:/data
     read_only: true
     cap_drop: [ALL]
     security_opt:
@@ -43,6 +45,7 @@ services:
 
 volumes:
   pgdata:
+  appdata:
 
 # Development-only credentials. Generate your own for any real deployment (see docs/user/install.md).
 secrets:

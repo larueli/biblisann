@@ -3,7 +3,9 @@
 Biblisann keeps track of the physical books you own: where they are, whether you read them, and whether they are lent.
 
 !!! note "Status"
-    The project is in its foundations phase (`0.x`). The server, API skeleton and web shell run; scanning and the library features arrive with the next slices (see the [roadmap](../roadmap.md)).
+    Biblisann is `0.x`: features land slice by slice (see the [roadmap](../roadmap.md)).
+
+- [First run](first-run.md): create the administrator, a library, and add your first books.
 
 - [Install](install.md): Docker Compose, container, binary, Kubernetes.
 - [Configuration](configuration.md): every setting and how to provide secrets.

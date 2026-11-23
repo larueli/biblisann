@@ -69,7 +69,17 @@ spec:
             - name: database
               mountPath: /run/secrets/database
               readOnly: true
+            - name: data
+              mountPath: /data
       volumes:
+        - name: data
+          {{- if or .Values.persistence.enabled .Values.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ default (include "biblisann.fullname" .) .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir:
+            sizeLimit: 1Gi
+          {{- end }}
         - name: database
           secret:
             secretName: {{ include "biblisann.dbSecretName" . }}

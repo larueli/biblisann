@@ -17,6 +17,11 @@ An optional file in `KEY=value` form (full variable names, `#` comments) can be 
 | `BIBLISANN_LOG_FORMAT` | `json` | no | `json` or `text`. |
 | `BIBLISANN_SHUTDOWN_TIMEOUT` | `20s` | no | Time allowed to finish in-flight requests on SIGTERM. |
 | `BIBLISANN_MIGRATE_ON_START` | `true` | no | Apply database migrations at start. |
+| `BIBLISANN_REGISTRATION` | `first-user` | no | `first-user`: only the very first account may register (it becomes the administrator). `open`: anyone. `closed`: nobody (administrators create accounts). |
+| `BIBLISANN_COVERS_DIR` | `data/covers` (`/data/covers` in the image) | no | Where cover images are stored. Mount a volume. |
+| `BIBLISANN_PROVIDERS` | `bnf,openlibrary` | no | Default metadata providers, in priority order. Libraries, users and single requests can override the list. |
+| `BIBLISANN_DISABLED_PROVIDERS` | empty | no | Providers disabled for everyone. Each lookup sends an ISBN to the provider: disable providers you do not want to leak to. |
+| `BIBLISANN_STATIC_PROVIDER_FILE` | none | no | JSON file `{"<isbn13>": {"title": "...", "authors": [...]}}` served by the `static` provider (add `static` to `BIBLISANN_PROVIDERS`). No network. |
 | `BIBLISANN_CONFIG_FILE` | none | no | Path of an optional config file. |
 
 ## Endpoints for operators

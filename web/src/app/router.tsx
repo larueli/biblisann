@@ -1,6 +1,17 @@
-import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  Link,
+  Outlet,
+  redirect,
+} from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { HomePage } from "../features/home/HomePage";
+import { api, setCsrfToken } from "../api/client";
+import { LoginPage } from "../features/auth/LoginPage";
+import { LibraryPage } from "../features/library/LibraryPage";
+import { ScanPage } from "../features/scan/ScanPage";
 
 function NotFound() {
   const { t } = useTranslation();
@@ -14,13 +25,54 @@ function NotFound() {
   );
 }
 
-const rootRoute = createRootRoute({ component: Outlet, notFoundComponent: NotFound });
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: HomePage });
+interface RouterContext {
+  queryClient: QueryClient;
+}
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([indexRoute]) });
+async function requireSession(queryClient: QueryClient) {
+  const session = await queryClient.fetchQuery({
+    queryKey: ["session"],
+    queryFn: async () => {
+      const { data, response } = await api.GET("/v1/auth/session");
+      if (response.status === 401 || !data) return null;
+      setCsrfToken(data.csrf_token);
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  if (!session) throw redirect({ to: "/login" });
+}
+
+const rootRoute = createRootRouteWithContext<RouterContext>()({
+  component: Outlet,
+  notFoundComponent: NotFound,
+});
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/login",
+  component: LoginPage,
+});
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  beforeLoad: ({ context }) => requireSession(context.queryClient),
+  component: LibraryPage,
+});
+const scanRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/scan/$libraryId",
+  beforeLoad: ({ context }) => requireSession(context.queryClient),
+  component: ScanPage,
+});
+
+const routeTree = rootRoute.addChildren([loginRoute, indexRoute, scanRoute]);
+
+export function createAppRouter(queryClient: QueryClient) {
+  return createRouter({ routeTree, context: { queryClient } });
+}
 
 declare module "@tanstack/react-router" {
   interface Register {
-    router: typeof router;
+    router: ReturnType<typeof createAppRouter>;
   }
 }

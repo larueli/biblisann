@@ -21,6 +21,7 @@ nav = [
   { "Home" = "index.md" },
   { "User guide" = [
     { "Overview" = "user/index.md" },
+    { "First run" = "user/first-run.md" },
     { "Install" = "user/install.md" },
     { "Configuration" = "user/configuration.md" },
   ] },
