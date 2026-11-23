@@ -43,6 +43,11 @@ Supply-chain attacks (typosquatting, hallucinated package names, abandoned packa
 | `dexie`, `dexie-react-hooks` | IndexedDB offline index and scan outbox | Apache-2.0 | `idb` (lower level), raw IndexedDB | Slice 1 |
 | `barcode-detector`, `zxing-wasm` | `BarcodeDetector` polyfill (WASM decoder served by the app, not a CDN) | MIT | `@zxing/library` (older, JS-only, slower), native API only (not on Firefox/iOS) | Slice 1 |
 | `fake-indexeddb` (dev) | IndexedDB in unit tests | Apache-2.0 | browser tests only | Slice 1 |
+| `github.com/riverqueue/river` (+ `riverdriver/riverpgxv5`, `rivermigrate`) | PostgreSQL job queue: loan reminders, notification delivery, housekeeping | MPL-2.0 | `asynq` (needs Redis), hand-rolled `SKIP LOCKED` queue | Slice 2 |
+| `github.com/SherClockHolmes/webpush-go` | Web Push (VAPID) delivery; uses the safehttp client | MIT | own implementation of RFC 8291/8292 (error-prone) | Slice 2 |
+| `github.com/minio/minio-go/v7` | S3-compatible cover storage | Apache-2.0 | `aws-sdk-go-v2` (much larger) | Slice 2 |
+| `github.com/modelcontextprotocol/go-sdk` | MCP server (streamable HTTP) | MIT/Apache-2.0 | `mark3labs/mcp-go` (community) | Slice 2 |
+| `qrcode` (web) | QR labels for places, generated in the browser | MIT | `qrcode-generator` | Slice 2 |
 | `zensical` (docs build tool, run with `uvx`, not part of the product) | Documentation site | MIT | MkDocs Material (see ADR 0012) | Slice 0 |
 
 ## Consequences

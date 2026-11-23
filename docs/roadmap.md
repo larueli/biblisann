@@ -1,6 +1,6 @@
 # Roadmap
 
-Current slice: **2 (Organise and lend)** in progress; Slice 0 and Slice 1 are code complete (Slice 0 items that need the GitHub repository are still open, see `docs/dev/github.md`). Update this line and the checkboxes in the same PR as the work.
+Current slice: **3 (Identity and ecosystem)** in progress; Slice 0 and Slice 1 are code complete (Slice 0 items that need the GitHub repository are still open, see `docs/dev/github.md`). Update this line and the checkboxes in the same PR as the work.
 
 Rule for every slice: demoable end to end, tested, documented, `make check` green, ADRs written for decisions taken.
 
@@ -37,14 +37,14 @@ Rule for every slice: demoable end to end, tested, documented, `make check` gree
 
 ## Slice 2: Organise and lend
 
-- [ ] Lists (personal, library, default wishlist), series and missing volumes
-- [ ] Reading status and statistics, local grades and comments
-- [ ] Loans and borrowing, notifications (email, Web Push, webhook/ntfy), ICS feed
-- [ ] Places, rooms, shelves, layers with visual display, QR labels, batch scanning, inventory mode
-- [ ] Sharing with users and groups, roles and custom permission profiles
-- [ ] Logical backup and restore, cover storage migration (local to S3 and back)
-- [ ] MCP server (read-write by default, read-only option) behind scoped personal access tokens
-- [ ] Imports: Goodreads CSV first
+- [x] Lists (personal, library, default wishlist), series and missing volumes
+- [x] Reading status and statistics, local grades and comments (external grades table is ready; Hardcover fills it in Slice 3)
+- [x] Loans and borrowing, notifications (email, Web Push, webhook/ntfy), ICS feed. Web Push is implemented server-side; the browser subscription UI and a custom service-worker push handler are still to do (needs the `injectManifest` PWA strategy)
+- [x] Places (tree, QR labels, batch scanning by scanning a label, inventory mode). A graphical shelf/layer display is not done: the tree view is plain text
+- [x] Sharing with users and groups, roles and custom permission profiles (API and ADR 0017; the web UI for sharing is not built yet)
+- [x] Logical backup and restore, cover storage migration (local to S3 and back). The S3 integration test only runs against an endpoint given by environment variables
+- [x] MCP server (read-write by default, read-only option) behind scoped personal access tokens
+- [x] Imports: Goodreads CSV first
 
 ## Slice 3: Identity and ecosystem
 

@@ -55,6 +55,100 @@
       "already_owned": "Already owned",
       "not_found": "Unknown book",
       "failed": "Failed"
-    }
+    },
+    "placeSet": "Place set: the next books go there."
+  },
+  "nav": {
+    "label": "Main",
+    "library": "Library",
+    "lists": "Lists",
+    "loans": "Loans",
+    "places": "Places",
+    "settings": "Settings"
+  },
+  "lists": {
+    "wishlist": "Wishlist",
+    "owned": "owned",
+    "remove": "Remove",
+    "emptyList": "Nothing here yet.",
+    "itemPlaceholder": "Add a book (title)",
+    "add": "Add",
+    "missing": "Missing volumes",
+    "missingVolumes": "missing volumes {{volumes}}",
+    "addMissing": "Add to wishlist",
+    "newList": "New list name",
+    "create": "Create list"
+  },
+  "loans": {
+    "open": "Loans",
+    "none": "No open loans.",
+    "lentTo": "Lent to {{name}}",
+    "borrowedFrom": "Borrowed from {{name}}",
+    "due": "due {{date}}",
+    "returned": "Returned",
+    "borrowTitle": "I borrowed a book",
+    "bookTitle": "Title",
+    "from": "From (person or library)",
+    "dueDate": "Due date",
+    "record": "Record",
+    "lendHint": "To lend one of your books, open it in your library."
+  },
+  "places": {
+    "title": "Places",
+    "none": "No places yet.",
+    "name": "Place name",
+    "parent": "Inside",
+    "noParent": "Top level",
+    "create": "Add place",
+    "print": "Print label",
+    "inventory": "Inventory",
+    "inventoryHelp": "Scan or paste the ISBNs of the books you find here to see what is missing.",
+    "scannedIsbns": "Scanned ISBNs",
+    "check": "Check",
+    "found": "{{count}} books found",
+    "missing": "Missing",
+    "unexpected": "Not expected here",
+    "unscannable": "No ISBN, check by eye"
+  },
+  "settings": {
+    "tokens": "Access tokens",
+    "tokensHelp": "Tokens let scripts and AI tools (MCP) use your library. A token never exceeds your own rights.",
+    "feed": "calendar feed",
+    "revoke": "Revoke",
+    "tokenName": "Token name",
+    "allowWrite": "Allow changes",
+    "createToken": "Create token",
+    "createFeed": "Create calendar feed",
+    "shownOnce": "Copy it now, it is shown only once:",
+    "notifications": "Notifications",
+    "channelKind": "Kind",
+    "channelTarget": "Address or URL",
+    "addChannel": "Add",
+    "webhookSecret": "Webhook signing secret (shown once):",
+    "sendTest": "Send a test",
+    "testSent": "Test sent.",
+    "testFailed": "Delivery failed.",
+    "import": "Import from Goodreads",
+    "importFile": "Goodreads CSV file",
+    "imported": "Imported {{books}} new books and {{copies}} copies.",
+    "backup": "Backup",
+    "backupHelp": "The archive contains password hashes: store it safely.",
+    "downloadBackup": "Download a backup"
+  },
+  "book": {
+    "actions": "Reading, grade, lending",
+    "status": "Reading status",
+    "statuses": {
+      "to_read": "To read",
+      "reading": "Reading",
+      "read": "Read",
+      "abandoned": "Abandoned"
+    },
+    "grade": "My grade (1-10)",
+    "comment": "My comment",
+    "save": "Save",
+    "lendTo": "Lend to…",
+    "lend": "Lend",
+    "lent": "Lent. It is listed under Loans."
   }
 }

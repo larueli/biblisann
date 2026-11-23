@@ -48,12 +48,14 @@ export async function enqueueScan(
   isbn13: string,
   allowDuplicate = false,
   db: BiblisannDB = defaultDb,
+  placeId?: string,
 ): Promise<OutboxItem> {
   const item: OutboxItem = {
     key: crypto.randomUUID(),
     libraryId,
     isbn13,
     allowDuplicate,
+    ...(placeId ? { placeId } : {}),
     status: "pending",
     createdAt: Date.now(),
   };
@@ -75,7 +77,11 @@ export async function flushOutbox(db: BiblisannDB = defaultDb): Promise<number> 
     try {
       const { data, error, response } = await api.POST("/v1/libraries/{id}/scan", {
         params: { path: { id: item.libraryId }, header: { "Idempotency-Key": item.key } },
-        body: { isbn: item.isbn13, allow_duplicate: item.allowDuplicate },
+        body: {
+          isbn: item.isbn13,
+          allow_duplicate: item.allowDuplicate,
+          ...(item.placeId ? { place_id: item.placeId } : {}),
+        },
       });
       if (data) {
         const r: ScanResult = data;

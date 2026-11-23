@@ -47,6 +47,11 @@ registration: first-user
 providers: [bnf, openlibrary]
 disabledProviders: []
 
+# Extra environment, for SMTP, S3, Web Push and other settings (docs/user/configuration.md).
+# Sensitive values belong in a Secret: use extraEnvFrom or valueFrom.secretKeyRef.
+extraEnv: []
+extraEnvFrom: []
+
 service:
   type: ClusterIP
   port: 80

@@ -22,6 +22,7 @@ nav = [
   { "User guide" = [
     { "Overview" = "user/index.md" },
     { "First run" = "user/first-run.md" },
+    { "Organise and lend" = "user/organise.md" },
     { "Install" = "user/install.md" },
     { "Configuration" = "user/configuration.md" },
   ] },

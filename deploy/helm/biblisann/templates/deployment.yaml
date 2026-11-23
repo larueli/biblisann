@@ -48,9 +48,15 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "biblisann.fullname" . }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           env:
             - name: BIBLISANN_DATABASE_URL_FILE
               value: /run/secrets/database/url
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8080

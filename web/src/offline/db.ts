@@ -32,6 +32,7 @@ export interface OutboxItem {
   libraryId: string;
   isbn13: string;
   allowDuplicate: boolean;
+  placeId?: string;
   status: OutboxStatus;
   createdAt: number;
   error?: string;

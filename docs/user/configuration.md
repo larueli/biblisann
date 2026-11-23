@@ -22,6 +22,12 @@ An optional file in `KEY=value` form (full variable names, `#` comments) can be 
 | `BIBLISANN_PROVIDERS` | `bnf,openlibrary` | no | Default metadata providers, in priority order. Libraries, users and single requests can override the list. |
 | `BIBLISANN_DISABLED_PROVIDERS` | empty | no | Providers disabled for everyone. Each lookup sends an ISBN to the provider: disable providers you do not want to leak to. |
 | `BIBLISANN_STATIC_PROVIDER_FILE` | none | no | JSON file `{"<isbn13>": {"title": "...", "authors": [...]}}` served by the `static` provider (add `static` to `BIBLISANN_PROVIDERS`). No network. |
+| `BIBLISANN_STORAGE_BACKEND` | `local` | no | `local` (covers in `BIBLISANN_COVERS_DIR`) or `s3`. |
+| `BIBLISANN_S3_ENDPOINT`, `_BUCKET`, `_REGION`, `_ACCESS_KEY`, `_PREFIX` | none | no | S3 location (endpoint is `host:port`, no scheme). The bucket must exist. |
+| `BIBLISANN_S3_SECRET_KEY` | none | yes (`_FILE`) | S3 secret key. `BIBLISANN_S3_USE_SSL` (default `true`). |
+| `BIBLISANN_SMTP_HOST`, `_PORT` (587), `_USERNAME`, `_FROM`, `_MODE` | none | no | Outgoing email. `_FROM` is required with a host. `_MODE`: `starttls` (default), `tls`, `none` (trusted local relay only). |
+| `BIBLISANN_SMTP_PASSWORD` | none | yes (`_FILE`) | SMTP password; only sent over TLS. |
+| `BIBLISANN_VAPID_PUBLIC_KEY`, `BIBLISANN_VAPID_PRIVATE_KEY` | none | private key: yes (`_FILE`) | Web Push keys; generate with `biblisann vapid`. Set both or none. `BIBLISANN_VAPID_SUBJECT` is the contact URL (defaults to the base URL). |
 | `BIBLISANN_CONFIG_FILE` | none | no | Path of an optional config file. |
 
 ## Endpoints for operators
@@ -31,6 +37,7 @@ An optional file in `KEY=value` form (full variable names, `#` comments) can be 
 | `/healthz` | Liveness: the process answers. |
 | `/readyz` | Readiness: the database answers. |
 | `/v1/version` | Running version. |
+| `/mcp` | MCP endpoint (bearer token). |
 | `/openapi.json`, `/openapi.yaml` | API description (no authentication). |
 
 ## Kubernetes note

@@ -18,7 +18,7 @@ export interface Detector {
 export function createDetector(): Detector {
   const native = (globalThis as { BarcodeDetector?: typeof PonyfillDetector }).BarcodeDetector;
   const Impl = native ?? PonyfillDetector;
-  const d = new Impl({ formats: ["ean_13"] });
+  const d = new Impl({ formats: ["ean_13", "qr_code"] });
   return {
     async detect(video) {
       const found = await d.detect(video);

@@ -55,6 +55,100 @@
       "already_owned": "Déjà possédé",
       "not_found": "Livre inconnu",
       "failed": "Échec"
-    }
+    },
+    "placeSet": "Emplacement défini : les prochains livres iront là."
+  },
+  "nav": {
+    "label": "Principal",
+    "library": "Bibliothèque",
+    "lists": "Listes",
+    "loans": "Prêts",
+    "places": "Emplacements",
+    "settings": "Réglages"
+  },
+  "lists": {
+    "wishlist": "Liste d'envies",
+    "owned": "possédé",
+    "remove": "Retirer",
+    "emptyList": "Rien ici pour l'instant.",
+    "itemPlaceholder": "Ajouter un livre (titre)",
+    "add": "Ajouter",
+    "missing": "Tomes manquants",
+    "missingVolumes": "tomes manquants {{volumes}}",
+    "addMissing": "Ajouter aux envies",
+    "newList": "Nom de la nouvelle liste",
+    "create": "Créer la liste"
+  },
+  "loans": {
+    "open": "Prêts",
+    "none": "Aucun prêt en cours.",
+    "lentTo": "Prêté à {{name}}",
+    "borrowedFrom": "Emprunté à {{name}}",
+    "due": "à rendre le {{date}}",
+    "returned": "Rendu",
+    "borrowTitle": "J'ai emprunté un livre",
+    "bookTitle": "Titre",
+    "from": "De (personne ou bibliothèque)",
+    "dueDate": "Date de retour",
+    "record": "Enregistrer",
+    "lendHint": "Pour prêter un de vos livres, ouvrez-le dans votre bibliothèque."
+  },
+  "places": {
+    "title": "Emplacements",
+    "none": "Aucun emplacement.",
+    "name": "Nom de l'emplacement",
+    "parent": "Dans",
+    "noParent": "Niveau principal",
+    "create": "Ajouter",
+    "print": "Imprimer l'étiquette",
+    "inventory": "Inventaire",
+    "inventoryHelp": "Scannez ou collez les ISBN des livres trouvés ici pour voir ce qui manque.",
+    "scannedIsbns": "ISBN scannés",
+    "check": "Vérifier",
+    "found": "{{count}} livres trouvés",
+    "missing": "Manquants",
+    "unexpected": "Pas attendus ici",
+    "unscannable": "Sans ISBN, à vérifier à l'œil"
+  },
+  "settings": {
+    "tokens": "Jetons d'accès",
+    "tokensHelp": "Les jetons permettent à des scripts et outils d'IA (MCP) d'utiliser votre bibliothèque. Un jeton n'excède jamais vos propres droits.",
+    "feed": "flux calendrier",
+    "revoke": "Révoquer",
+    "tokenName": "Nom du jeton",
+    "allowWrite": "Autoriser les modifications",
+    "createToken": "Créer un jeton",
+    "createFeed": "Créer un flux calendrier",
+    "shownOnce": "Copiez-le maintenant, il n'est affiché qu'une fois :",
+    "notifications": "Notifications",
+    "channelKind": "Type",
+    "channelTarget": "Adresse ou URL",
+    "addChannel": "Ajouter",
+    "webhookSecret": "Secret de signature du webhook (affiché une fois) :",
+    "sendTest": "Envoyer un test",
+    "testSent": "Test envoyé.",
+    "testFailed": "Échec de l'envoi.",
+    "import": "Importer depuis Goodreads",
+    "importFile": "Fichier CSV Goodreads",
+    "imported": "{{books}} nouveaux livres et {{copies}} exemplaires importés.",
+    "backup": "Sauvegarde",
+    "backupHelp": "L'archive contient des empreintes de mots de passe : conservez-la en lieu sûr.",
+    "downloadBackup": "Télécharger une sauvegarde"
+  },
+  "book": {
+    "actions": "Lecture, note, prêt",
+    "status": "Statut de lecture",
+    "statuses": {
+      "to_read": "À lire",
+      "reading": "En cours",
+      "read": "Lu",
+      "abandoned": "Abandonné"
+    },
+    "grade": "Ma note (1-10)",
+    "comment": "Mon commentaire",
+    "save": "Enregistrer",
+    "lendTo": "Prêter à…",
+    "lend": "Prêter",
+    "lent": "Prêté. Voir l'onglet Prêts."
   }
 }

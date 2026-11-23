@@ -1,4 +1,4 @@
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, useParams, useSearch } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,8 @@ import { createDetector } from "./scanner";
 export function ScanPage() {
   const { t } = useTranslation();
   const { libraryId } = useParams({ strict: false }) as { libraryId: string };
+  const search = useSearch({ strict: false }) as { place?: string };
+  const [placeId, setPlaceId] = useState<string | undefined>(search.place);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [manual, setManual] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -31,6 +33,13 @@ export function ScanPage() {
 
   const handleCode = useCallback(
     async (raw: string) => {
+      // A place label (QR code) sets the current place for the books scanned next.
+      const label = /\/p\/([0-9a-f-]{36})$/i.exec(raw.trim());
+      if (label?.[1]) {
+        setPlaceId(label[1]);
+        setMessage(t("scan.placeSet"));
+        return;
+      }
       const isbn = normalizeIsbn(raw);
       if (!isbn) {
         setMessage(t("scan.notIsbn"));
@@ -41,11 +50,11 @@ export function ScanPage() {
         setMessage(t("scan.alreadyOwned", { title: owned[0]?.title ?? isbn }));
         return;
       }
-      await enqueueScan(libraryId, isbn);
+      await enqueueScan(libraryId, isbn, false, db, placeId);
       setMessage(t("scan.queued", { isbn }));
       void sync();
     },
-    [libraryId, sync, t],
+    [libraryId, placeId, sync, t],
   );
 
   useEffect(() => {

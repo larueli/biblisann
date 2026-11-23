@@ -30,7 +30,8 @@
     "dexie": "4.4.7",
     "zxing-wasm": "3.1.7",
     "barcode-detector": "3.2.4",
-    "dexie-react-hooks": "4.4.0"
+    "dexie-react-hooks": "4.4.0",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",
@@ -51,6 +52,7 @@
     "vitest": "5.1.1",
     "workbox-build": "7.4.1",
     "workbox-window": "7.4.1",
-    "fake-indexeddb": "6.2.8"
+    "fake-indexeddb": "6.2.8",
+    "@types/qrcode": "1.5.6"
   }
 }

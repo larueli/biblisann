@@ -1,8 +1,7 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAuthActions, useSession } from "../auth/session";
-import { LanguageSwitcher } from "../home/LanguageSwitcher";
+import { BookActions } from "./BookActions";
 import { useCreateLibrary, useInstances, useLibraries } from "./useLibraries";
 
 function Shelf({ libraryId }: { libraryId: string }) {
@@ -50,6 +49,7 @@ function Shelf({ libraryId }: { libraryId: string }) {
               <p className="font-medium">{i.title}</p>
               <p className="text-sm text-slate-600 dark:text-slate-300">{i.authors.join(", ")}</p>
               {i.isbn13 && <p className="text-xs text-slate-500">{i.isbn13}</p>}
+              <BookActions item={i} />
             </div>
           </li>
         ))}
@@ -60,34 +60,14 @@ function Shelf({ libraryId }: { libraryId: string }) {
 
 export function LibraryPage() {
   const { t } = useTranslation();
-  const session = useSession();
-  const { logout } = useAuthActions();
   const libraries = useLibraries();
   const create = useCreateLibrary();
-  const navigate = useNavigate();
   const [selected, setSelected] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
 
   const current = selected ?? libraries.data?.[0]?.id ?? null;
   return (
-    <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-4 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">{t("app.name")}</h1>
-        <div className="flex items-center gap-3">
-          <LanguageSwitcher />
-          <span className="text-sm">{session.data?.user.email}</span>
-          <button
-            type="button"
-            className="text-sm underline"
-            onClick={() =>
-              logout.mutate(undefined, { onSuccess: () => void navigate({ to: "/login" }) })
-            }
-          >
-            {t("auth.signOut")}
-          </button>
-        </div>
-      </header>
-
+    <main className="flex flex-col gap-4">
       {libraries.data && libraries.data.length > 0 && (
         <select
           aria-label={t("library.choose")}
