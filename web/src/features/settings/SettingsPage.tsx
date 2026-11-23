@@ -6,13 +6,16 @@ import { field, muted, primary, secondary } from "../../app/ui";
 import { useSession } from "../auth/session";
 import { useLibraries } from "../library/useLibraries";
 import { AccountSection } from "./Account";
+import { AdminGroups } from "./AdminGroups";
 import { AdminUsers } from "./AdminUsers";
 import { Hardcover } from "./Hardcover";
+import { LibrarySharing } from "./LibrarySharing";
+import { pushSupported, subscribePush } from "./push";
 import { Security } from "./Security";
 
 type ChannelKind = Schemas["ChannelBody"]["kind"];
 
-function Tokens() {
+function Tokens({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const tokens = useQuery({
@@ -27,7 +30,7 @@ function Tokens() {
   const [write, setWrite] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
   const create = useMutation({
-    mutationFn: async (kind: "pat" | "feed") => {
+    mutationFn: async (kind: "pat" | "feed" | "scim") => {
       const { data, error } = await api.POST("/v1/me/tokens", {
         body: {
           name: name || kind,
@@ -40,7 +43,11 @@ function Tokens() {
     },
     onSuccess: async ({ token, kind }) => {
       setSecret(
-        kind === "feed" ? `${window.location.origin}/v1/feeds/loans.ics?token=${token}` : token,
+        kind === "feed"
+          ? `${window.location.origin}/v1/feeds/loans.ics?token=${token}`
+          : kind === "scim"
+            ? `${window.location.origin}/scim/v2  (token: ${token})`
+            : token,
       );
       setName("");
       await qc.invalidateQueries({ queryKey: ["tokens"] });
@@ -89,6 +96,11 @@ function Tokens() {
         <button type="button" className={secondary} onClick={() => create.mutate("feed")}>
           {t("settings.createFeed")}
         </button>
+        {isAdmin && (
+          <button type="button" className={secondary} onClick={() => create.mutate("scim")}>
+            {t("settings.createScim")}
+          </button>
+        )}
       </div>
       {secret && (
         <p role="status" className="break-all rounded bg-amber-100 p-2 text-sm text-amber-900">
@@ -140,6 +152,22 @@ function Channels() {
     },
   });
   const kinds = channels.data?.available.filter((k) => k !== "webpush") ?? [];
+  const vapid = channels.data?.webpush_public_key;
+  const enablePush = useMutation({
+    mutationFn: async () => {
+      if (!vapid) throw new Error("push is not configured");
+      const sub = await subscribePush(vapid);
+      const { data, error } = await api.POST("/v1/me/notification-channels", {
+        body: {
+          kind: "webpush",
+          target: sub.endpoint,
+          config: { p256dh: sub.p256dh, auth: sub.auth },
+        },
+      });
+      if (!data) throw new Error(problemMessage(error));
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["channels"] }),
+  });
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-lg font-semibold">{t("settings.notifications")}</h2>
@@ -155,6 +183,19 @@ function Channels() {
           </li>
         ))}
       </ul>
+      {vapid && pushSupported() && (
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            className={`${primary} self-start`}
+            onClick={() => enablePush.mutate()}
+            disabled={enablePush.isPending}
+          >
+            {t("settings.enablePush")}
+          </button>
+          {enablePush.isError && <p role="alert">{t("settings.pushFailed")}</p>}
+        </div>
+      )}
       <form
         className="flex flex-wrap gap-2"
         onSubmit={(e: FormEvent) => {
@@ -252,18 +293,38 @@ function GoodreadsImport() {
   );
 }
 
+function AdminLibraries() {
+  const { t } = useTranslation();
+  const libraries = useLibraries();
+  const mine = libraries.data?.filter((l) => l.role === "admin") ?? [];
+  if (mine.length === 0) return null;
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-lg font-semibold">{t("sharing.title")}</h2>
+      {mine.map((l) => (
+        <details key={l.id}>
+          <summary className="cursor-pointer font-medium">{l.name}</summary>
+          <LibrarySharing libraryId={l.id} />
+        </details>
+      ))}
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const { t } = useTranslation();
   const session = useSession();
   return (
     <main className="flex flex-col gap-8">
       <Security />
-      <Tokens />
+      <AdminLibraries />
+      <Tokens isAdmin={session.data?.user.is_admin === true} />
       <Channels />
       <GoodreadsImport />
       <Hardcover />
       <AccountSection />
       {session.data?.user.is_admin && <AdminUsers />}
+      {session.data?.user.is_admin && <AdminGroups />}
       {session.data?.user.is_admin && (
         <section className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold">{t("settings.backup")}</h2>

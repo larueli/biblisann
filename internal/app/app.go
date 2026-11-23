@@ -240,7 +240,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			RedirectURL: cfg.BaseURL.String() + "/v1/auth/oidc/callback", Scopes: cfg.OIDCScopes, GroupsClaim: cfg.OIDCGroupsClaim,
 			AdminGroup: cfg.OIDCAdminGroup, AutoCreate: cfg.OIDCAutoCreate, Label: cfg.OIDCLabel}, pool, authSvc, fetcher.Std())
 	}
-	h, _ := api.New(api.Deps{HCSync: hcs, SourceURL: cfg.SourceURL, Metrics: telemetry.New(version.Version(), pool), MetricsToken: cfg.MetricsToken.Reveal(), MetricsPublic: cfg.MetricsPublic, Account: account.NewService(pool, libSvc, catSvc, listsSvc, loansSvc, readingSvc), Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
+	h, _ := api.New(api.Deps{WebPushKey: cfg.VAPIDPublicKey, HCSync: hcs, SourceURL: cfg.SourceURL, Metrics: telemetry.New(version.Version(), pool), MetricsToken: cfg.MetricsToken.Reveal(), MetricsPublic: cfg.MetricsPublic, Account: account.NewService(pool, libSvc, catSvc, listsSvc, loansSvc, readingSvc), Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
 		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
 		Auth: authSvc, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
 		Lists: listsSvc, Loans: loansSvc,

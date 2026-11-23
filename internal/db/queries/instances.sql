@@ -80,3 +80,13 @@ SELECT count(*) FROM instances WHERE library_id = $1 AND edition_id = $2 AND del
 -- name: ExportInstances :many
 SELECT i.id, i.edition_id, i.place_id, i.kind, i.condition, i.notes, i.acquired_on
 FROM instances i WHERE i.library_id = $1 AND i.deleted_at IS NULL ORDER BY i.created_at, i.id;
+
+-- name: ListInstancesInPlace :many
+-- Copies of a library placed exactly in one place (place_id) or placed nowhere (place_id NULL).
+SELECT i.id, i.library_id, i.edition_id, i.place_id, i.kind, i.condition, i.notes, i.acquired_on,
+       i.created_at, i.updated_at,
+       e.title, e.authors, e.isbn13, e.work_id, e.cover_id, e.pages
+FROM instances i JOIN editions e ON e.id = i.edition_id
+WHERE i.library_id = $1 AND i.deleted_at IS NULL AND i.place_id IS NOT DISTINCT FROM sqlc.narg('place_id')::uuid
+ORDER BY e.series_name, e.series_position NULLS LAST, e.title
+LIMIT $2;

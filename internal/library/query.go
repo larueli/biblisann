@@ -269,3 +269,18 @@ func (s *Service) Inventory(ctx context.Context, placeID uuid.UUID, scanned []st
 	}
 	return res, nil
 }
+
+// ListInstancesInPlace returns the copies standing exactly in a place (placeID nil: copies with no
+// place), in shelf order: by series and volume, then title.
+func (s *Service) ListInstancesInPlace(ctx context.Context, libraryID uuid.UUID, placeID *uuid.UUID, limit int) ([]dbsqlc.ListInstancesInPlaceRow, error) {
+	if _, err := s.Require(ctx, nil, libraryID, authz.RoleRead); err != nil {
+		return nil, err
+	}
+	if placeID != nil {
+		pl, err := s.q.GetPlace(ctx, *placeID)
+		if err != nil || pl.LibraryID != libraryID {
+			return nil, ErrNotFound
+		}
+	}
+	return s.q.ListInstancesInPlace(ctx, dbsqlc.ListInstancesInPlaceParams{LibraryID: libraryID, PlaceID: placeID, Limit: int32(clampLimit(limit))})
+}

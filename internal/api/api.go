@@ -70,6 +70,7 @@ type Deps struct {
 	Metrics       *telemetry.Metrics                           // nil: no /metrics endpoint
 	MetricsToken  string                                       // bearer token for /metrics
 	MetricsPublic bool                                         // true: /metrics needs no authentication (protect it at the reverse proxy)
+	WebPushKey    string                                       // VAPID public key, shown to browsers that subscribe
 	SourceURL     string                                       // where the source of this version lives (AGPL section 13)
 	HCSync        *hcsync.Service                              // nil: per-user Hardcover sync is off
 	Passkeys      *passkeys.Service                            // nil: passkeys are off

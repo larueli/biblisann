@@ -151,6 +151,18 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	if st, _ := post(t, srv, "/oauth/token", rf); st != 400 {
 		t.Errorf("rotated refresh token reused: %d", st)
 	}
+	// Reuse reveals a copy: the whole family is dead, including the newest tokens.
+	if p, _ := svc.Resolve(ctx, tok2["access_token"].(string)); p != nil {
+		t.Error("the access token of a compromised family must stop working")
+	}
+	good := url.Values{"grant_type": {"refresh_token"}, "client_id": {cid}, "refresh_token": {tok2["refresh_token"].(string)}}
+	if st, _ := post(t, srv, "/oauth/token", good); st != 400 {
+		t.Errorf("the newest refresh token of a compromised family must be refused: %d", st)
+	}
+	grants, _ := svc.Grants(ctx, u.ID)
+	if len(grants) != 0 {
+		t.Errorf("a revoked family must not stay listed as an authorized app: %+v", grants)
+	}
 	rf.Set("client_id", "bbc_other")
 	rf.Set("refresh_token", tok2["refresh_token"].(string))
 	if st, _ := post(t, srv, "/oauth/token", rf); st != 400 {

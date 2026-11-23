@@ -72,8 +72,8 @@ Added during Slices 1 to 3 (defaults taken):
 
 - [ ] **Real-device and real-service validation** is missing everywhere it matters: barcode scanning on a phone, passkeys on devices, OIDC/SCIM against a real IdP, MCP OAuth with a real client, BnF/Google/LoC/K10plus/Hardcover live responses, S3 beyond RustFS (the integration test now runs against RustFS 1.0.6).
 - [x] Done in the follow-ups: garbage collection, per-user two-way Hardcover sync, the AGPL source link, Prometheus and OpenTelemetry, probe routes, the `oasdiff` gate, self-hosted API docs, PostgreSQL 19 tested.
-- [ ] **Web UI gaps**: library sharing and profile management, group management, SCIM token creation, Web Push subscription (needs a custom service worker), a graphical shelf view.
-- [ ] **Valkey-backed cache**. Sessions and OAuth grants can now be revoked by users and administrators; a stolen refresh token is still only detected by rotation, not by revoking its whole family.
+- [x] **Web UI gaps** closed (ADR 0024): library sharing and profile management, group management, SCIM token creation, Web Push subscription with a custom service worker, a graphical shelf view.
+- [ ] **Valkey-backed cache**. Sessions and OAuth grants can now be revoked by users and administrators; reusing a refresh token now revokes its whole family (ADR 0024).
 - [x] **GDPR**: per-user export, per-library export/import and account deletion exist (ADR 0022). Orphaned cover files are not yet garbage-collected.
 - [ ] **Version policy**: Slice 3 is delivered in code, so the "stay on 0.x until Slice 3 is delivered" rule now says a `1.0.0` could be cut: decide after the real-world validation above (`Release-As: 1.0.0`).
 

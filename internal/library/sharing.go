@@ -272,3 +272,11 @@ func (s *Service) SetGroupMember(ctx context.Context, groupID uuid.UUID, email s
 	}
 	return s.q.RemoveGroupMember(ctx, dbsqlc.RemoveGroupMemberParams{GroupID: groupID, UserID: u.ID})
 }
+
+// GroupMembers lists the members of a group (instance administrators).
+func (s *Service) GroupMembers(ctx context.Context, groupID uuid.UUID) ([]dbsqlc.ListGroupMembersRow, error) {
+	if err := requireInstanceAdmin(ctx); err != nil {
+		return nil, err
+	}
+	return s.q.ListGroupMembers(ctx, groupID)
+}

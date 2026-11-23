@@ -328,6 +328,79 @@ func (q *Queries) ListInstances(ctx context.Context, arg ListInstancesParams) ([
 	return items, nil
 }
 
+const listInstancesInPlace = `-- name: ListInstancesInPlace :many
+SELECT i.id, i.library_id, i.edition_id, i.place_id, i.kind, i.condition, i.notes, i.acquired_on,
+       i.created_at, i.updated_at,
+       e.title, e.authors, e.isbn13, e.work_id, e.cover_id, e.pages
+FROM instances i JOIN editions e ON e.id = i.edition_id
+WHERE i.library_id = $1 AND i.deleted_at IS NULL AND i.place_id IS NOT DISTINCT FROM $3::uuid
+ORDER BY e.series_name, e.series_position NULLS LAST, e.title
+LIMIT $2
+`
+
+type ListInstancesInPlaceParams struct {
+	LibraryID uuid.UUID
+	Limit     int32
+	PlaceID   *uuid.UUID
+}
+
+type ListInstancesInPlaceRow struct {
+	ID         uuid.UUID
+	LibraryID  uuid.UUID
+	EditionID  uuid.UUID
+	PlaceID    *uuid.UUID
+	Kind       string
+	Condition  string
+	Notes      string
+	AcquiredOn *time.Time
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	Title      string
+	Authors    []string
+	Isbn13     *string
+	WorkID     uuid.UUID
+	CoverID    *uuid.UUID
+	Pages      *int32
+}
+
+// Copies of a library placed exactly in one place (place_id) or placed nowhere (place_id NULL).
+func (q *Queries) ListInstancesInPlace(ctx context.Context, arg ListInstancesInPlaceParams) ([]ListInstancesInPlaceRow, error) {
+	rows, err := q.db.Query(ctx, listInstancesInPlace, arg.LibraryID, arg.Limit, arg.PlaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInstancesInPlaceRow{}
+	for rows.Next() {
+		var i ListInstancesInPlaceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LibraryID,
+			&i.EditionID,
+			&i.PlaceID,
+			&i.Kind,
+			&i.Condition,
+			&i.Notes,
+			&i.AcquiredOn,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Title,
+			&i.Authors,
+			&i.Isbn13,
+			&i.WorkID,
+			&i.CoverID,
+			&i.Pages,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ownedByWorkOrISBN = `-- name: OwnedByWorkOrISBN :many
 SELECT i.id AS instance_id, i.library_id, l.name AS library_name, e.id AS edition_id, e.isbn13, e.title,
        (e.isbn13 = $2::text) AS same_edition

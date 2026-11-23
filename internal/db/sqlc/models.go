@@ -261,6 +261,7 @@ type OauthAccessToken struct {
 	LibraryIds []uuid.UUID
 	Resource   string
 	ExpiresAt  time.Time
+	FamilyID   uuid.UUID
 }
 
 type OauthClient struct {
@@ -291,6 +292,8 @@ type OauthRefreshToken struct {
 	Resource   string
 	ExpiresAt  time.Time
 	CreatedAt  time.Time
+	FamilyID   uuid.UUID
+	UsedAt     *time.Time
 }
 
 type OidcFlow struct {

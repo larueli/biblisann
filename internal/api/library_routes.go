@@ -67,6 +67,7 @@ type instanceListItem struct {
 	ISBN13     *string    `json:"isbn13,omitempty"`
 	WorkID     uuid.UUID  `json:"work_id"`
 	CoverID    *uuid.UUID `json:"cover_id,omitempty"`
+	Pages      *int32     `json:"pages,omitempty" doc:"Only set when listing a place (it sizes the spine in the shelf view)."`
 }
 
 type instanceInput struct {
@@ -205,10 +206,12 @@ func (s *Server) registerLibraries(a huma.API) {
 	Register(a, huma.Operation{OperationID: "list-instances", Method: http.MethodGet, Path: "/v1/libraries/{id}/instances",
 		Summary: "List or search the copies of a library", Tags: []string{"instances"}}, PermLibraryRead,
 		func(ctx context.Context, in *struct {
-			ID     uuid.UUID `path:"id"`
-			Cursor string    `query:"cursor" maxLength:"200"`
-			Limit  int       `query:"limit" minimum:"1" maximum:"200" default:"50"`
-			Q      string    `query:"q" maxLength:"200" doc:"Search text (title, author, publisher, ISBN). Typos are tolerated."`
+			ID       uuid.UUID `path:"id"`
+			Cursor   string    `query:"cursor" maxLength:"200"`
+			Limit    int       `query:"limit" minimum:"1" maximum:"200" default:"50"`
+			Q        string    `query:"q" maxLength:"200" doc:"Search text (title, author, publisher, ISBN). Typos are tolerated."`
+			PlaceID  uuid.UUID `query:"place_id" doc:"Only the copies standing exactly in this place, in shelf order."`
+			Unplaced bool      `query:"unplaced" doc:"Only the copies that have no place."`
 		}) (*struct {
 			Body struct {
 				Items      []instanceListItem `json:"items"`
@@ -222,6 +225,22 @@ func (s *Server) registerLibraries(a huma.API) {
 				}
 			}{}
 			out.Body.Items = []instanceListItem{}
+			if in.PlaceID != uuid.Nil || in.Unplaced {
+				var pid *uuid.UUID
+				if in.PlaceID != uuid.Nil {
+					pid = &in.PlaceID
+				}
+				rows, err := s.Library.ListInstancesInPlace(ctx, in.ID, pid, in.Limit)
+				if err != nil {
+					return nil, mapError(s.Log, err)
+				}
+				for _, r := range rows {
+					out.Body.Items = append(out.Body.Items, instanceListItem{ID: r.ID, LibraryID: r.LibraryID, EditionID: r.EditionID, PlaceID: r.PlaceID,
+						Kind: r.Kind, Condition: r.Condition, Notes: r.Notes, AcquiredOn: toDate(r.AcquiredOn), CreatedAt: r.CreatedAt,
+						UpdatedAt: r.UpdatedAt, Title: r.Title, Authors: nonNil(r.Authors), ISBN13: r.Isbn13, WorkID: r.WorkID, CoverID: r.CoverID, Pages: r.Pages})
+				}
+				return out, nil
+			}
 			if in.Q != "" {
 				rows, err := s.Library.SearchInstances(ctx, in.ID, in.Q, in.Limit)
 				if err != nil {

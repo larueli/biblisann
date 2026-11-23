@@ -390,7 +390,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Members of a user group (instance administrators) */
+        get: operations["list-group-members"];
         /** Add or remove a user (by email) in a group (instance administrators) */
         put: operations["set-group-member"];
         post?: never;
@@ -1791,6 +1792,11 @@ export interface components {
             id: string;
             name: string;
         };
+        GroupMemberBody: {
+            email: string;
+            name: string;
+            user_id: string;
+        };
         GroupShareBody: {
             group_id: string;
             name: string;
@@ -1895,6 +1901,11 @@ export interface components {
             kind: "print" | "ebook";
             library_id: string;
             notes: string;
+            /**
+             * Format: int32
+             * @description Only set when listing a place (it sizes the spine in the shelf view).
+             */
+            pages?: number;
             place_id?: string;
             title: string;
             /** Format: date-time */
@@ -1943,6 +1954,8 @@ export interface components {
         "List-channelsResponse": {
             available: string[];
             channels: components["schemas"]["ChannelBody"][];
+            /** @description VAPID public key for browser push subscriptions. */
+            webpush_public_key?: string;
         };
         "List-instancesResponse": {
             items: components["schemas"]["InstanceListItem"][] | null;
@@ -3532,6 +3545,55 @@ export interface operations {
             };
         };
     };
+    "list-group-members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMemberBody"][] | null;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "set-group-member": {
         parameters: {
             query?: never;
@@ -4271,6 +4333,10 @@ export interface operations {
                 limit?: number;
                 /** @description Search text (title, author, publisher, ISBN). Typos are tolerated. */
                 q?: string;
+                /** @description Only the copies standing exactly in this place, in shelf order. */
+                place_id?: string;
+                /** @description Only the copies that have no place. */
+                unplaced?: boolean;
             };
             header?: never;
             path: {

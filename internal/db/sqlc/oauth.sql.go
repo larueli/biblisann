@@ -33,26 +33,6 @@ func (q *Queries) ConsumeOAuthCode(ctx context.Context, codeHash []byte) (OauthC
 	return i, err
 }
 
-const consumeOAuthRefresh = `-- name: ConsumeOAuthRefresh :one
-DELETE FROM oauth_refresh_tokens WHERE token_hash = $1 AND expires_at > now() RETURNING token_hash, client_id, user_id, scopes, library_ids, resource, expires_at, created_at
-`
-
-func (q *Queries) ConsumeOAuthRefresh(ctx context.Context, tokenHash []byte) (OauthRefreshToken, error) {
-	row := q.db.QueryRow(ctx, consumeOAuthRefresh, tokenHash)
-	var i OauthRefreshToken
-	err := row.Scan(
-		&i.TokenHash,
-		&i.ClientID,
-		&i.UserID,
-		&i.Scopes,
-		&i.LibraryIds,
-		&i.Resource,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const countOAuthClients = `-- name: CountOAuthClients :one
 SELECT count(*) FROM oauth_clients
 `
@@ -65,8 +45,8 @@ func (q *Queries) CountOAuthClients(ctx context.Context) (int64, error) {
 }
 
 const createOAuthAccess = `-- name: CreateOAuthAccess :exec
-INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scopes, library_ids, resource, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO oauth_access_tokens (token_hash, client_id, user_id, scopes, library_ids, resource, expires_at, family_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type CreateOAuthAccessParams struct {
@@ -77,6 +57,7 @@ type CreateOAuthAccessParams struct {
 	LibraryIds []uuid.UUID
 	Resource   string
 	ExpiresAt  time.Time
+	FamilyID   uuid.UUID
 }
 
 func (q *Queries) CreateOAuthAccess(ctx context.Context, arg CreateOAuthAccessParams) error {
@@ -88,6 +69,7 @@ func (q *Queries) CreateOAuthAccess(ctx context.Context, arg CreateOAuthAccessPa
 		arg.LibraryIds,
 		arg.Resource,
 		arg.ExpiresAt,
+		arg.FamilyID,
 	)
 	return err
 }
@@ -140,8 +122,8 @@ func (q *Queries) CreateOAuthCode(ctx context.Context, arg CreateOAuthCodeParams
 }
 
 const createOAuthRefresh = `-- name: CreateOAuthRefresh :exec
-INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes, library_ids, resource, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes, library_ids, resource, expires_at, family_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type CreateOAuthRefreshParams struct {
@@ -152,6 +134,7 @@ type CreateOAuthRefreshParams struct {
 	LibraryIds []uuid.UUID
 	Resource   string
 	ExpiresAt  time.Time
+	FamilyID   uuid.UUID
 }
 
 func (q *Queries) CreateOAuthRefresh(ctx context.Context, arg CreateOAuthRefreshParams) error {
@@ -163,6 +146,7 @@ func (q *Queries) CreateOAuthRefresh(ctx context.Context, arg CreateOAuthRefresh
 		arg.LibraryIds,
 		arg.Resource,
 		arg.ExpiresAt,
+		arg.FamilyID,
 	)
 	return err
 }
@@ -217,7 +201,7 @@ func (q *Queries) GetOAuthClient(ctx context.Context, id string) (OauthClient, e
 const listOAuthGrants = `-- name: ListOAuthGrants :many
 SELECT c.id AS client_id, c.name, array_agg(DISTINCT s ORDER BY s)::text[] AS scopes, min(r.created_at)::timestamptz AS since
 FROM oauth_refresh_tokens r JOIN oauth_clients c ON c.id = r.client_id, unnest(r.scopes) AS s
-WHERE r.user_id = $1 GROUP BY c.id, c.name ORDER BY since
+WHERE r.user_id = $1 AND r.used_at IS NULL GROUP BY c.id, c.name ORDER BY since
 `
 
 type ListOAuthGrantsRow struct {
@@ -250,6 +234,37 @@ func (q *Queries) ListOAuthGrants(ctx context.Context, userID uuid.UUID) ([]List
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockOAuthRefresh = `-- name: LockOAuthRefresh :one
+SELECT token_hash, client_id, user_id, scopes, library_ids, resource, expires_at, created_at, family_id, used_at FROM oauth_refresh_tokens WHERE token_hash = $1 AND expires_at > now() FOR UPDATE
+`
+
+func (q *Queries) LockOAuthRefresh(ctx context.Context, tokenHash []byte) (OauthRefreshToken, error) {
+	row := q.db.QueryRow(ctx, lockOAuthRefresh, tokenHash)
+	var i OauthRefreshToken
+	err := row.Scan(
+		&i.TokenHash,
+		&i.ClientID,
+		&i.UserID,
+		&i.Scopes,
+		&i.LibraryIds,
+		&i.Resource,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.FamilyID,
+		&i.UsedAt,
+	)
+	return i, err
+}
+
+const markOAuthRefreshUsed = `-- name: MarkOAuthRefreshUsed :exec
+UPDATE oauth_refresh_tokens SET used_at = now() WHERE token_hash = $1
+`
+
+func (q *Queries) MarkOAuthRefreshUsed(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.Exec(ctx, markOAuthRefreshUsed, tokenHash)
+	return err
 }
 
 const purgeOAuth = `-- name: PurgeOAuth :exec
@@ -290,6 +305,24 @@ type RevokeOAuthAccessForClientParams struct {
 
 func (q *Queries) RevokeOAuthAccessForClient(ctx context.Context, arg RevokeOAuthAccessForClientParams) error {
 	_, err := q.db.Exec(ctx, revokeOAuthAccessForClient, arg.UserID, arg.ClientID)
+	return err
+}
+
+const revokeOAuthFamily = `-- name: RevokeOAuthFamily :exec
+DELETE FROM oauth_refresh_tokens WHERE family_id = $1
+`
+
+func (q *Queries) RevokeOAuthFamily(ctx context.Context, familyID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeOAuthFamily, familyID)
+	return err
+}
+
+const revokeOAuthFamilyAccess = `-- name: RevokeOAuthFamilyAccess :exec
+DELETE FROM oauth_access_tokens WHERE family_id = $1
+`
+
+func (q *Queries) RevokeOAuthFamilyAccess(ctx context.Context, familyID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeOAuthFamilyAccess, familyID)
 	return err
 }
 

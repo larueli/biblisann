@@ -41,6 +41,31 @@ test("scan to list: register, create a library, add a book by ISBN, find it", as
   await page.getByRole("link", { name: "Back to the library" }).click();
   await page.getByLabel("Search title, author, ISBN…").fill("petit prnce"); // typo on purpose
   await expect(page.getByText("Le Petit Prince")).toBeVisible();
+
+  // Shelf view: create a place, then move the book onto it from the shelf screen.
+  await page.getByRole("link", { name: "Places" }).click();
+  await page.getByLabel("Place name").fill("Living room shelf");
+  await page.getByRole("button", { name: "Add place" }).click();
+  await page.getByRole("link", { name: "Shelves" }).click();
+  const unplaced = page.getByRole("region", { name: "Books without a place" });
+  await unplaced.getByRole("button", { name: "Le Petit Prince" }).click();
+  await page.getByLabel("Move to").selectOption({ label: "Living room shelf" });
+  await expect(
+    page
+      .getByRole("region", { name: "Living room shelf" })
+      .getByRole("button", { name: "Le Petit Prince" }),
+  ).toBeVisible();
+  await expect(unplaced.getByRole("button", { name: "Le Petit Prince" })).toHaveCount(0);
+
+  // Administration screens: a user group, then a custom permission profile on the library.
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByLabel("New group name").fill("Family");
+  await page.getByRole("button", { name: "Create group" }).click();
+  await expect(page.getByRole("button", { name: "Family" })).toBeVisible();
+  await page.getByText("E2E home").click(); // opens the sharing panel of the library
+  await page.getByLabel("Profile name").fill("Contributor");
+  await page.getByRole("button", { name: "Create the profile" }).click();
+  await expect(page.getByText("Contributor")).toBeVisible();
 });
 
 // The API viewers are hosted by the server itself and must work under its Content-Security-Policy.

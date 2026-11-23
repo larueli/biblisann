@@ -378,3 +378,46 @@ func TestInventory(t *testing.T) {
 		t.Errorf("foreign place: %v", err)
 	}
 }
+
+func TestListInstancesInPlace(t *testing.T) {
+	e := newEnv(t)
+	ctx, uid := e.user(t, "a@example.org")
+	lib, _ := e.lib.CreateLibrary(ctx, "L")
+	other, _ := e.lib.CreateLibrary(ctx, "Other")
+	shelf, _ := e.lib.CreatePlace(ctx, lib.ID, library.PlaceInput{Name: "Shelf"})
+	layer, _ := e.lib.CreatePlace(ctx, lib.ID, library.PlaceInput{Name: "Layer 1", ParentID: &shelf.ID})
+	foreign, _ := e.lib.CreatePlace(ctx, other.ID, library.PlaceInput{Name: "Elsewhere"})
+	add := func(title string, place *uuid.UUID) {
+		ed := e.edition(t, uid, "", title)
+		if _, err := e.lib.AddInstance(ctx, lib.ID, library.InstanceInput{EditionID: ed.ID, PlaceID: place}, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("On shelf", &shelf.ID)
+	add("On layer", &layer.ID)
+	add("Nowhere", nil)
+
+	titles := func(pid *uuid.UUID) []string {
+		rows, err := e.lib.ListInstancesInPlace(ctx, lib.ID, pid, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, r := range rows {
+			out = append(out, r.Title)
+		}
+		return out
+	}
+	if got := titles(&shelf.ID); len(got) != 1 || got[0] != "On shelf" {
+		t.Errorf("exactly on the shelf (not the layer below): %v", got)
+	}
+	if got := titles(&layer.ID); len(got) != 1 || got[0] != "On layer" {
+		t.Errorf("layer: %v", got)
+	}
+	if got := titles(nil); len(got) != 1 || got[0] != "Nowhere" {
+		t.Errorf("unplaced: %v", got)
+	}
+	if _, err := e.lib.ListInstancesInPlace(ctx, lib.ID, &foreign.ID, 50); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("a place of another library: %v", err)
+	}
+}

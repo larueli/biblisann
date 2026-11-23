@@ -20,6 +20,7 @@ import { LoansPage } from "../features/loans/LoansPage";
 import { PlacesPage } from "../features/places/PlacesPage";
 import { ScanPage } from "../features/scan/ScanPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { ShelvesPage } from "../features/shelves/ShelvesPage";
 import { Shell } from "./Nav";
 
 function NotFound() {
@@ -106,6 +107,7 @@ const listsRoute = guarded("/lists", inShell(ListsPage));
 const loansRoute = guarded("/loans", inShell(LoansPage));
 const placesRoute = guarded("/places", inShell(PlacesPage));
 const settingsRoute = guarded("/settings", inShell(SettingsPage));
+const shelvesRoute = guarded("/shelves", inShell(ShelvesPage));
 
 const scanRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -142,6 +144,7 @@ const routeTree = rootRoute.addChildren([
   loansRoute,
   placesRoute,
   settingsRoute,
+  shelvesRoute,
 ]);
 
 export function createAppRouter(queryClient: QueryClient) {

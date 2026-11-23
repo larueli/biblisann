@@ -42,6 +42,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      // A custom service worker (src/sw.ts) so it can also handle Web Push notifications.
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "prompt",
       includeAssets: ["icon.svg"],
       manifest: {
@@ -59,19 +63,7 @@ export default defineConfig({
           { src: "icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
-      workbox: {
-        // Server routes must never be answered by the SPA shell.
-        navigateFallbackDenylist: [
-          /^\/v1\//,
-          /^\/openapi/,
-          /^\/docs/,
-          /^\/mcp/,
-          /^\/oauth\/(token|register)/,
-          /^\/\.well-known\//,
-          /^\/scim\//,
-          /^\/opds\//,
-          /^\/(healthz|livez|readyz|startupz|health|metrics)$/,
-        ],
+      injectManifest: {
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         globIgnores: ["docs/**"], // the API viewers are large and not part of the app
       },

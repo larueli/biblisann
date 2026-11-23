@@ -84,7 +84,8 @@
     "lists": "Lists",
     "loans": "Loans",
     "places": "Places",
-    "settings": "Settings"
+    "settings": "Settings",
+    "shelves": "Shelves"
   },
   "lists": {
     "wishlist": "Wishlist",
@@ -155,7 +156,10 @@
     "backupHelp": "The archive contains password hashes: store it safely.",
     "downloadBackup": "Download a backup",
     "importTitle": "Import from another service",
-    "importSource": "Source"
+    "importSource": "Source",
+    "createScim": "Create provisioning token (SCIM)",
+    "enablePush": "Enable notifications on this device",
+    "pushFailed": "This device could not be subscribed (was the permission refused?)."
   },
   "book": {
     "actions": "Reading, grade, lending",
@@ -246,5 +250,60 @@
     "unlink": "Unlink",
     "lastSync": "Last synchronization: {{when}}",
     "synced": "Done: {{pulled}} updated here, {{pushed}} sent to Hardcover."
+  },
+  "sharing": {
+    "title": "Sharing my libraries",
+    "who": "Who has access",
+    "groupPrefix": "Group",
+    "email": "Email of a registered user",
+    "role": "Role",
+    "roles": {
+      "read": "Read only",
+      "edit": "Editor",
+      "admin": "Administrator",
+      "custom": "Custom profile"
+    },
+    "profile": "Profile",
+    "chooseProfile": "Choose a profile",
+    "shareUser": "Share",
+    "group": "Group",
+    "chooseGroup": "Choose a group",
+    "shareGroup": "Share with the group",
+    "profiles": "Custom permission profiles",
+    "profilesHelp": "A profile is a named set of permissions you can give to people or groups instead of a standard role.",
+    "deleteProfile": "Delete",
+    "profileName": "Profile name",
+    "permissions": "Permissions",
+    "createProfile": "Create the profile",
+    "perm": {
+      "read": "Read",
+      "write": "Add and change books",
+      "place": "Manage places",
+      "loan": "Manage loans",
+      "list": "Manage lists",
+      "share": "Share the library",
+      "admin": "Everything (administrator)"
+    }
+  },
+  "groups": {
+    "title": "User groups",
+    "help": "Groups let you share a library with several people at once. OIDC sign-in can fill them automatically.",
+    "name": "New group name",
+    "create": "Create group",
+    "empty": "No members yet.",
+    "memberEmail": "Email of a registered user",
+    "addMember": "Add",
+    "confirmDelete": "Delete the group {{name}}? Libraries shared with it are no longer shared with its members."
+  },
+  "shelves": {
+    "title": "Shelves",
+    "noPlaces": "Create places first (Places page): a shelf is a place, its layers are places inside it.",
+    "choose": "Shelf or room",
+    "hint": "Books stand as spines, thicker when they have more pages. Drag a book to another layer, or select it to move it.",
+    "onTop": "{{name}} (on the shelf itself)",
+    "unplaced": "Books without a place",
+    "empty": "Nothing here.",
+    "moveTo": "Move to",
+    "close": "Close"
   }
 }

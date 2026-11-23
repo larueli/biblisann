@@ -6,6 +6,10 @@ Open **Reading, grade, lending** under a book to set its status (to read, readin
 
 Every account has a **wishlist**; **Lists** can hold books you do not own. Items you already own (any edition) are flagged. Under **Missing volumes**, one click adds every missing volume of a series to your wishlist.
 
+## Shelves
+
+The **Shelves** page draws a shelf: a place is the shelf, the places inside it are its layers. Books stand as spines (thicker when they have more pages). Drag a book to another layer, or select it and choose where to move it. Books without a place wait at the bottom.
+
 ## Places, labels and inventory
 
 Create places (house, room, shelf…) in a tree. Select one to print its **QR label**. Scan the label in the scanner: the books you scan next go to that place. **Inventory** compares a list of scanned ISBNs with what the place (and everything below it) should contain.
@@ -18,11 +22,13 @@ Lend one of your copies from its book menu, or record a book you **borrowed** (f
 
 In **Settings > Notifications** add where you want to be told: email (needs SMTP on the server), a webhook (the request body is signed with the secret shown once, header `X-Biblisann-Signature: sha256=<hmac>`), or an ntfy topic URL. **Send a test** checks them. Targets on private networks are refused for webhooks and ntfy.
 
+On a phone or computer, **Settings > Notifications > Enable notifications on this device** subscribes this browser to push messages (needs the server's VAPID keys; on iPhone, install the app to the home screen first).
+
 A **calendar feed** (Settings > Access tokens > *Create calendar feed*) gives a private URL to subscribe to in any calendar app; it only shows due dates and can be revoked.
 
 ## Sharing
 
-Library administrators share a library with a user (by email) or a group, with the role `read`, `edit`, `admin`, or a **custom profile** (a chosen set of permissions). This is available through the API (`/v1/libraries/{id}/sharing`, `/profiles`, `/v1/groups`); a web screen is planned.
+Library administrators share a library with a user (by email) or a group, with the role `read`, `edit`, `admin`, or a **custom profile** (a chosen set of permissions). In **Settings > Sharing my libraries** (open a library you administer) you share with a user by email or with a group, and define custom profiles from checkboxes of permissions. Instance administrators create the groups and their members in **Settings > User groups**. The same actions exist in the API (`/v1/libraries/{id}/sharing`, `/profiles`, `/v1/groups`).
 
 ## Tokens, scripts and AI assistants
 

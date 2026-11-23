@@ -47,6 +47,7 @@ var (
 
 // Service is the authorization server.
 type Service struct {
+	pool     *pgxpool.Pool
 	q        *dbsqlc.Queries
 	base     string
 	resource string
@@ -56,7 +57,7 @@ type Service struct {
 // New creates the service; base is the public origin (BASE_URL without trailing slash).
 func New(pool *pgxpool.Pool, base string) *Service {
 	base = strings.TrimSuffix(base, "/")
-	return &Service{q: dbsqlc.New(pool), base: base, resource: base + "/mcp", now: time.Now}
+	return &Service{pool: pool, q: dbsqlc.New(pool), base: base, resource: base + "/mcp", now: time.Now}
 }
 
 // Issuer is the authorization server identifier.
@@ -227,7 +228,7 @@ type TokenResponse struct {
 	Scope        string `json:"scope"`
 }
 
-func (s *Service) issue(ctx context.Context, clientID string, uid uuid.UUID, scopes []string, libs []uuid.UUID) (TokenResponse, error) {
+func (s *Service) issue(ctx context.Context, q *dbsqlc.Queries, family uuid.UUID, clientID string, uid uuid.UUID, scopes []string, libs []uuid.UUID) (TokenResponse, error) {
 	at, err := randToken(accessPref, 32)
 	if err != nil {
 		return TokenResponse{}, err
@@ -237,12 +238,12 @@ func (s *Service) issue(ctx context.Context, clientID string, uid uuid.UUID, sco
 		return TokenResponse{}, err
 	}
 	now := s.now()
-	if err := s.q.CreateOAuthAccess(ctx, dbsqlc.CreateOAuthAccessParams{TokenHash: hash(at), ClientID: clientID, UserID: uid,
-		Scopes: scopes, LibraryIds: libs, Resource: s.resource, ExpiresAt: now.Add(AccessTTL)}); err != nil {
+	if err := q.CreateOAuthAccess(ctx, dbsqlc.CreateOAuthAccessParams{TokenHash: hash(at), ClientID: clientID, UserID: uid,
+		Scopes: scopes, LibraryIds: libs, Resource: s.resource, ExpiresAt: now.Add(AccessTTL), FamilyID: family}); err != nil {
 		return TokenResponse{}, err
 	}
-	if err := s.q.CreateOAuthRefresh(ctx, dbsqlc.CreateOAuthRefreshParams{TokenHash: hash(rt), ClientID: clientID, UserID: uid,
-		Scopes: scopes, LibraryIds: libs, Resource: s.resource, ExpiresAt: now.Add(RefreshTTL)}); err != nil {
+	if err := q.CreateOAuthRefresh(ctx, dbsqlc.CreateOAuthRefreshParams{TokenHash: hash(rt), ClientID: clientID, UserID: uid,
+		Scopes: scopes, LibraryIds: libs, Resource: s.resource, ExpiresAt: now.Add(RefreshTTL), FamilyID: family}); err != nil {
 		return TokenResponse{}, err
 	}
 	return TokenResponse{AccessToken: at, TokenType: "Bearer", ExpiresIn: int(AccessTTL.Seconds()), RefreshToken: rt, Scope: strings.Join(scopes, " ")}, nil
@@ -264,27 +265,54 @@ func (s *Service) ExchangeCode(ctx context.Context, clientID, code, redirectURI,
 	if len(verifier) < 43 || len(verifier) > 128 || subtle.ConstantTimeCompare([]byte(want), []byte(row.CodeChallenge)) != 1 {
 		return TokenResponse{}, ErrInvalidGrant
 	}
-	return s.issue(ctx, clientID, row.UserID, row.Scopes, row.LibraryIds)
+	return s.issue(ctx, s.q, uuid.New(), clientID, row.UserID, row.Scopes, row.LibraryIds) // a new authorization starts a new family
 }
 
-// Refresh rotates a refresh token. A refresh token works once: replaying a stolen, already used
-// token fails and the legitimate holder's next refresh reveals the theft.
+// Refresh rotates a refresh token. A refresh token works once. Presenting one that was already used
+// means two parties hold copies (a theft, or a client that lost state): the whole family, every
+// refresh and access token descended from the same authorization, is revoked, so the thief and the
+// owner are both locked out and the user has to authorize again.
 func (s *Service) Refresh(ctx context.Context, clientID, refresh string) (TokenResponse, error) {
-	row, err := s.q.ConsumeOAuthRefresh(ctx, hash(refresh))
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	row, err := q.LockOAuthRefresh(ctx, hash(refresh))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TokenResponse{}, ErrInvalidGrant
 	}
 	if err != nil {
 		return TokenResponse{}, err
 	}
+	if row.UsedAt != nil {
+		if err := q.RevokeOAuthFamily(ctx, row.FamilyID); err != nil {
+			return TokenResponse{}, err
+		}
+		if err := q.RevokeOAuthFamilyAccess(ctx, row.FamilyID); err != nil {
+			return TokenResponse{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return TokenResponse{}, err
+		}
+		return TokenResponse{}, ErrInvalidGrant
+	}
 	if row.ClientID != clientID {
 		return TokenResponse{}, ErrInvalidGrant
 	}
-	u, err := s.q.GetUser(ctx, row.UserID)
+	u, err := q.GetUser(ctx, row.UserID)
 	if err != nil || u.DisabledAt != nil {
 		return TokenResponse{}, ErrInvalidGrant
 	}
-	return s.issue(ctx, clientID, row.UserID, row.Scopes, row.LibraryIds)
+	if err := q.MarkOAuthRefreshUsed(ctx, row.TokenHash); err != nil {
+		return TokenResponse{}, err
+	}
+	tr, err := s.issue(ctx, q, row.FamilyID, clientID, row.UserID, row.Scopes, row.LibraryIds)
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	return tr, tx.Commit(ctx)
 }
 
 // Resolve authenticates an OAuth access token for the MCP endpoint. It returns (nil, nil) for

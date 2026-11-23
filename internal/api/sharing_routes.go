@@ -165,6 +165,24 @@ func (s *Server) registerSharing(a huma.API) {
 		func(ctx context.Context, in *libPath) (*struct{}, error) {
 			return nil, mapError(s.Log, s.Library.DeleteGroup(ctx, in.ID))
 		})
+	type groupMemberBody struct {
+		UserID uuid.UUID `json:"user_id"`
+		Email  string    `json:"email"`
+		Name   string    `json:"name"`
+	}
+	Register(a, huma.Operation{OperationID: "list-group-members", Method: http.MethodGet, Path: "/v1/groups/{id}/members",
+		Summary: "Members of a user group (instance administrators)", Tags: []string{"sharing"}}, PermInstanceAdmin,
+		func(ctx context.Context, in *libPath) (*struct{ Body []groupMemberBody }, error) {
+			rows, err := s.Library.GroupMembers(ctx, in.ID)
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			out := make([]groupMemberBody, len(rows))
+			for i, r := range rows {
+				out[i] = groupMemberBody{r.ID, r.Email, r.DisplayName}
+			}
+			return &struct{ Body []groupMemberBody }{out}, nil
+		})
 	Register(a, huma.Operation{OperationID: "set-group-member", Method: http.MethodPut, Path: "/v1/groups/{id}/members",
 		Summary: "Add or remove a user (by email) in a group (instance administrators)", Tags: []string{"sharing"}, DefaultStatus: http.StatusNoContent}, PermInstanceAdmin,
 		func(ctx context.Context, in *struct {

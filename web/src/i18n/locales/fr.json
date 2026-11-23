@@ -84,7 +84,8 @@
     "lists": "Listes",
     "loans": "Prêts",
     "places": "Emplacements",
-    "settings": "Réglages"
+    "settings": "Réglages",
+    "shelves": "Étagères"
   },
   "lists": {
     "wishlist": "Liste d'envies",
@@ -155,7 +156,10 @@
     "backupHelp": "L'archive contient des empreintes de mots de passe : conservez-la en lieu sûr.",
     "downloadBackup": "Télécharger une sauvegarde",
     "importTitle": "Importer depuis un autre service",
-    "importSource": "Source"
+    "importSource": "Source",
+    "createScim": "Créer un jeton de provisionnement (SCIM)",
+    "enablePush": "Activer les notifications sur cet appareil",
+    "pushFailed": "Cet appareil n'a pas pu être abonné (l'autorisation a-t-elle été refusée ?)."
   },
   "book": {
     "actions": "Lecture, note, prêt",
@@ -246,5 +250,60 @@
     "unlink": "Délier",
     "lastSync": "Dernière synchronisation : {{when}}",
     "synced": "Terminé : {{pulled}} mis à jour ici, {{pushed}} envoyés à Hardcover."
+  },
+  "sharing": {
+    "title": "Partage de mes bibliothèques",
+    "who": "Qui a accès",
+    "groupPrefix": "Groupe",
+    "email": "E-mail d'un utilisateur inscrit",
+    "role": "Rôle",
+    "roles": {
+      "read": "Lecture seule",
+      "edit": "Éditeur",
+      "admin": "Administrateur",
+      "custom": "Profil personnalisé"
+    },
+    "profile": "Profil",
+    "chooseProfile": "Choisir un profil",
+    "shareUser": "Partager",
+    "group": "Groupe",
+    "chooseGroup": "Choisir un groupe",
+    "shareGroup": "Partager avec le groupe",
+    "profiles": "Profils de permissions personnalisés",
+    "profilesHelp": "Un profil est un ensemble nommé de permissions que vous pouvez donner à des personnes ou des groupes à la place d'un rôle standard.",
+    "deleteProfile": "Supprimer",
+    "profileName": "Nom du profil",
+    "permissions": "Permissions",
+    "createProfile": "Créer le profil",
+    "perm": {
+      "read": "Lire",
+      "write": "Ajouter et modifier des livres",
+      "place": "Gérer les emplacements",
+      "loan": "Gérer les prêts",
+      "list": "Gérer les listes",
+      "share": "Partager la bibliothèque",
+      "admin": "Tout (administrateur)"
+    }
+  },
+  "groups": {
+    "title": "Groupes d'utilisateurs",
+    "help": "Les groupes permettent de partager une bibliothèque avec plusieurs personnes à la fois. La connexion OIDC peut les remplir automatiquement.",
+    "name": "Nom du nouveau groupe",
+    "create": "Créer le groupe",
+    "empty": "Aucun membre pour l'instant.",
+    "memberEmail": "E-mail d'un utilisateur inscrit",
+    "addMember": "Ajouter",
+    "confirmDelete": "Supprimer le groupe {{name}} ? Les bibliothèques partagées avec lui ne le sont plus avec ses membres."
+  },
+  "shelves": {
+    "title": "Étagères",
+    "noPlaces": "Créez d'abord des emplacements (page Emplacements) : une étagère est un emplacement, ses niveaux sont des emplacements à l'intérieur.",
+    "choose": "Étagère ou pièce",
+    "hint": "Les livres sont des tranches, plus épaisses quand ils ont plus de pages. Glissez un livre vers un autre niveau, ou sélectionnez-le pour le déplacer.",
+    "onTop": "{{name}} (sur l'étagère elle-même)",
+    "unplaced": "Livres sans emplacement",
+    "empty": "Rien ici.",
+    "moveTo": "Déplacer vers",
+    "close": "Fermer"
   }
 }

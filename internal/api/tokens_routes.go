@@ -100,8 +100,9 @@ func (s *Server) registerTokens(a huma.API) {
 		Summary: "Where I get notified, and which kinds this server can deliver", Tags: []string{"notifications"}}, PermAuthenticated,
 		func(ctx context.Context, _ *struct{}) (*struct {
 			Body struct {
-				Available []string      `json:"available" nullable:"false"`
-				Channels  []channelBody `json:"channels" nullable:"false"`
+				Available  []string      `json:"available" nullable:"false"`
+				Channels   []channelBody `json:"channels" nullable:"false"`
+				WebPushKey string        `json:"webpush_public_key,omitempty" doc:"VAPID public key for browser push subscriptions."`
 			}
 		}, error) {
 			p, err := userID(ctx)
@@ -114,10 +115,12 @@ func (s *Server) registerTokens(a huma.API) {
 			}
 			out := &struct {
 				Body struct {
-					Available []string      `json:"available" nullable:"false"`
-					Channels  []channelBody `json:"channels" nullable:"false"`
+					Available  []string      `json:"available" nullable:"false"`
+					Channels   []channelBody `json:"channels" nullable:"false"`
+					WebPushKey string        `json:"webpush_public_key,omitempty" doc:"VAPID public key for browser push subscriptions."`
 				}
 			}{}
+			out.Body.WebPushKey = s.WebPushKey
 			out.Body.Available = []string{}
 			if s.Notify != nil {
 				out.Body.Available = s.Notify.Available()

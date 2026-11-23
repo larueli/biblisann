@@ -10,11 +10,11 @@
 
 ## Provisioning with SCIM
 
-An administrator creates a provisioning token through the API (`POST /v1/me/tokens` with `kind: scim`) and gives it, with `<BASE_URL>/scim/v2`, to the identity provider. Users are created without a password (they sign in through OIDC); "delete" in the provider deactivates the account.
+An administrator creates a provisioning token in Settings (*Create provisioning token (SCIM)*, shown once) and gives it, with `<BASE_URL>/scim/v2`, to the identity provider. Users are created without a password (they sign in through OIDC); "delete" in the provider deactivates the account.
 
 ## AI assistants (MCP) with OAuth
 
-MCP clients that support OAuth find the server by themselves (`/.well-known/oauth-protected-resource`), register, and send you to an authorization screen where you choose read-only or read-write and optionally limit the libraries. The resulting token works on `/mcp` only. Personal access tokens (Settings) remain available for scripts.
+MCP clients that support OAuth find the server by themselves (`/.well-known/oauth-protected-resource`), register, and send you to an authorization screen where you choose read-only or read-write and optionally limit the libraries. The resulting token works on `/mcp` only. Refresh tokens work once; if one is ever presented twice, the whole authorization is revoked and the client has to ask you again. Personal access tokens (Settings) remain available for scripts.
 
 ## OPDS
 

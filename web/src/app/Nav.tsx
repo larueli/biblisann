@@ -38,6 +38,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Link to="/loans" className={link}>
           {t("nav.loans")}
         </Link>
+        <Link to="/shelves" className={link}>
+          {t("nav.shelves")}
+        </Link>
         <Link to="/places" className={link}>
           {t("nav.places")}
         </Link>
