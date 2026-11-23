@@ -140,7 +140,7 @@ func (s *Server) registerTokens(a huma.API) {
 				Config json.RawMessage `json:"config,omitempty" doc:"webpush: {p256dh, auth}. ntfy: {token}. Never returned."`
 			}
 		}) (*struct{ Body channelBody }, error) {
-			p, err := userID(ctx)
+			p, err := sessionUserID(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -172,7 +172,7 @@ func (s *Server) registerTokens(a huma.API) {
 		func(ctx context.Context, in *struct {
 			ID uuid.UUID `path:"id"`
 		}) (*struct{}, error) {
-			p, err := userID(ctx)
+			p, err := sessionUserID(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -197,9 +197,14 @@ func (s *Server) registerTokens(a huma.API) {
 			if s.Notify == nil {
 				return nil, huma.Error503ServiceUnavailable("notifications are not configured")
 			}
-			p, err := userID(ctx)
+			p, err := sessionUserID(ctx)
 			if err != nil {
 				return nil, err
+			}
+			if s.Limiter != nil {
+				if ok, _ := s.Limiter.Allow("notify-test|" + p.String()); !ok {
+					return nil, huma.NewError(http.StatusTooManyRequests, "too many test notifications, try again later")
+				}
 			}
 			if err := s.Notify.Deliver(ctx, p, notify.Message{Event: "test", Title: i18n.T(lang, "test.title"), Body: i18n.T(lang, "test.body")}); err != nil {
 				s.Log.Warn("test notification failed", "error", err)
@@ -207,6 +212,19 @@ func (s *Server) registerTokens(a huma.API) {
 			}
 			return nil, nil
 		})
+}
+
+// sessionUserID is userID for operations a token must not perform (notification channels can leak
+// every future reminder to a third party).
+func sessionUserID(ctx context.Context) (uuid.UUID, error) {
+	p, err := authz.From(ctx)
+	if err != nil {
+		return uuid.Nil, huma.Error401Unauthorized("authentication required")
+	}
+	if p.Via != "session" {
+		return uuid.Nil, huma.Error403Forbidden("this action needs a browser session")
+	}
+	return p.UserID, nil
 }
 
 func userID(ctx context.Context) (uuid.UUID, error) {

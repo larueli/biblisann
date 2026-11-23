@@ -126,3 +126,39 @@ func mustHash(t *testing.T, c *catalog.Service, ctx context.Context, id uuid.UUI
 	}
 	return h
 }
+
+// A copy that was lent and then deleted must not make the purge, and with it every later step, fail.
+func TestRunSurvivesPurgedLentCopy(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Pool(t)
+	covers, _ := storage.NewLocal(t.TempDir())
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	a, _ := auth.NewService(pool, auth.RegistrationOpen)
+	u, _ := a.Register(ctx, "a@example.org", "tulips in the garden", "A")
+	uctx := authz.With(ctx, &authz.Principal{UserID: u.ID, Via: "session", Scopes: []string{"read", "write"}})
+	lib := library.NewService(pool)
+	cat := catalog.NewService(pool, catalog.Config{Covers: covers, Log: log})
+	l, _ := lib.CreateLibrary(uctx, "Home")
+	ed, _, _ := cat.Create(ctx, u.ID, catalog.EditionInput{Title: "Lent", Authors: []string{"A"}}, "", nil)
+	inst, err := lib.AddInstance(uctx, l.ID, library.InstanceInput{EditionID: ed.ID}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO loans (library_id, owner_id, direction, instance_id, title) VALUES ($1, $2, 'lent', $3, 'Lent')", l.ID, u.ID, inst.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := lib.DeleteInstance(uctx, inst.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, "UPDATE instances SET deleted_at = now() - interval '100 days' WHERE deleted_at IS NOT NULL"); err != nil {
+		t.Fatal(err)
+	}
+	r, err := gc.Run(ctx, pool, covers, gc.Defaults(), log)
+	if err != nil || r.Instances != 1 {
+		t.Fatalf("purge: %+v %v", r, err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM loans WHERE title = 'Lent' AND instance_id IS NULL").Scan(&n); err != nil || n != 1 {
+		t.Errorf("the loan keeps its history: %d %v", n, err)
+	}
+}

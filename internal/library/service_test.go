@@ -421,3 +421,47 @@ func TestListInstancesInPlace(t *testing.T) {
 		t.Errorf("a place of another library: %v", err)
 	}
 }
+
+// A member who may only share must not be able to become, or make anyone, an administrator.
+func TestSharerCannotEscalate(t *testing.T) {
+	e := newEnv(t)
+	adminCtx, _ := e.user(t, "admin@example.org")
+	sharerCtx, _ := e.user(t, "sharer@example.org")
+	_, _ = e.user(t, "friend@example.org")
+	lib, err := e.lib.CreateLibrary(adminCtx, "Home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr, err := e.lib.CreateProfile(adminCtx, lib.ID, "inviter", []string{authz.PermRead, authz.PermShare})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.lib.ShareWithUser(adminCtx, lib.ID, "sharer@example.org", library.Grant{Role: "custom", ProfileID: &pr.ID}); err != nil {
+		t.Fatal(err)
+	}
+	for name, f := range map[string]func() error{
+		"admin for oneself": func() error {
+			return e.lib.ShareWithUser(sharerCtx, lib.ID, "sharer@example.org", library.Grant{Role: "admin"})
+		},
+		"admin for a friend": func() error {
+			return e.lib.ShareWithUser(sharerCtx, lib.ID, "friend@example.org", library.Grant{Role: "admin"})
+		},
+		"sharer profile": func() error {
+			return e.lib.ShareWithUser(sharerCtx, lib.ID, "friend@example.org", library.Grant{Role: "custom", ProfileID: &pr.ID})
+		},
+		"demote the admin": func() error {
+			return e.lib.ShareWithUser(sharerCtx, lib.ID, "admin@example.org", library.Grant{Role: "read"})
+		},
+		"change own grant": func() error {
+			return e.lib.ShareWithUser(sharerCtx, lib.ID, "sharer@example.org", library.Grant{Role: "edit"})
+		},
+	} {
+		if err := f(); !errors.Is(err, authz.ErrForbidden) {
+			t.Errorf("%s: want forbidden, got %v", name, err)
+		}
+	}
+	// What a sharer may do: hand out ordinary access.
+	if err := e.lib.ShareWithUser(sharerCtx, lib.ID, "friend@example.org", library.Grant{Role: "edit"}); err != nil {
+		t.Errorf("ordinary share: %v", err)
+	}
+}

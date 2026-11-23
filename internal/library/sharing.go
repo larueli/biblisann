@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -47,13 +48,67 @@ func (s *Service) checkGrant(ctx context.Context, libraryID uuid.UUID, g Grant) 
 	return nil
 }
 
+// sharer checks that the caller may share the library and says whether they are a full administrator.
+// A member who only holds library.share may hand out ordinary access (read, edit, or a custom profile
+// without share or admin) to people who have no elevated access: they cannot make anyone, themselves
+// included, an administrator or a sharer, and cannot change or remove one.
+func (s *Service) sharer(ctx context.Context, libraryID uuid.UUID) (p *authz.Principal, isAdmin bool, err error) {
+	p, err = s.RequirePerm(ctx, nil, libraryID, authz.PermShare)
+	if err != nil {
+		return nil, false, err
+	}
+	_, aerr := s.RequirePerm(ctx, nil, libraryID, authz.PermAdmin)
+	return p, aerr == nil, nil
+}
+
+// elevated reports whether userID holds administrator or sharing rights on the library.
+func (s *Service) elevated(ctx context.Context, libraryID, userID uuid.UUID) (bool, error) {
+	rows, err := s.q.LibraryAccess(ctx, dbsqlc.LibraryAccessParams{LibraryID: libraryID, UserID: userID})
+	if err != nil {
+		return false, fmt.Errorf("library: access: %w", err)
+	}
+	for _, r := range rows {
+		have := r.Permissions
+		if r.Role != "custom" {
+			have = authz.RolePermissions(r.Role)
+		}
+		if authz.HasPermission(have, authz.PermShare) { // true for administrators too
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// checkSharerGrant limits what a non-administrator sharer may hand out.
+func (s *Service) checkSharerGrant(ctx context.Context, g Grant) error {
+	switch g.Role {
+	case "admin":
+		return ErrForbidden
+	case "custom":
+		pr, err := s.q.GetProfile(ctx, *g.ProfileID)
+		if err != nil {
+			return err
+		}
+		if slices.Contains(pr.Permissions, authz.PermAdmin) || slices.Contains(pr.Permissions, authz.PermShare) {
+			return ErrForbidden
+		}
+	}
+	return nil
+}
+
 // ShareWithUser grants a registered user (by email) access to a library.
 func (s *Service) ShareWithUser(ctx context.Context, libraryID uuid.UUID, email string, g Grant) error {
-	if _, err := s.RequirePerm(ctx, nil, libraryID, authz.PermShare); err != nil {
+	p, isAdmin, err := s.sharer(ctx, libraryID)
+	if err != nil {
 		return err
 	}
 	if err := s.checkGrant(ctx, libraryID, g); err != nil {
 		return err
+	}
+	if !isAdmin {
+		if err := s.checkSharerGrant(ctx, g); err != nil {
+			return err
+		}
 	}
 	u, err := s.q.GetUserByEmail(ctx, strings.TrimSpace(email))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -61,6 +116,15 @@ func (s *Service) ShareWithUser(ctx context.Context, libraryID uuid.UUID, email 
 	}
 	if err != nil {
 		return err
+	}
+	if !isAdmin {
+		el, err := s.elevated(ctx, libraryID, u.ID)
+		if err != nil {
+			return err
+		}
+		if el || u.ID == p.UserID {
+			return ErrForbidden
+		}
 	}
 	if g.Role != "admin" {
 		if err := s.keepAnAdmin(ctx, libraryID, u.ID); err != nil {
@@ -88,8 +152,18 @@ func (s *Service) keepAnAdmin(ctx context.Context, libraryID, userID uuid.UUID) 
 
 // UnshareUser removes a user's direct access.
 func (s *Service) UnshareUser(ctx context.Context, libraryID, userID uuid.UUID) error {
-	if _, err := s.RequirePerm(ctx, nil, libraryID, authz.PermShare); err != nil {
+	_, isAdmin, err := s.sharer(ctx, libraryID)
+	if err != nil {
 		return err
+	}
+	if !isAdmin {
+		el, err := s.elevated(ctx, libraryID, userID)
+		if err != nil {
+			return err
+		}
+		if el {
+			return ErrForbidden
+		}
 	}
 	if err := s.keepAnAdmin(ctx, libraryID, userID); err != nil {
 		return err
@@ -106,7 +180,8 @@ func (s *Service) UnshareUser(ctx context.Context, libraryID, userID uuid.UUID) 
 
 // ShareWithGroup grants a group access to a library.
 func (s *Service) ShareWithGroup(ctx context.Context, libraryID, groupID uuid.UUID, g Grant) error {
-	if _, err := s.RequirePerm(ctx, nil, libraryID, authz.PermShare); err != nil {
+	// Groups can hold elevated grants: only administrators change them.
+	if _, err := s.RequirePerm(ctx, nil, libraryID, authz.PermAdmin); err != nil {
 		return err
 	}
 	if err := s.checkGrant(ctx, libraryID, g); err != nil {
@@ -120,7 +195,7 @@ func (s *Service) ShareWithGroup(ctx context.Context, libraryID, groupID uuid.UU
 
 // UnshareGroup removes a group's access.
 func (s *Service) UnshareGroup(ctx context.Context, libraryID, groupID uuid.UUID) error {
-	if _, err := s.RequirePerm(ctx, nil, libraryID, authz.PermShare); err != nil {
+	if _, err := s.RequirePerm(ctx, nil, libraryID, authz.PermAdmin); err != nil {
 		return err
 	}
 	n, err := s.q.UnshareGroup(ctx, dbsqlc.UnshareGroupParams{LibraryID: libraryID, GroupID: groupID})
@@ -220,7 +295,7 @@ func requireInstanceAdmin(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !p.IsAdmin || !p.HasScope("write") {
+	if !p.IsAdmin || !p.HasScope("write") || p.Via != "session" { // group membership opens libraries: no tokens
 		return ErrForbidden
 	}
 	return nil

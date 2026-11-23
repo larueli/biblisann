@@ -178,7 +178,10 @@ func (s *Service) Login(ctx context.Context, email, password, userAgent string) 
 	if verr != nil || !ok || u.PasswordHash == nil || u.DisabledAt != nil {
 		return nil, ErrInvalidCredentials
 	}
-	if s.secretKey != nil && s.hasMFA(ctx, u.ID) {
+	if s.hasMFA(ctx, u.ID) {
+		if s.secretKey == nil {
+			return nil, ErrMFADisabled // fail closed: never let a password alone open an account that has a second factor
+		}
 		ch, err := s.startChallenge(ctx, u.ID)
 		if err != nil {
 			return nil, err

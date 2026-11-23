@@ -108,6 +108,7 @@ func (q *Queries) GetIdentity(ctx context.Context, arg GetIdentityParams) (uuid.
 }
 
 const listExternalGroupsOfUser = `-- name: ListExternalGroupsOfUser :many
+
 SELECT g.id, g.name FROM groups g JOIN group_members gm ON gm.group_id = g.id
 WHERE gm.user_id = $1 AND g.external_id IS NOT NULL
 `
@@ -117,6 +118,7 @@ type ListExternalGroupsOfUserRow struct {
 	Name string
 }
 
+// A same-named group created by an administrator is never taken over: no row is returned for it.
 func (q *Queries) ListExternalGroupsOfUser(ctx context.Context, userID uuid.UUID) ([]ListExternalGroupsOfUserRow, error) {
 	rows, err := q.db.Query(ctx, listExternalGroupsOfUser, userID)
 	if err != nil {
@@ -162,7 +164,7 @@ func (q *Queries) SetUserAdmin(ctx context.Context, arg SetUserAdminParams) erro
 
 const upsertExternalGroup = `-- name: UpsertExternalGroup :one
 INSERT INTO groups (name, external_id) VALUES ($1, $2)
-ON CONFLICT (lower(name)) DO UPDATE SET external_id = COALESCE(groups.external_id, EXCLUDED.external_id)
+ON CONFLICT (lower(name)) DO UPDATE SET external_id = groups.external_id WHERE groups.external_id IS NOT NULL
 RETURNING id, name, external_id, created_at
 `
 

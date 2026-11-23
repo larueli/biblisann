@@ -20,7 +20,7 @@ import (
 const (
 	MaxInputBytes = 5 << 20
 	maxDimension  = 8000
-	maxPixels     = 24_000_000
+	maxPixels     = 6_000_000
 	fullHeight    = 800
 	thumbHeight   = 240
 )

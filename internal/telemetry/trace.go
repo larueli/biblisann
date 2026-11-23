@@ -52,6 +52,9 @@ func Middleware(next http.Handler) http.Handler {
 			case "/healthz", "/livez", "/readyz", "/startupz", "/health", "/metrics":
 				return false
 			}
+			if strings.HasPrefix(r.URL.Path, "/opds/") {
+				return false // the feed token is part of the path: never put it in a trace
+			}
 			return true
 		}),
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + spanPath(r.URL.Path) }))

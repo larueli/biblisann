@@ -108,7 +108,7 @@ func publicError(err error) string {
 	case isForbidden(err):
 		return "this token is not allowed to do that"
 	}
-	return "the request could not be completed: " + err.Error()
+	return "the request could not be completed" // details stay in the server logs
 }
 
 func parseID(s string) (uuid.UUID, error) {

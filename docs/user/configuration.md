@@ -7,6 +7,8 @@ An optional file in `KEY=value` form (full variable names, `#` comments) can be 
 !!! warning "One source per value"
     Giving the same value twice (variable and `_FILE`, or environment and config file) stops the server at startup with an error that names the setting. Error messages never print values.
 
+A commented starting point is in `deploy/compose/.env.example`.
+
 | Variable | Default | Sensitive | Description |
 |----------|---------|-----------|-------------|
 | `BIBLISANN_DATABASE_URL` | none, required | yes (`_FILE`) | PostgreSQL connection URL. |

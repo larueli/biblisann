@@ -5,6 +5,15 @@ import { api, problemMessage } from "../../api/client";
 import { muted, primary, secondary } from "../../app/ui";
 import { useLibraries } from "../library/useLibraries";
 
+function redirectHost(uri: string): string {
+  try {
+    const u = new URL(uri);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.host : `${u.protocol}//${u.host}`;
+  } catch {
+    return uri;
+  }
+}
+
 /** Consent screen of the OAuth authorization server (MCP clients). */
 export function AuthorizePage() {
   const { t } = useTranslation();
@@ -28,7 +37,7 @@ export function AuthorizePage() {
     },
   });
   const libraries = useLibraries();
-  const [write, setWrite] = useState(true); // read-write by default at consent time
+  const [writeChoice, setWriteChoice] = useState<boolean | null>(null);
   const [only, setOnly] = useState<string[]>([]);
   const decide = useMutation({
     mutationFn: async (approve: boolean) => {
@@ -55,14 +64,20 @@ export function AuthorizePage() {
     );
   }
   const wantsWrite = info.data?.requested_scopes.includes("write") ?? false;
+  const write = writeChoice ?? wantsWrite; // never more than the client asked for, unless the user opts in
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 p-6">
       <h1 className="text-2xl font-bold">
         {t("oauth.title", { client: info.data?.client_name ?? "…" })}
       </h1>
       <p>{t("oauth.explain")}</p>
+      <p className="break-all rounded border border-amber-600 p-2 text-sm">
+        {t("oauth.redirectsTo")} <strong>{redirectHost(request.redirect_uri)}</strong>
+        <br />
+        <span className={muted}>{t("oauth.unverified")}</span>
+      </p>
       <label className="flex items-center gap-2">
-        <input type="checkbox" checked={write} onChange={(e) => setWrite(e.target.checked)} />
+        <input type="checkbox" checked={write} onChange={(e) => setWriteChoice(e.target.checked)} />
         {t("oauth.allowWrite")}{" "}
         {wantsWrite ? "" : <span className={muted}>({t("oauth.notRequested")})</span>}
       </label>

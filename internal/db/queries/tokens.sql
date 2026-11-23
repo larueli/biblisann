@@ -18,4 +18,4 @@ FROM access_tokens WHERE user_id = $1 ORDER BY created_at DESC;
 DELETE FROM access_tokens WHERE id = $1 AND user_id = $2;
 
 -- name: DeleteUserTokens :exec
-DELETE FROM access_tokens WHERE user_id = $1 AND kind = 'pat';
+DELETE FROM access_tokens WHERE user_id = $1; -- every kind: personal, feed and provisioning tokens

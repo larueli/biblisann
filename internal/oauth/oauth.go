@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -190,12 +191,14 @@ func redirectWith(redirect string, params map[string]string) string {
 // Approve records the user's consent and returns the URL to send the browser back to. scopes are
 // what the user granted (they may be fewer than requested); libs restricts the grant (nil: all).
 func (s *Service) Approve(ctx context.Context, userID uuid.UUID, r Request, scopes []string, libs []uuid.UUID) (string, error) {
-	if _, _, err := s.Validate(ctx, r); err != nil {
+	_, requested, err := s.Validate(ctx, r)
+	if err != nil {
 		return "", err
 	}
 	granted := scopes[:0:0]
 	for _, sc := range scopes {
-		if sc == "read" || sc == "write" {
+		// Never more than the client asked for, whatever the browser sends.
+		if (sc == "read" || sc == "write") && slices.Contains(requested, sc) {
 			granted = append(granted, sc)
 		}
 	}

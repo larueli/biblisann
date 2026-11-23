@@ -200,7 +200,9 @@
     "librariesHelp": "None ticked means all your libraries.",
     "allow": "Allow",
     "deny": "Deny",
-    "invalid": "This authorization request is invalid. Close this page."
+    "invalid": "This authorization request is invalid. Close this page.",
+    "redirectsTo": "After you approve, your browser is sent to:",
+    "unverified": "Anyone can register an application under any name. Only continue if you started this connection yourself and recognise this address."
   },
   "account": {
     "sessions": "Where I am signed in",

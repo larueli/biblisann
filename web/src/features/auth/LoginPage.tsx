@@ -9,10 +9,31 @@ import { LanguageSwitcher } from "../home/LanguageSwitcher";
 import { passkeysSupported } from "./passkeys";
 import { useAuthActions } from "./session";
 
+function hasControlChar(s: string): boolean {
+  for (const ch of s) {
+    const c = ch.charCodeAt(0);
+    if (c < 0x20 || c === 0x7f) return true;
+  }
+  return false;
+}
+
 /** Only same-origin paths are accepted as a post-login destination (no open redirect). */
 export function safeNext(next: string | undefined): string | null {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return null;
-  return next;
+  // Control characters are rejected first: browsers strip tab, CR and LF from URLs, so "/\t/host" would become "//host".
+  if (
+    !next ||
+    hasControlChar(next) ||
+    !next.startsWith("/") ||
+    next.startsWith("//") ||
+    next.includes("\\")
+  )
+    return null;
+  try {
+    const u = new URL(next, window.location.origin);
+    return u.origin === window.location.origin ? u.pathname + u.search + u.hash : null;
+  } catch {
+    return null;
+  }
 }
 
 export function LoginPage() {

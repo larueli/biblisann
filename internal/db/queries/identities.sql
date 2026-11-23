@@ -21,8 +21,9 @@ UPDATE users SET is_admin = $2 WHERE id = $1;
 
 -- name: UpsertExternalGroup :one
 INSERT INTO groups (name, external_id) VALUES ($1, $2)
-ON CONFLICT (lower(name)) DO UPDATE SET external_id = COALESCE(groups.external_id, EXCLUDED.external_id)
+ON CONFLICT (lower(name)) DO UPDATE SET external_id = groups.external_id WHERE groups.external_id IS NOT NULL
 RETURNING *;
+-- A same-named group created by an administrator is never taken over: no row is returned for it.
 
 -- name: ListExternalGroupsOfUser :many
 SELECT g.id, g.name FROM groups g JOIN group_members gm ON gm.group_id = g.id

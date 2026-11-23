@@ -76,6 +76,7 @@ func (s *Service) Create(ctx context.Context, kind, name string, scopes []string
 		}
 	} else {
 		scopes = []string{}
+		libraries = nil // a feed or SCIM token cannot be restricted: do not pretend it is
 		if kind == KindSCIM && !p.IsAdmin {
 			return Created{}, authz.ErrForbidden // provisioning tokens are an administrator tool
 		}
@@ -148,6 +149,9 @@ func (s *Service) List(ctx context.Context) ([]dbsqlc.ListTokensRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	if p.Via != "session" {
+		return nil, authz.ErrForbidden // a leaked token must not enumerate or remove the others
+	}
 	return s.q.ListTokens(ctx, p.UserID)
 }
 
@@ -156,6 +160,9 @@ func (s *Service) Revoke(ctx context.Context, id uuid.UUID) error {
 	p, err := authz.From(ctx)
 	if err != nil {
 		return err
+	}
+	if p.Via != "session" {
+		return authz.ErrForbidden
 	}
 	n, err := s.q.DeleteToken(ctx, dbsqlc.DeleteTokenParams{ID: id, UserID: p.UserID})
 	if err != nil {

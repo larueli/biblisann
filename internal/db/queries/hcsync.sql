@@ -39,3 +39,7 @@ WHERE r.user_id = $1;
 
 -- name: WorkIDByISBN :one
 SELECT work_id FROM editions WHERE isbn13 = $1;
+
+-- name: SealedHardcoverSamples :many
+-- Sealed Hardcover tokens, to check at startup that the secret key still opens them.
+SELECT token_enc FROM hardcover_links ORDER BY created_at DESC LIMIT 20;

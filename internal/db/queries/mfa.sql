@@ -44,3 +44,7 @@ INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES ($1, $2, $3
 -- name: UsePasswordReset :one
 UPDATE password_resets SET used_at = now()
 WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING user_id;
+
+-- name: SealedTOTPSamples :many
+-- Sealed secrets of confirmed authenticators, to check at startup that the secret key still opens them.
+SELECT secret_enc FROM user_totp WHERE confirmed_at IS NOT NULL ORDER BY confirmed_at DESC LIMIT 20;

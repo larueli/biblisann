@@ -34,7 +34,11 @@ func NewHandler(root fs.FS) http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		if _, err := fs.Stat(root, name); err != nil {
+		if st, err := fs.Stat(root, name); err != nil || (st.IsDir() && name != ".") {
+			if err == nil {
+				http.NotFound(w, r) // no directory listings
+				return
+			}
 			if name != "index.html" && path.Ext(name) != "" {
 				http.NotFound(w, r)
 				return

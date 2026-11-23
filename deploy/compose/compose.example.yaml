@@ -1,0 +1,72 @@
+# Production-style example: published image, secrets as files, hardened containers.
+# Copy this file and .env.example next to each other (for example into /path/to/biblisann/),
+# rename .env.example to .env, edit it, create the secrets (see docs/user/install.md), then:
+#   docker compose -f compose.example.yaml up -d
+# Put a reverse proxy with TLS in front of port 8080 (it is published on loopback only).
+name: biblisann
+
+services:
+  app:
+    # Pin a version, then pin by digest once you have verified it (docs/dev/versioning.md).
+    # Floating tags (0, 0.1, latest) are for trying it out, not for production.
+    image: ghcr.io/larueli/biblisann:${BIBLISANN_VERSION:?set BIBLISANN_VERSION in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file: .env
+    environment:
+      BIBLISANN_DATABASE_URL_FILE: /run/secrets/database_url
+      BIBLISANN_SECRET_KEY_FILE: /run/secrets/secret_key
+    secrets: [database_url, secret_key]
+    volumes:
+      - appdata:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    # The image already has a healthcheck (`biblisann healthcheck`, the /healthz endpoint).
+
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: biblisann
+      POSTGRES_USER: biblisann
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biblisann -d biblisann"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, FOWNER, DAC_OVERRIDE]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # Optional: only needed with several app replicas, to share rate limits.
+  # Add BIBLISANN_VALKEY_URL_FILE to the app and a secret holding the redis:// URL.
+  # valkey:
+  #   image: valkey/valkey:8-alpine
+  #   read_only: true
+  #   cap_drop: [ALL]
+  #   restart: unless-stopped
+
+volumes:
+  pgdata:
+  appdata:
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  database_url:
+    file: ./secrets/database_url
+  secret_key:
+    file: ./secrets/secret_key

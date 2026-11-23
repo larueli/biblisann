@@ -285,7 +285,7 @@ func (im *Importer) importOne(ctx context.Context, uid, libraryID, wishlistID uu
 	ed, created, err := im.catalog.Create(ctx, uid, catalog.EditionInput{ISBN: isbn, Title: b.Title, Authors: b.Authors,
 		Publisher: b.Publisher, Year: b.Year, Pages: b.Pages}, "", prov)
 	if err != nil {
-		rep.Errors = append(rep.Errors, RowError{row, "invalid book: " + err.Error()})
+		rep.Errors = append(rep.Errors, RowError{row, "invalid book"})
 		rep.Skipped++
 		return
 	}

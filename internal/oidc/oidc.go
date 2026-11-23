@@ -251,6 +251,9 @@ func (s *Service) syncGroups(ctx context.Context, uid uuid.UUID, names []string)
 			continue
 		}
 		g, err := s.q.UpsertExternalGroup(ctx, dbsqlc.UpsertExternalGroupParams{Name: n, ExternalID: ptr("oidc:" + n)})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue // an administrator's own group with that name: identity provider claims never join it
+		}
 		if err != nil {
 			return err
 		}

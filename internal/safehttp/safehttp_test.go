@@ -180,3 +180,11 @@ func TestUserAgentAndErrorsDoNotLeakQuery(t *testing.T) {
 		t.Errorf("error must not leak the query string: %v", err)
 	}
 }
+
+func TestIPv6TransitionRangesBlocked(t *testing.T) {
+	for _, s := range []string{"::a00:1", "::ffff:0:a00:1", "2001:0:4136:e378:8000:63bf:3fff:fdd2"} {
+		if isPublic(netip.MustParseAddr(s)) {
+			t.Errorf("%s must be blocked", s)
+		}
+	}
+}

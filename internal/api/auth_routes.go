@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
+	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -69,7 +71,7 @@ func (s *Server) throttle(ctx context.Context, kind, email string) error {
 	if s.Limiter == nil {
 		return nil
 	}
-	ip := httpmw.ClientIP(ctx).String()
+	ip := ipKey(httpmw.ClientIP(ctx))
 	if err := s.allow(ctx, kind+"-ip", ip, s.Limiter); err != nil {
 		return err
 	}
@@ -109,6 +111,9 @@ func (s *Server) registerAuth(a huma.API) {
 			var mfa *auth.MFARequired
 			if errors.As(err, &mfa) {
 				return &loginOutput{Body: loginBody{MFARequired: true, MFAToken: mfa.Challenge}}, nil
+			}
+			if errors.Is(err, auth.ErrMFADisabled) {
+				return nil, huma.Error503ServiceUnavailable("two-factor authentication is on for this account but the server cannot check it; contact the administrator")
 			}
 			if err != nil {
 				return nil, mapError(s.Log, err)
@@ -198,6 +203,9 @@ func (s *Server) registerAuth(a huma.API) {
 			secret, uri, err := s.Auth.EnrollTOTP(ctx, p.UserID, "Biblisann")
 			if errors.Is(err, auth.ErrMFADisabled) {
 				return nil, huma.Error503ServiceUnavailable(err.Error())
+			}
+			if errors.Is(err, auth.ErrMFAActive) {
+				return nil, huma.Error409Conflict(err.Error())
 			}
 			if err != nil {
 				return nil, mapError(s.Log, err)
@@ -313,15 +321,9 @@ func (s *Server) loginOK(sess *auth.Session) *loginOutput {
 	return &loginOutput{SetCookie: newSessionCookie(s.secure, sess.Token, exp), Body: loginBody{User: &u, CSRFToken: sess.CSRFToken, ExpiresAt: &exp}}
 }
 
-func lower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c >= 'A' && c <= 'Z' {
-			b[i] = c + 32
-		}
-	}
-	return string(b)
-}
+// lower is the throttle key of an email address. It trims and lowercases exactly like the account
+// lookup does, so every spelling of one address shares one bucket.
+func lower(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 
 func (s *Server) sessionOut(token, csrf string, exp time.Time, u userBody) *sessionOutput {
 	return &sessionOutput{SetCookie: *newSessionCookie(s.secure, token, exp),
@@ -337,4 +339,16 @@ func (s *Server) open(ctx context.Context, userID uuid.UUID) (*sessionOutput, er
 		Name: sess.Name, IsAdmin: sess.IsAdmin, Locale: sess.Locale}), nil
 }
 
-func clientKey(r *http.Request) string { return httpmw.ClientIP(r.Context()).String() }
+func clientKey(r *http.Request) string { return ipKey(httpmw.ClientIP(r.Context())) }
+
+// ipKey is the rate-limit key of a client: an IPv6 client is identified by its /64, because a single
+// subscriber usually controls that whole prefix and could otherwise rotate addresses freely.
+func ipKey(a netip.Addr) string {
+	a = a.Unmap()
+	if a.Is6() {
+		if p, err := a.Prefix(64); err == nil {
+			return p.String()
+		}
+	}
+	return a.String()
+}

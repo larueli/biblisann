@@ -526,7 +526,7 @@ func TestSessionsExportImportDelete(t *testing.T) {
 	if st, _ := c.w("DELETE", "/v1/me", map[string]any{"confirm_email": "admin@example.org", "password": "wrong wrong wrong"}); st != 401 {
 		t.Errorf("wrong password: %d", st)
 	}
-	if st, _ := c.w("DELETE", "/v1/me", map[string]any{"confirm_email": "someone@else.org", "password": "tulips in the garden"}); st != 401 {
+	if st, _ := c.w("DELETE", "/v1/me", map[string]any{"confirm_email": "someone@example.net", "password": "tulips in the garden"}); st != 401 {
 		t.Errorf("wrong email: %d", st)
 	}
 	// the only active admin cannot leave

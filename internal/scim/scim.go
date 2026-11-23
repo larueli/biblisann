@@ -278,6 +278,17 @@ func (h *Handler) user(w http.ResponseWriter, r *http.Request) (dbsqlc.User, boo
 	return dbsqlc.User{}, false
 }
 
+// writableUser is user() for operations that change the account. Instance administrators are never
+// managed through SCIM: a leaked provisioning token must not be able to rewrite their email address.
+func (h *Handler) writableUser(w http.ResponseWriter, r *http.Request) (dbsqlc.User, bool) {
+	u, ok := h.user(w, r)
+	if ok && u.IsAdmin {
+		writeErr(w, 403, "", "instance administrators are not managed through SCIM")
+		return dbsqlc.User{}, false
+	}
+	return u, ok
+}
+
 func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 	if u, ok := h.user(w, r); ok {
 		writeJSON(w, 200, h.userOut(u))
@@ -317,7 +328,7 @@ func (h *Handler) apply(w http.ResponseWriter, r *http.Request, u dbsqlc.User, e
 }
 
 func (h *Handler) replaceUser(w http.ResponseWriter, r *http.Request) {
-	u, ok := h.user(w, r)
+	u, ok := h.writableUser(w, r)
 	if !ok {
 		return
 	}
@@ -344,7 +355,7 @@ type patchRequest struct {
 }
 
 func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
-	u, ok := h.user(w, r)
+	u, ok := h.writableUser(w, r)
 	if !ok {
 		return
 	}
@@ -398,7 +409,7 @@ func (h *Handler) patchUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
-	u, ok := h.user(w, r)
+	u, ok := h.writableUser(w, r)
 	if !ok {
 		return
 	}

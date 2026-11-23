@@ -309,7 +309,13 @@ func (s *Service) AddInstance(ctx context.Context, libraryID uuid.UUID, in Insta
 	if cond == "" {
 		cond = "ok"
 	}
-	hash := sha256.Sum256(fmt.Appendf(nil, "add|%s|%v", libraryID, in))
+	// Hash a canonical encoding: %v would print the addresses of pointer fields, so a replay with a
+	// place or acquisition date would never match its first attempt.
+	canon, err := json.Marshal(in)
+	if err != nil {
+		return dbsqlc.Instance{}, fmt.Errorf("library: hash request: %w", err)
+	}
+	hash := sha256.Sum256(append([]byte("add|"+libraryID.String()+"|"), canon...))
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

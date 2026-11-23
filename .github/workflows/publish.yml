@@ -47,7 +47,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag }}
+          fetch-tags: true # needed to know whether this tag is the newest of its line
           persist-credentials: false
+
+      # Floating tags move only when this really is the newest stable release of their line, so
+      # republishing an old tag can never move `latest`, `X` or `X.Y` backwards.
+      - name: Decide which floating tags this release may move
+        id: floating
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          newest() { git tag -l "$1" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1; }
+          major="${TAG#v}"; major="${major%%.*}"
+          minor="${TAG#v}"; minor="${minor%.*}"
+          stable=false; [[ "$TAG" != *-* ]] && stable=true
+          out() { echo "$1=$([ "$stable" = true ] && [ "$(newest "$2")" = "$TAG" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"; }
+          out latest 'v*'
+          out major "v${major}.*"
+          out minor "v${minor}.*"
+          cat "$GITHUB_OUTPUT"
 
       - name: Compute lowercase image name
         id: names
@@ -79,7 +97,9 @@ jobs:
             latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ inputs.tag }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }},enable=${{ !contains(inputs.tag, '-') }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }},enable=${{ steps.floating.outputs.minor == 'true' }}
+            type=semver,pattern={{major}},value=${{ inputs.tag }},enable=${{ steps.floating.outputs.major == 'true' }}
+            type=raw,value=latest,enable=${{ steps.floating.outputs.latest == 'true' }}
             type=sha
 
       - if: steps.detect.outputs.present == 'true'
@@ -95,8 +115,7 @@ jobs:
             VERSION=${{ inputs.tag }}
           provenance: mode=max
           sbom: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No shared build cache: the released image is built from scratch.
 
       - name: Sign the image by digest (keyless)
         if: steps.detect.outputs.present == 'true'

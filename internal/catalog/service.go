@@ -178,11 +178,25 @@ type EditionInput struct {
 	SeriesPos   *float64
 }
 
+// tooLong enforces the field limits of the API for every path into the shared catalog (imports and
+// providers included), so one oversized row cannot be served to every user.
+func tooLong(in EditionInput) bool {
+	if len(in.Description) > 20000 || len(in.Subtitle) > 1000 || len(in.Publisher) > 300 || len(in.Language) > 35 || len(in.Series) > 300 {
+		return true
+	}
+	for _, a := range in.Authors {
+		if len(a) > 300 {
+			return true
+		}
+	}
+	return false
+}
+
 // Create stores an edition (and its work), reusing an existing edition with the same ISBN. The
 // returned bool says whether a new edition was created.
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, in EditionInput, coverURL string, prov map[string]Provenance) (dbsqlc.Edition, bool, error) {
 	title := strings.TrimSpace(in.Title)
-	if title == "" || len(title) > 1000 || len(in.Authors) > 50 {
+	if title == "" || len(title) > 1000 || len(in.Authors) > 50 || tooLong(in) {
 		return dbsqlc.Edition{}, false, ErrInvalidEdition
 	}
 	var isbn13, isbn10 *string

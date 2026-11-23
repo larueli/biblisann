@@ -172,6 +172,31 @@ func (q *Queries) LocalReadingForSync(ctx context.Context, userID uuid.UUID) ([]
 	return items, nil
 }
 
+const sealedHardcoverSamples = `-- name: SealedHardcoverSamples :many
+SELECT token_enc FROM hardcover_links ORDER BY created_at DESC LIMIT 20
+`
+
+// Sealed Hardcover tokens, to check at startup that the secret key still opens them.
+func (q *Queries) SealedHardcoverSamples(ctx context.Context) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, sealedHardcoverSamples)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := [][]byte{}
+	for rows.Next() {
+		var token_enc []byte
+		if err := rows.Scan(&token_enc); err != nil {
+			return nil, err
+		}
+		items = append(items, token_enc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setHardcoverMode = `-- name: SetHardcoverMode :exec
 UPDATE hardcover_links SET mode = $2, next_sync_at = now() WHERE user_id = $1
 `

@@ -127,10 +127,20 @@ func (s *Service) Owned(ctx context.Context, rawISBN string) ([]OwnedMatch, erro
 	if err != nil {
 		return nil, fmt.Errorf("library: owned: %w", err)
 	}
-	out := make([]OwnedMatch, len(rows))
-	for i, r := range rows {
-		out[i] = OwnedMatch{InstanceID: r.InstanceID, LibraryID: r.LibraryID, LibraryName: r.LibraryName,
-			EditionID: r.EditionID, Title: r.Title, SameEdition: r.SameEdition}
+	out := make([]OwnedMatch, 0, len(rows))
+	readable := map[uuid.UUID]bool{} // per library: token restriction and the read permission
+	for _, r := range rows {
+		ok, seen := readable[r.LibraryID]
+		if !seen {
+			_, err := s.RequirePerm(ctx, nil, r.LibraryID, authz.PermRead)
+			ok = err == nil
+			readable[r.LibraryID] = ok
+		}
+		if !ok {
+			continue
+		}
+		out = append(out, OwnedMatch{InstanceID: r.InstanceID, LibraryID: r.LibraryID, LibraryName: r.LibraryName,
+			EditionID: r.EditionID, Title: r.Title, SameEdition: r.SameEdition})
 	}
 	return out, nil
 }

@@ -24,6 +24,10 @@ var blockedPrefixes = mustPrefixes(
 	"2001:db8::/32",   // documentation
 	"2002::/16",       // 6to4: embeds an IPv4 address
 	"fec0::/10",       // deprecated site-local
+	"::/96",           // IPv4-compatible (deprecated)
+	"::ffff:0:0:0/96", // IPv4-translated
+	"2001::/32",       // Teredo
+	"2001:2::/48",     // benchmarking
 )
 
 func mustPrefixes(ss ...string) []netip.Prefix {

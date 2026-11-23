@@ -33,11 +33,18 @@ type Service struct {
 	lists   *lists.Service
 	loans   *loans.Service
 	reading *reading.Service
+	imports chan struct{} // limits concurrent archive imports
 }
+
+// maxImportLibraries bounds the libraries one archive may create.
+const maxImportLibraries = 50
+
+// ErrBusy is returned when too many imports are already running.
+var ErrBusy = errors.New("account: too many imports in progress, try again later")
 
 // NewService creates the service.
 func NewService(pool *pgxpool.Pool, l *library.Service, c *catalog.Service, ls *lists.Service, ln *loans.Service, r *reading.Service) *Service {
-	return &Service{pool: pool, q: dbsqlc.New(pool), library: l, catalog: c, lists: ls, loans: ln, reading: r}
+	return &Service{pool: pool, q: dbsqlc.New(pool), library: l, catalog: c, lists: ls, loans: ln, reading: r, imports: make(chan struct{}, 2)}
 }
 
 // libraryEntry renders one library as NDJSON and returns the cover IDs it references.
@@ -305,6 +312,12 @@ func (s *Service) ImportLibrary(ctx context.Context, r io.Reader) (ImportReport,
 	if _, err := authz.From(ctx); err != nil {
 		return rep, err
 	}
+	select {
+	case s.imports <- struct{}{}: // bounded memory: archives are held in RAM while they are imported
+		defer func() { <-s.imports }()
+	default:
+		return rep, ErrBusy
+	}
 	a, err := readArchive(r)
 	if err != nil {
 		return rep, err
@@ -360,7 +373,7 @@ func (s *Service) importLibrary(ctx context.Context, a *archive, data []byte, re
 				rep.Editions++
 			}
 			editions[r.Key] = e
-			if r.CoverSHA != "" && e.CoverID == nil {
+			if r.CoverSHA != "" && created && e.CoverID == nil { // never fill covers of editions other users already share
 				if data, ok := a.covers[r.CoverSHA]; ok {
 					if _, done := stored[r.CoverSHA]; !done {
 						stored[r.CoverSHA] = s.catalog.StoreCover(ctx, data) // re-encoded: never trust archive images
@@ -557,6 +570,9 @@ func (s *Service) ImportAccount(ctx context.Context, r io.Reader) (ImportReport,
 			if json.Unmarshal(raw, &lr) != nil || !strings.HasPrefix(lr.File, "libraries/") {
 				return ErrArchive
 			}
+			if len(files) >= maxImportLibraries {
+				return fmt.Errorf("%w: too many libraries", ErrArchive)
+			}
 			files = append(files, lr.File)
 		}
 		return nil
@@ -565,6 +581,7 @@ func (s *Service) ImportAccount(ctx context.Context, r io.Reader) (ImportReport,
 		return rep, err
 	}
 	slices.Sort(files)
+	files = slices.Compact(files) // a file listed twice is imported once
 	for _, f := range files {
 		data, ok := a.entries[f]
 		if !ok {

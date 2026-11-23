@@ -23,3 +23,18 @@ A calendar/catalog feed token (Settings > Access tokens > *Create calendar feed*
 ## Metadata providers
 
 Default: BnF and Open Library. Also available by name: `google`, `loc`, `k10plus`, `static` and your own addons (see `docs/dev/addons.md`). Each lookup sends the ISBN to the providers in use.
+
+## Single sign-on and two-factor
+
+When you sign in through OIDC, your identity provider is the authentication factor: Biblisann does not ask for its own authenticator code. Enforce multi-factor authentication at the provider.
+
+## The secret key (`BIBLISANN_SECRET_KEY`)
+
+The key seals authenticator secrets and Hardcover tokens in the database. Treat it like the database password: keep it with your other secrets and back it up **separately** from database backups (a backup does not contain it).
+
+Biblisann checks it at every start and **refuses to start** when:
+
+- it is not set but users have two-factor authentication or a Hardcover link (starting anyway would let accounts sign in without their second factor);
+- it does not open the data sealed earlier (a different key than before).
+
+The error names the problem and never prints the key. The fix is to start with the original key. If the key is truly lost, the sealed data cannot be recovered: delete it on purpose (`DELETE FROM user_totp;` and `DELETE FROM hardcover_links;` in PostgreSQL, then affected users enrol again), and only then start without or with a new key. While the server is running with two-factor users but no key, signing in is refused for them rather than skipping the second factor.

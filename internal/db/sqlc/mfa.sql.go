@@ -146,6 +146,31 @@ func (q *Queries) GetTOTP(ctx context.Context, userID uuid.UUID) (UserTotp, erro
 	return i, err
 }
 
+const sealedTOTPSamples = `-- name: SealedTOTPSamples :many
+SELECT secret_enc FROM user_totp WHERE confirmed_at IS NOT NULL ORDER BY confirmed_at DESC LIMIT 20
+`
+
+// Sealed secrets of confirmed authenticators, to check at startup that the secret key still opens them.
+func (q *Queries) SealedTOTPSamples(ctx context.Context) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, sealedTOTPSamples)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := [][]byte{}
+	for rows.Next() {
+		var secret_enc []byte
+		if err := rows.Scan(&secret_enc); err != nil {
+			return nil, err
+		}
+		items = append(items, secret_enc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setTOTPStep = `-- name: SetTOTPStep :execrows
 UPDATE user_totp SET last_step = $2 WHERE user_id = $1 AND last_step < $2
 `

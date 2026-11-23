@@ -18,6 +18,7 @@ import (
 
 // Errors of the second factor and reset flows.
 var (
+	ErrMFAActive     = errors.New("two-factor authentication is already on: turn it off first (this needs your password)")
 	ErrMFADisabled   = errors.New("two-factor authentication is not available on this server")
 	ErrInvalidCode   = errors.New("invalid code")
 	ErrTooManyTries  = errors.New("too many attempts")
@@ -71,6 +72,9 @@ func (s *Service) IsMFAEnabled(ctx context.Context, userID uuid.UUID) bool {
 func (s *Service) EnrollTOTP(ctx context.Context, userID uuid.UUID, issuer string) (secret, uri string, err error) {
 	if s.secretKey == nil {
 		return "", "", ErrMFADisabled
+	}
+	if s.hasMFA(ctx, userID) {
+		return "", "", ErrMFAActive // replacing a confirmed factor would silently switch it off
 	}
 	u, err := s.q.GetUser(ctx, userID)
 	if err != nil {
@@ -271,6 +275,17 @@ func (s *Service) Reset(ctx context.Context, token, newPassword string) error {
 		return err
 	}
 	if err := s.q.UpdateUserPassword(ctx, dbsqlc.UpdateUserPasswordParams{ID: uid, PasswordHash: &hash}); err != nil {
+		return err
+	}
+	// A reset means the account may have been compromised: forget every credential an intruder
+	// could have added besides the password.
+	if err := s.q.DeleteUserTokens(ctx, uid); err != nil {
+		return err
+	}
+	if err := s.q.RevokeAllOAuthRefreshForUser(ctx, uid); err != nil {
+		return err
+	}
+	if err := s.q.RevokeAllOAuthAccessForUser(ctx, uid); err != nil {
 		return err
 	}
 	return s.q.DeleteUserSessions(ctx, uid)

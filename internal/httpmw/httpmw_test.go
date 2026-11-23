@@ -79,3 +79,15 @@ func TestChainRecoverHeadersLog(t *testing.T) {
 		t.Errorf("access log should record the 500: %s", buf.String())
 	}
 }
+
+func TestRedactPath(t *testing.T) {
+	for in, want := range map[string]string{
+		"/opds/bb_feed_secret/libraries/1": "/opds/{token}/libraries/1",
+		"/opds/bb_feed_secret":             "/opds/{token}",
+		"/v1/libraries":                    "/v1/libraries",
+	} {
+		if got := RedactPath(in); got != want {
+			t.Errorf("%s: %s", in, got)
+		}
+	}
+}

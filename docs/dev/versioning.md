@@ -51,7 +51,7 @@ Mark these with `!` and a `BREAKING CHANGE:` footer that tells the operator what
 4. The same workflow run creates the tag and the GitHub Release (notes = changelog section) and calls `publish.yml`.
 5. `publish.yml` validates the tag, builds the multi-arch image, pushes it to GHCR with SBOM and provenance, signs it with cosign, and pushes the Helm chart.
 
-Image tags: `X.Y.Z`, `X.Y` (not for pre-releases) and `sha-<short>`. There is no `latest` tag; deployments should pin by digest.
+Image tags: `X.Y.Z` (every release), `sha-<short>`, and the floating tags `X.Y`, `X` and `latest`. A floating tag is moved only when the published release is a stable one (no `-rc` suffix) **and** the newest stable release of its line, checked against the repository's `v*` tags: `X.Y` for the newest `vX.Y.*`, `X` for the newest `vX.*`, `latest` for the newest overall. Republishing an old tag therefore never moves them backwards. Floating tags are for trying the project out; production deployments should pin a version, then a digest. The floating tags are never consumed by this repository (`AGENTS.md`).
 
 To republish an existing tag (for example after a registry outage), run the `publish` workflow manually with the tag. To force a version (for example `1.0.0`), add a commit with a `Release-As: 1.0.0` footer.
 

@@ -1,4 +1,7 @@
 {{- if .Values.networkPolicy.enabled }}
+{{- if not .Values.networkPolicy.ingressFrom }}
+{{- fail "networkPolicy.ingressFrom must list who may reach the pod: an empty list would allow everyone" }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

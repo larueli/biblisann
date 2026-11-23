@@ -200,7 +200,9 @@
     "librariesHelp": "Aucune cochée : toutes vos bibliothèques.",
     "allow": "Autoriser",
     "deny": "Refuser",
-    "invalid": "Cette demande d'autorisation est invalide. Fermez cette page."
+    "invalid": "Cette demande d'autorisation est invalide. Fermez cette page.",
+    "redirectsTo": "Après votre accord, votre navigateur sera envoyé vers :",
+    "unverified": "N'importe qui peut enregistrer une application sous n'importe quel nom. Ne continuez que si vous avez vous-même lancé cette connexion et reconnaissez cette adresse."
   },
   "account": {
     "sessions": "Où je suis connecté",

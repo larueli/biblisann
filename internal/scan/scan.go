@@ -53,6 +53,10 @@ func settings(l dbsqlc.Library) *catalog.LookupSettings { return SettingsFrom(l.
 // Scan runs the flow.
 func (s *Service) Scan(ctx context.Context, in Input) (Result, error) {
 	var out Result
+	// Authorize first: a replayed key or a lookup must not work for someone who may not add books here.
+	if _, err := s.lib.RequirePerm(ctx, nil, in.LibraryID, authz.PermWrite); err != nil {
+		return out, err
+	}
 	if in.IdempotencyKey != "" {
 		prev, err := s.lib.ReplayedInstance(ctx, in.IdempotencyKey)
 		if err != nil {

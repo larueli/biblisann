@@ -14,7 +14,8 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 - Follow-up: StoryGraph and LibraryThing importers, Hardcover bulk refresh job (rate limit, retry, 3-day refresh), library/account export and import, account deletion, session and OAuth grant revocation, admin user management, S3 tested with RustFS.
 - Follow-up 2: garbage collection (`biblisann gc`, daily), probe routes, Prometheus and OpenTelemetry, self-hosted API docs at `/docs/`, `/v1/about` and footer, `oasdiff` CI gate, two-way Hardcover sync per user, PostgreSQL 19 tested.
 - Follow-up 3: web screens for sharing, profiles, groups and SCIM token; Web Push in the browser (custom service worker); shelf view; OAuth refresh-token family revocation.
-- ADRs 0011 to 0024, user docs (first run, organise, security, install, configuration), `docs/dev/addons.md`.
+- Security audit fixes (ADR 0025); open audit follow-ups are at the end of the roadmap.
+- ADRs 0011 to 0025, user docs (first run, organise, security, install, configuration), `docs/dev/addons.md`.
 
 ## In progress
 

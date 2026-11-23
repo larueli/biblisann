@@ -58,3 +58,20 @@ BIBLISANN_DATABASE_URL=postgres://... ./bin/biblisann serve
 ```
 
 Database migrations run automatically at start (`BIBLISANN_MIGRATE_ON_START=false` to disable, then run `biblisann migrate`). A lock makes several replicas starting together safe.
+
+## Compose for a real server
+
+`deploy/compose/compose.yaml` is for development (it builds the image). For a server, start from `deploy/compose/compose.example.yaml` and `deploy/compose/.env.example`:
+
+```bash
+mkdir -p /path/to/biblisann/secrets && cd /path/to/biblisann
+# copy compose.example.yaml and .env.example here; rename .env.example to .env and edit it
+umask 077
+pw="$(openssl rand -hex 24)"
+printf '%s' "$pw" > secrets/db_password
+printf 'postgres://biblisann:%s@db:5432/biblisann?sslmode=disable' "$pw" > secrets/database_url
+openssl rand -base64 32 | tr -d '\n' > secrets/secret_key
+docker compose -f compose.example.yaml up -d
+```
+
+The example runs the published image with a read-only root filesystem and no capabilities, keeps secrets in files, and publishes the port on loopback for your reverse proxy. Every setting is listed in [Configuration](configuration.md).

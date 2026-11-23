@@ -7,6 +7,7 @@ package gc
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -46,55 +47,63 @@ func (r Report) String() string {
 func Run(ctx context.Context, pool *pgxpool.Pool, covers storage.Store, o Options, log *slog.Logger) (Report, error) {
 	q := dbsqlc.New(pool)
 	var r Report
-	var err error
-	if r.Instances, err = q.GCPurgeSoftDeletedInstances(ctx, int32(o.SoftDeleteDays)); err != nil {
-		return r, fmt.Errorf("gc: instances: %w", err)
+	var errs []error
+	// Every step is independent: one failing step is reported but never stops the others, so a
+	// single bad row cannot make the database grow forever.
+	step := func(name string, f func() error) {
+		if err := f(); err != nil {
+			log.WarnContext(ctx, "gc: step failed", "step", name, "error", err)
+			errs = append(errs, fmt.Errorf("gc: %s: %w", name, err))
+		}
 	}
-	if r.Editions, err = q.GCPurgeUnusedEditions(ctx, int32(o.UnusedEditions)); err != nil {
-		return r, fmt.Errorf("gc: editions: %w", err)
-	}
-	if r.Works, err = q.GCPurgeEmptyWorks(ctx); err != nil {
-		return r, fmt.Errorf("gc: works: %w", err)
-	}
-
-	unused, err := q.GCUnreferencedCovers(ctx, int32(o.CoverGraceHours))
-	if err != nil {
-		return r, fmt.Errorf("gc: covers: %w", err)
-	}
-	for _, c := range unused {
-		key := hex.EncodeToString(c.Sha256)
-		okFiles := true
-		for _, k := range []string{key, key + ".thumb"} {
-			if err := covers.Delete(ctx, k); err != nil {
-				log.WarnContext(ctx, "gc: cover file not removed, will retry", "key", k, "error", err)
-				okFiles = false
-				continue
+	step("instances", func() (err error) {
+		r.Instances, err = q.GCPurgeSoftDeletedInstances(ctx, int32(o.SoftDeleteDays))
+		return
+	})
+	step("editions", func() (err error) { r.Editions, err = q.GCPurgeUnusedEditions(ctx, int32(o.UnusedEditions)); return })
+	step("works", func() (err error) { r.Works, err = q.GCPurgeEmptyWorks(ctx); return })
+	step("covers", func() error {
+		unused, err := q.GCUnreferencedCovers(ctx, int32(o.CoverGraceHours))
+		if err != nil {
+			return err
+		}
+		for _, c := range unused {
+			key := hex.EncodeToString(c.Sha256)
+			okFiles := true
+			for _, k := range []string{key, key + ".thumb"} {
+				if err := covers.Delete(ctx, k); err != nil {
+					log.WarnContext(ctx, "gc: cover file not removed, will retry", "key", k, "error", err)
+					okFiles = false
+					continue
+				}
+				r.CoverFiles++
 			}
-			r.CoverFiles++
-		}
-		if okFiles {
-			if err := q.GCDeleteCover(ctx, c.ID); err != nil {
-				return r, fmt.Errorf("gc: cover row: %w", err)
+			if okFiles {
+				if err := q.GCDeleteCover(ctx, c.ID); err != nil {
+					return fmt.Errorf("cover row: %w", err)
+				}
+				r.Covers++
 			}
-			r.Covers++
 		}
-	}
-
-	if r.Superseded, err = q.GCCompactSupersededChanges(ctx, int32(o.SupersededDays)); err != nil {
-		return r, fmt.Errorf("gc: changes: %w", err)
-	}
-	pruned, err := q.GCPruneOldTombstones(ctx, int32(o.TombstoneDays))
-	if err != nil {
-		return r, fmt.Errorf("gc: tombstones: %w", err)
-	}
-	for _, p := range pruned {
-		r.Tombstones++
-		if err := q.GCSetPrunedThrough(ctx, dbsqlc.GCSetPrunedThroughParams{ID: p.LibraryID, ChangesPrunedThrough: p.Seq}); err != nil {
-			return r, fmt.Errorf("gc: horizon: %w", err)
+		return nil
+	})
+	step("changes", func() (err error) {
+		r.Superseded, err = q.GCCompactSupersededChanges(ctx, int32(o.SupersededDays))
+		return
+	})
+	step("tombstones", func() error {
+		pruned, err := q.GCPruneOldTombstones(ctx, int32(o.TombstoneDays))
+		if err != nil {
+			return err
 		}
-	}
-	if r.Expired, err = q.GCExpireMisc(ctx, int32(o.ProviderCacheDay)); err != nil {
-		return r, fmt.Errorf("gc: expired: %w", err)
-	}
-	return r, nil
+		for _, p := range pruned {
+			r.Tombstones++
+			if err := q.GCSetPrunedThrough(ctx, dbsqlc.GCSetPrunedThroughParams{ID: p.LibraryID, ChangesPrunedThrough: p.Seq}); err != nil {
+				return fmt.Errorf("horizon: %w", err)
+			}
+		}
+		return nil
+	})
+	step("expired", func() (err error) { r.Expired, err = q.GCExpireMisc(ctx, int32(o.ProviderCacheDay)); return })
+	return r, errors.Join(errs...)
 }

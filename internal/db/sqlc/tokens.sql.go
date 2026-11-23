@@ -80,7 +80,7 @@ func (q *Queries) DeleteToken(ctx context.Context, arg DeleteTokenParams) (int64
 }
 
 const deleteUserTokens = `-- name: DeleteUserTokens :exec
-DELETE FROM access_tokens WHERE user_id = $1 AND kind = 'pat'
+DELETE FROM access_tokens WHERE user_id = $1
 `
 
 func (q *Queries) DeleteUserTokens(ctx context.Context, userID uuid.UUID) error {

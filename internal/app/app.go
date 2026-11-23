@@ -75,6 +75,9 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	if err := jobs.Migrate(ctx, pool); err != nil {
 		return err
 	}
+	if err := CheckSecretKey(ctx, cfg, pool); err != nil {
+		return err
+	}
 	root, jc, err := Build(cfg, log, pool)
 	if err != nil {
 		return err

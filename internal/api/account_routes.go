@@ -57,6 +57,8 @@ func accountErr(s *Server, err error) error {
 		return huma.Error409Conflict(sole.Error())
 	case errors.Is(err, account.ErrLastInstanceAdmin):
 		return huma.Error409Conflict(err.Error())
+	case errors.Is(err, account.ErrBusy):
+		return huma.NewError(http.StatusTooManyRequests, "too many imports in progress, try again in a minute")
 	case errors.Is(err, account.ErrArchive):
 		return huma.Error422UnprocessableEntity("the archive is not a valid, supported Biblisann export")
 	}

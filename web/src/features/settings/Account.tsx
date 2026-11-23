@@ -3,7 +3,7 @@ import { type ChangeEvent, type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, problemMessage } from "../../api/client";
 import { field, muted, primary, secondary } from "../../app/ui";
-import { useSession } from "../auth/session";
+import { clearLocalData, useSession } from "../auth/session";
 
 function Sessions() {
   const { t } = useTranslation();
@@ -148,6 +148,7 @@ function DeleteAccount() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [promote, setPromote] = useState(false);
+  const qc = useQueryClient();
   const del = useMutation({
     mutationFn: async () => {
       const { response, error } = await api.DELETE("/v1/me", {
@@ -159,7 +160,10 @@ function DeleteAccount() {
       });
       if (!response.ok) throw new Error(problemMessage(error));
     },
-    onSuccess: () => window.location.assign("/login"),
+    onSuccess: async () => {
+      await clearLocalData(qc);
+      window.location.assign("/login");
+    },
   });
   function submit(e: FormEvent) {
     e.preventDefault();

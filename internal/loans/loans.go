@@ -184,8 +184,8 @@ func (s *Service) mine(ctx context.Context, id uuid.UUID) (dbsqlc.Loan, error) {
 		return dbsqlc.Loan{}, err
 	}
 	l, err := s.q.GetLoan(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && l.OwnerID != p.UserID) {
-		return l, ErrNotFound
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (l.OwnerID != p.UserID || !p.AllowsLibrary(l.LibraryID))) {
+		return l, ErrNotFound // also for a token restricted to other libraries
 	}
 	return l, err
 }
@@ -223,7 +223,17 @@ func (s *Service) List(ctx context.Context, includeReturned bool) ([]dbsqlc.List
 	if err != nil {
 		return nil, err
 	}
-	return s.q.ListLoans(ctx, dbsqlc.ListLoansParams{OwnerID: p.UserID, Column2: includeReturned, Limit: 500})
+	rows, err := s.q.ListLoans(ctx, dbsqlc.ListLoansParams{OwnerID: p.UserID, Column2: includeReturned, Limit: 500})
+	if err != nil {
+		return nil, err
+	}
+	out := rows[:0]
+	for _, r := range rows {
+		if p.AllowsLibrary(r.LibraryID) { // a token restricted to some libraries sees only their loans
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 // FeedEvents returns calendar events for the open loans of a user. It is used by the calendar
