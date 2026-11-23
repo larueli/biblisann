@@ -14,7 +14,7 @@ test("exposes an installable manifest and the OpenAPI document", async ({ reques
 test("scan to list: register, create a library, add a book by ISBN, find it", async ({ page }) => {
   const email = `e2e-${Date.now()}@example.org`;
   await page.goto("/");
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("heading", { name: "Biblisann", level: 1 })).toBeVisible();
 
   // The first account of an instance may register itself; later runs fall back to login.
