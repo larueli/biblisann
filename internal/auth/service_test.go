@@ -1,10 +1,13 @@
 package auth_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/dbtest"
@@ -95,4 +98,111 @@ func TestChangePasswordEndsSessions(t *testing.T) {
 	if _, err := svc.Register(ctx, "a@EXAMPLE.org", "tulips in the garden", ""); !errors.Is(err, auth.ErrEmailTaken) {
 		t.Errorf("duplicate email (case-insensitive): %v", err)
 	}
+}
+
+type captureMailer struct{ to, subject, body string }
+
+func (c *captureMailer) SendMail(_ context.Context, to, subject, body string) error {
+	c.to, c.subject, c.body = to, subject, body
+	return nil
+}
+
+func TestTOTPAndRecoveryFlow(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := auth.NewService(dbtest.Pool(t), auth.RegistrationOpen)
+	if err := svc.EnableMFA(bytes.Repeat([]byte{1}, 32)); err != nil {
+		t.Fatal(err)
+	}
+	u, _ := svc.Register(ctx, "a@example.org", "tulips in the garden", "A")
+	secret, _, err := svc.EnrollTOTP(ctx, u.ID, "Biblisann")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Before confirmation login stays single-factor.
+	if _, err := svc.Login(ctx, "a@example.org", "tulips in the garden", ""); err != nil {
+		t.Fatalf("login before confirm: %v", err)
+	}
+	if _, err := svc.ConfirmTOTP(ctx, u.ID, "000000"); !errors.Is(err, auth.ErrInvalidCode) {
+		t.Errorf("wrong code: %v", err)
+	}
+	code := auth.CurrentTOTP(secret, time.Now())
+	recovery, err := svc.ConfirmTOTP(ctx, u.ID, code)
+	if err != nil || len(recovery) != 10 {
+		t.Fatalf("confirm: %v %v", recovery, err)
+	}
+	// The same code cannot be replayed.
+	var mfa *auth.MFARequired
+	_, err = svc.Login(ctx, "a@example.org", "tulips in the garden", "")
+	if !errors.As(err, &mfa) {
+		t.Fatalf("expected MFARequired, got %v", err)
+	}
+	if _, err := svc.VerifyMFA(ctx, mfa.Challenge, code, ""); !errors.Is(err, auth.ErrInvalidCode) {
+		t.Errorf("replayed code: %v", err)
+	}
+	// A recovery code works once.
+	_, err = svc.Login(ctx, "a@example.org", "tulips in the garden", "")
+	errors.As(err, &mfa)
+	if _, err := svc.VerifyMFA(ctx, mfa.Challenge, recovery[0], ""); err != nil {
+		t.Fatalf("recovery code: %v", err)
+	}
+	_, err = svc.Login(ctx, "a@example.org", "tulips in the garden", "")
+	errors.As(err, &mfa)
+	if _, err := svc.VerifyMFA(ctx, mfa.Challenge, recovery[0], ""); !errors.Is(err, auth.ErrInvalidCode) {
+		t.Errorf("recovery code reuse: %v", err)
+	}
+	// Brute force: the challenge dies after a few wrong tries.
+	_, err = svc.Login(ctx, "a@example.org", "tulips in the garden", "")
+	errors.As(err, &mfa)
+	var last error
+	for range 7 {
+		_, last = svc.VerifyMFA(ctx, mfa.Challenge, "111111", "")
+	}
+	if !errors.Is(last, auth.ErrTooManyTries) && !errors.Is(last, auth.ErrInvalidToken) {
+		t.Errorf("brute force not stopped: %v", last)
+	}
+	if err := svc.DisableTOTP(ctx, u.ID, "wrong password!!"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Errorf("disable with wrong password: %v", err)
+	}
+	if err := svc.DisableTOTP(ctx, u.ID, "tulips in the garden"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Login(ctx, "a@example.org", "tulips in the garden", ""); err != nil {
+		t.Errorf("login after disable: %v", err)
+	}
+}
+
+func TestPasswordReset(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := auth.NewService(dbtest.Pool(t), auth.RegistrationOpen)
+	if err := svc.RequestReset(ctx, "a@example.org", "https://x"); !errors.Is(err, auth.ErrNoMailer) {
+		t.Errorf("no mailer: %v", err)
+	}
+	m := &captureMailer{}
+	svc.SetMailer(m)
+	u, _ := svc.Register(ctx, "a@example.org", "tulips in the garden", "A")
+	sess, _ := svc.Login(ctx, "a@example.org", "tulips in the garden", "")
+	if err := svc.RequestReset(ctx, "nobody@example.org", "https://x"); err != nil || m.to != "" {
+		t.Errorf("unknown address must be silent: %v %q", err, m.to)
+	}
+	if err := svc.RequestReset(ctx, "a@example.org", "https://x"); err != nil || m.to != "a@example.org" {
+		t.Fatalf("request: %v", err)
+	}
+	token := m.body[strings.Index(m.body, "token=")+6:]
+	token = strings.Fields(token)[0]
+	if err := svc.Reset(ctx, token, "short"); err == nil {
+		t.Error("weak password accepted")
+	}
+	if err := svc.Reset(ctx, token, "a brand new passphrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Reset(ctx, token, "another new passphrase"); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("token reuse: %v", err)
+	}
+	if _, err := svc.Lookup(ctx, sess.Token); err == nil {
+		t.Error("sessions must end after a reset")
+	}
+	if _, err := svc.Login(ctx, "a@example.org", "a brand new passphrase", ""); err != nil {
+		t.Errorf("login with new password: %v", err)
+	}
+	_ = u
 }

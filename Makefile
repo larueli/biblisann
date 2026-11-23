@@ -45,11 +45,11 @@ fmt: ## Format Go and web code
 > @if [ -f web/package.json ]; then cd web && pnpm exec biome format --write .; fi
 
 lint: ## Lint Go and web code
-> @if [ -f go.mod ]; then go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run ./...; else echo "lint: no go.mod yet, skipped"; fi
+> @if [ -f go.mod ]; then GOMEMLIMIT=1GiB GOGC=50 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --concurrency 2 ./...; else echo "lint: no go.mod yet, skipped"; fi
 > @if [ -f web/package.json ]; then cd web && pnpm exec biome check .; fi
 
 test: ## Run Go tests with the race detector (Docker needed for testcontainers)
-> @if [ -f go.mod ]; then go test -race -count=1 ./...; else echo "test: no go.mod yet, skipped"; fi
+> @if [ -f go.mod ]; then GOMEMLIMIT=1GiB go test -p 2 -race -count=1 ./...; else echo "test: no go.mod yet, skipped"; fi
 
 vuln: ## Scan Go and web dependencies for known vulnerabilities
 > @if [ -f go.mod ]; then go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...; else echo "vuln: no go.mod yet, skipped"; fi

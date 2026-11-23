@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/mail"
 	"time"
@@ -9,6 +10,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
+	"github.com/larueli/biblisann/internal/auth"
+	"github.com/larueli/biblisann/internal/authz"
 	"github.com/larueli/biblisann/internal/httpmw"
 )
 
@@ -24,6 +27,19 @@ type sessionBody struct {
 	User      userBody  `json:"user"`
 	CSRFToken string    `json:"csrf_token" doc:"Send as X-CSRF-Token on every non-GET request made with the session cookie."`
 	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type loginBody struct {
+	User        *userBody  `json:"user,omitempty"`
+	CSRFToken   string     `json:"csrf_token,omitempty"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	MFARequired bool       `json:"mfa_required"`
+	MFAToken    string     `json:"mfa_token,omitempty" doc:"Present when mfa_required: send it to /v1/auth/mfa with a code."`
+}
+
+type loginOutput struct {
+	SetCookie *http.Cookie `header:"Set-Cookie"`
+	Body      loginBody
 }
 
 type sessionOutput struct {
@@ -82,19 +98,168 @@ func (s *Server) registerAuth(a huma.API) {
 		})
 
 	Register(a, huma.Operation{OperationID: "login", Method: http.MethodPost, Path: "/v1/auth/login",
-		Summary: "Sign in with email and password", Tags: []string{"auth"}, Errors: []int{401, 429}}, PermPublic,
-		func(ctx context.Context, in *struct{ Body credentials }) (*sessionOutput, error) {
+		Summary:     "Sign in with email and password",
+		Description: "When the account has a second factor the answer is 200 with mfa_required=true and an mfa_token, and no cookie: finish with /v1/auth/mfa.",
+		Tags:        []string{"auth"}, Errors: []int{401, 429}}, PermPublic,
+		func(ctx context.Context, in *struct{ Body credentials }) (*loginOutput, error) {
 			if err := s.throttle(ctx, "login", lower(in.Body.Email)); err != nil {
 				return nil, err
 			}
 			sess, err := s.Auth.Login(ctx, in.Body.Email, in.Body.Password, "")
+			var mfa *auth.MFARequired
+			if errors.As(err, &mfa) {
+				return &loginOutput{Body: loginBody{MFARequired: true, MFAToken: mfa.Challenge}}, nil
+			}
 			if err != nil {
 				return nil, mapError(s.Log, err)
 			}
-			return s.sessionOut(sess.Token, sess.CSRFToken, sess.ExpiresAt, userBody{ID: sess.UserID, Email: sess.Email,
-				Name: sess.Name, IsAdmin: sess.IsAdmin, Locale: sess.Locale}), nil
+			return s.loginOK(sess), nil
 		})
 
+	Register(a, huma.Operation{OperationID: "complete-mfa", Method: http.MethodPost, Path: "/v1/auth/mfa",
+		Summary: "Finish a sign-in with an authenticator code or a recovery code", Tags: []string{"auth"}, Errors: []int{401, 429}}, PermPublic,
+		func(ctx context.Context, in *struct {
+			Body struct {
+				MFAToken string `json:"mfa_token" maxLength:"128"`
+				Code     string `json:"code" maxLength:"32"`
+			}
+		}) (*loginOutput, error) {
+			if err := s.throttle(ctx, "mfa", ""); err != nil {
+				return nil, err
+			}
+			sess, err := s.Auth.VerifyMFA(ctx, in.Body.MFAToken, in.Body.Code, "")
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			return s.loginOK(sess), nil
+		})
+
+	Register(a, huma.Operation{OperationID: "request-password-reset", Method: http.MethodPost, Path: "/v1/auth/password-reset",
+		Summary: "Email a password reset link (always answers 204, whether or not the address exists)", Tags: []string{"auth"},
+		DefaultStatus: http.StatusNoContent, Errors: []int{429, 503}}, PermPublic,
+		func(ctx context.Context, in *struct {
+			Body struct {
+				Email string `json:"email" maxLength:"320"`
+			}
+		}) (*struct{}, error) {
+			if !s.Auth.ResetAvailable() {
+				return nil, huma.Error503ServiceUnavailable("password reset is not available on this server")
+			}
+			if err := s.throttle(ctx, "reset", lower(in.Body.Email)); err != nil {
+				return nil, err
+			}
+			if err := s.Auth.RequestReset(ctx, in.Body.Email, s.BaseURL.String()); err != nil {
+				s.Log.Warn("password reset mail failed", "error", err) // never tell the caller
+			}
+			return nil, nil
+		})
+	Register(a, huma.Operation{OperationID: "confirm-password-reset", Method: http.MethodPost, Path: "/v1/auth/password-reset/confirm",
+		Summary: "Set a new password with the token from the reset email", Tags: []string{"auth"},
+		DefaultStatus: http.StatusNoContent, Errors: []int{401, 422, 429}}, PermPublic,
+		func(ctx context.Context, in *struct {
+			Body struct {
+				Token    string `json:"token" maxLength:"128"`
+				Password string `json:"new_password" maxLength:"256"`
+			}
+		}) (*struct{}, error) {
+			if err := s.throttle(ctx, "reset-confirm", ""); err != nil {
+				return nil, err
+			}
+			return nil, mapError(s.Log, s.Auth.Reset(ctx, in.Body.Token, in.Body.Password))
+		})
+
+	type securityBody struct {
+		MFAAvailable      bool `json:"mfa_available"`
+		MFAEnabled        bool `json:"mfa_enabled"`
+		ResetAvailable    bool `json:"reset_available"`
+		PasskeysAvailable bool `json:"passkeys_available"`
+	}
+	Register(a, huma.Operation{OperationID: "get-security", Method: http.MethodGet, Path: "/v1/me/security",
+		Summary: "Which sign-in protections exist on this server and which I use", Tags: []string{"auth"}}, PermAuthenticated,
+		func(ctx context.Context, _ *struct{}) (*struct{ Body securityBody }, error) {
+			p, err := authz.From(ctx)
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			return &struct{ Body securityBody }{securityBody{s.Auth.MFAAvailable(), s.Auth.IsMFAEnabled(ctx, p.UserID), s.Auth.ResetAvailable(), false}}, nil
+		})
+	Register(a, huma.Operation{OperationID: "enroll-totp", Method: http.MethodPost, Path: "/v1/me/mfa/totp",
+		Summary: "Start authenticator-app enrollment", Tags: []string{"auth"}, Errors: []int{503}}, PermAuthenticated,
+		func(ctx context.Context, _ *struct{}) (*struct {
+			Body struct {
+				Secret string `json:"secret" doc:"Base32 secret for manual entry."`
+				URI    string `json:"uri" doc:"otpauth:// URI to render as a QR code."`
+			}
+		}, error) {
+			if SessionFrom(ctx) == nil {
+				return nil, huma.Error403Forbidden("a browser session is required")
+			}
+			p, _ := authz.From(ctx)
+			secret, uri, err := s.Auth.EnrollTOTP(ctx, p.UserID, "Biblisann")
+			if errors.Is(err, auth.ErrMFADisabled) {
+				return nil, huma.Error503ServiceUnavailable(err.Error())
+			}
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			out := &struct {
+				Body struct {
+					Secret string `json:"secret" doc:"Base32 secret for manual entry."`
+					URI    string `json:"uri" doc:"otpauth:// URI to render as a QR code."`
+				}
+			}{}
+			out.Body.Secret, out.Body.URI = secret, uri
+			return out, nil
+		})
+	Register(a, huma.Operation{OperationID: "confirm-totp", Method: http.MethodPost, Path: "/v1/me/mfa/totp/confirm",
+		Summary: "Confirm enrollment with a first code; returns one-time recovery codes", Tags: []string{"auth"}, Errors: []int{422}}, PermAuthenticated,
+		func(ctx context.Context, in *struct {
+			Body struct {
+				Code string `json:"code" maxLength:"16"`
+			}
+		}) (*struct {
+			Body struct {
+				RecoveryCodes []string `json:"recovery_codes" doc:"Shown once. Each works once."`
+			}
+		}, error) {
+			if SessionFrom(ctx) == nil {
+				return nil, huma.Error403Forbidden("a browser session is required")
+			}
+			p, _ := authz.From(ctx)
+			if err := s.throttle(ctx, "totp-confirm", p.UserID.String()); err != nil {
+				return nil, err
+			}
+			codes, err := s.Auth.ConfirmTOTP(ctx, p.UserID, in.Body.Code)
+			if errors.Is(err, auth.ErrInvalidCode) {
+				return nil, huma.Error422UnprocessableEntity("invalid code")
+			}
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			out := &struct {
+				Body struct {
+					RecoveryCodes []string `json:"recovery_codes" doc:"Shown once. Each works once."`
+				}
+			}{}
+			out.Body.RecoveryCodes = codes
+			return out, nil
+		})
+	Register(a, huma.Operation{OperationID: "disable-totp", Method: http.MethodDelete, Path: "/v1/me/mfa/totp",
+		Summary: "Turn the authenticator off (password required)", Tags: []string{"auth"}, DefaultStatus: http.StatusNoContent, Errors: []int{401}}, PermAuthenticated,
+		func(ctx context.Context, in *struct {
+			Body struct {
+				Password string `json:"password" maxLength:"256"`
+			}
+		}) (*struct{}, error) {
+			if SessionFrom(ctx) == nil {
+				return nil, huma.Error403Forbidden("a browser session is required")
+			}
+			p, _ := authz.From(ctx)
+			if err := s.throttle(ctx, "totp-disable", p.UserID.String()); err != nil {
+				return nil, err
+			}
+			return nil, mapError(s.Log, s.Auth.DisableTOTP(ctx, p.UserID, in.Body.Password))
+		})
 	Register(a, huma.Operation{OperationID: "get-session", Method: http.MethodGet, Path: "/v1/auth/session",
 		Summary: "Current user and CSRF token", Tags: []string{"auth"}}, PermAuthenticated,
 		func(ctx context.Context, _ *struct{}) (*struct{ Body sessionBody }, error) {
@@ -140,6 +305,12 @@ func (s *Server) registerAuth(a huma.API) {
 			}
 			return nil, nil
 		})
+}
+
+func (s *Server) loginOK(sess *auth.Session) *loginOutput {
+	u := userBody{ID: sess.UserID, Email: sess.Email, Name: sess.Name, IsAdmin: sess.IsAdmin, Locale: sess.Locale}
+	exp := sess.ExpiresAt
+	return &loginOutput{SetCookie: newSessionCookie(s.secure, sess.Token, exp), Body: loginBody{User: &u, CSRFToken: sess.CSRFToken, ExpiresAt: &exp}}
 }
 
 func lower(s string) string {

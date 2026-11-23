@@ -260,3 +260,14 @@ func ValidTarget(kind, target string) bool {
 		return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil
 	}
 }
+
+// SendMail sends a plain-text message to an address (password reset links, for example).
+func (e Email) SendMail(ctx context.Context, to, subject, body string) error {
+	msg, err := buildMessage(e.Config.From, to, subject, body, time.Now())
+	if err != nil {
+		return err
+	}
+	from, _ := mail.ParseAddress(e.Config.From)
+	rcpt, _ := mail.ParseAddress(to)
+	return e.deliver(ctx, from.Address, rcpt.Address, msg)
+}

@@ -199,6 +199,13 @@ type LoanNotification struct {
 	SentAt time.Time
 }
 
+type MfaChallenge struct {
+	TokenHash []byte
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+	Attempts  int32
+}
+
 type NotificationChannel struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
@@ -207,6 +214,13 @@ type NotificationChannel struct {
 	Config    []byte
 	Enabled   bool
 	CreatedAt time.Time
+}
+
+type PasswordReset struct {
+	TokenHash []byte
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+	UsedAt    *time.Time
 }
 
 type PermissionProfile struct {
@@ -243,6 +257,12 @@ type ReadingState struct {
 	UpdatedAt  time.Time
 }
 
+type RecoveryCode struct {
+	UserID   uuid.UUID
+	CodeHash []byte
+	UsedAt   *time.Time
+}
+
 type Session struct {
 	TokenHash []byte
 	UserID    uuid.UUID
@@ -268,6 +288,13 @@ type User struct {
 type UserLibraryAccess struct {
 	UserID    uuid.UUID
 	LibraryID uuid.UUID
+}
+
+type UserTotp struct {
+	UserID      uuid.UUID
+	SecretEnc   []byte
+	ConfirmedAt *time.Time
+	LastStep    int64
 }
 
 type Work struct {

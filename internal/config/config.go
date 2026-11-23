@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -30,6 +31,10 @@ type Config struct {
 	// StaticProviderFile is an optional JSON file of ISBN -> metadata served by the "static"
 	// provider (air-gapped instances, curated data, tests).
 	StaticProviderFile string
+
+	// SecretKey (base64, 32 bytes) seals secrets at rest (TOTP). Without it two-factor is off.
+	// Generate with: openssl rand -base64 32
+	SecretKey Secret
 
 	// Cover storage: "local" (CoversDir) or "s3".
 	StorageBackend string
@@ -98,6 +103,13 @@ func Load(src Sources, opts Options) (Config, error) {
 	}
 	if v, ok := r.lookup("SMTP_PASSWORD", true); ok {
 		c.SMTPPassword = Secret(v)
+	}
+	if v, ok := r.lookup("SECRET_KEY", true); ok {
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v))
+		if err != nil || len(raw) != 32 {
+			r.fail("%sSECRET_KEY: must be base64 of exactly 32 bytes (openssl rand -base64 32)", prefix)
+		}
+		c.SecretKey = Secret(v)
 	}
 	if v, ok := r.lookup("S3_SECRET_KEY", true); ok {
 		c.S3SecretKey = Secret(v)

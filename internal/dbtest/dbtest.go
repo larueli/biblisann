@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/moby/moby/api/types/container"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
@@ -30,6 +31,9 @@ var (
 func start(ctx context.Context) {
 	ctr, err := postgres.Run(ctx, image,
 		postgres.WithDatabase("postgres"), postgres.WithUsername("test"), postgres.WithPassword("test"),
+		// Small and fast: this host may have little RAM and no swap.
+		testcontainers.WithCmdArgs("-c", "shared_buffers=16MB", "-c", "max_connections=50", "-c", "fsync=off", "-c", "work_mem=2MB"),
+		testcontainers.WithHostConfigModifier(func(hc *container.HostConfig) { hc.Memory = 384 << 20; hc.MemorySwap = 384 << 20 }),
 		postgres.BasicWaitStrategies())
 	if err != nil {
 		startEr = err

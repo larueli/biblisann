@@ -50,6 +50,8 @@ type Service struct {
 	// which emails are registered.
 	dummyHash string
 	now       func() time.Time
+	secretKey []byte // enables TOTP
+	mailer    Mailer // enables password reset
 }
 
 // NewService creates the service.
@@ -175,6 +177,13 @@ func (s *Service) Login(ctx context.Context, email, password, userAgent string) 
 	ok, verr := VerifyPassword(password, hash)
 	if verr != nil || !ok || u.PasswordHash == nil || u.DisabledAt != nil {
 		return nil, ErrInvalidCredentials
+	}
+	if s.secretKey != nil && s.hasMFA(ctx, u.ID) {
+		ch, err := s.startChallenge(ctx, u.ID)
+		if err != nil {
+			return nil, err
+		}
+		return nil, ch
 	}
 	return s.openSession(ctx, u, userAgent)
 }

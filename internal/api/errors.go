@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"log/slog"
+	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -45,6 +46,10 @@ func mapError(log *slog.Logger, err error) error {
 		return huma.Error422UnprocessableEntity(err.Error())
 	case errors.As(err, &weak):
 		return huma.Error422UnprocessableEntity(weak.Error())
+	case errors.Is(err, auth.ErrInvalidCode), errors.Is(err, auth.ErrInvalidToken):
+		return huma.Error401Unauthorized("invalid or expired code")
+	case errors.Is(err, auth.ErrTooManyTries):
+		return huma.NewError(http.StatusTooManyRequests, "too many attempts")
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		return huma.Error401Unauthorized("invalid email or password")
 	case errors.Is(err, auth.ErrRegistrationClosed):

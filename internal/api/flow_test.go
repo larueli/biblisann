@@ -388,3 +388,38 @@ func TestImportInventoryBackup(t *testing.T) {
 		t.Errorf("non-admin backup: %d", st)
 	}
 }
+
+func TestMFAOverAPI(t *testing.T) {
+	srv, authSvc := newServer(t)
+	if err := authSvc.EnableMFA(bytes.Repeat([]byte{3}, 32)); err != nil {
+		t.Fatal(err)
+	}
+	c := &client{t: t, srv: srv}
+	c.do("POST", "/v1/auth/register", map[string]string{"email": "me@example.org", "password": "tulips in the garden"}, nil)
+	c.login("me@example.org", "tulips in the garden")
+	st, enr := c.w("POST", "/v1/me/mfa/totp", nil)
+	if st != 200 {
+		t.Fatalf("enroll %d %v", st, enr)
+	}
+	code := auth.CurrentTOTP(enr["secret"].(string), time.Now())
+	st, conf := c.w("POST", "/v1/me/mfa/totp/confirm", map[string]string{"code": code})
+	if st != 200 || len(conf["recovery_codes"].([]any)) != 10 {
+		t.Fatalf("confirm %d %v", st, conf)
+	}
+	st, out, hdr := (&client{t: t, srv: srv}).do("POST", "/v1/auth/login", map[string]string{"email": "me@example.org", "password": "tulips in the garden"}, nil)
+	if st != 200 || out["mfa_required"] != true || hdr.Get("Set-Cookie") != "" {
+		t.Fatalf("login with mfa: %d %v cookie=%q", st, out, hdr.Get("Set-Cookie"))
+	}
+	token := out["mfa_token"].(string)
+	if st, _, _ := (&client{t: t, srv: srv}).do("POST", "/v1/auth/mfa", map[string]string{"mfa_token": token, "code": "000000"}, nil); st != 401 {
+		t.Errorf("wrong code: %d", st)
+	}
+	recovery := conf["recovery_codes"].([]any)[0].(string)
+	st, out, hdr = (&client{t: t, srv: srv}).do("POST", "/v1/auth/mfa", map[string]string{"mfa_token": token, "code": recovery}, nil)
+	if st != 200 || hdr.Get("Set-Cookie") == "" || out["csrf_token"] == nil {
+		t.Errorf("complete mfa: %d %v", st, out)
+	}
+	if st, _ := c.w("POST", "/v1/auth/password-reset", map[string]string{"email": "me@example.org"}); st != 503 {
+		t.Errorf("reset without mailer: %d", st)
+	}
+}

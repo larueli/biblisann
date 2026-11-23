@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -89,6 +90,12 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	if err != nil {
 		return nil, nil, err
 	}
+	if cfg.SecretKey != "" {
+		key, _ := base64.StdEncoding.DecodeString(cfg.SecretKey.Reveal())
+		if err := authSvc.EnableMFA(key); err != nil {
+			return nil, nil, err
+		}
+	}
 	covers, err := OpenStorage(context.Background(), cfg, cfg.StorageBackend)
 	if err != nil {
 		return nil, nil, err
@@ -120,8 +127,10 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 
 	senders := []notify.Sender{notify.Webhook{HTTP: fetcher}, notify.Ntfy{HTTP: fetcher}}
 	if cfg.SMTPHost != "" {
-		senders = append(senders, notify.Email{Config: notify.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort,
-			Username: cfg.SMTPUsername, Password: cfg.SMTPPassword.Reveal(), From: cfg.SMTPFrom, Mode: cfg.SMTPMode}})
+		mailer := notify.Email{Config: notify.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort,
+			Username: cfg.SMTPUsername, Password: cfg.SMTPPassword.Reveal(), From: cfg.SMTPFrom, Mode: cfg.SMTPMode}}
+		senders = append(senders, mailer)
+		authSvc.SetMailer(mailer)
 	}
 	if cfg.VAPIDPublicKey != "" {
 		subject := cfg.VAPIDSubject

@@ -48,6 +48,7 @@ Supply-chain attacks (typosquatting, hallucinated package names, abandoned packa
 | `github.com/minio/minio-go/v7` | S3-compatible cover storage | Apache-2.0 | `aws-sdk-go-v2` (much larger) | Slice 2 |
 | `github.com/modelcontextprotocol/go-sdk` | MCP server (streamable HTTP) | MIT/Apache-2.0 | `mark3labs/mcp-go` (community) | Slice 2 |
 | `qrcode` (web) | QR labels for places, generated in the browser | MIT | `qrcode-generator` | Slice 2 |
+| `github.com/moby/moby/api` (tests only) | Docker host-config types to cap test container memory | Apache-2.0 | none (needed by the testcontainers option) | Slice 3 |
 | `zensical` (docs build tool, run with `uvx`, not part of the product) | Documentation site | MIT | MkDocs Material (see ADR 0012) | Slice 0 |
 
 ## Consequences
