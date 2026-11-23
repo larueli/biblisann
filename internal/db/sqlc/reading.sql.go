@@ -28,6 +28,20 @@ func (q *Queries) AverageGrade(ctx context.Context, userID uuid.UUID) (AverageGr
 	return i, err
 }
 
+const deleteExternalGrade = `-- name: DeleteExternalGrade :exec
+DELETE FROM external_grades WHERE work_id = $1 AND source = $2
+`
+
+type DeleteExternalGradeParams struct {
+	WorkID uuid.UUID
+	Source string
+}
+
+func (q *Queries) DeleteExternalGrade(ctx context.Context, arg DeleteExternalGradeParams) error {
+	_, err := q.db.Exec(ctx, deleteExternalGrade, arg.WorkID, arg.Source)
+	return err
+}
+
 const deleteGrade = `-- name: DeleteGrade :exec
 DELETE FROM grades WHERE user_id = $1 AND work_id = $2
 `
@@ -54,6 +68,140 @@ type DeleteReadingStateParams struct {
 func (q *Queries) DeleteReadingState(ctx context.Context, arg DeleteReadingStateParams) error {
 	_, err := q.db.Exec(ctx, deleteReadingState, arg.UserID, arg.WorkID)
 	return err
+}
+
+const exportGrades = `-- name: ExportGrades :many
+SELECT g.grade, g.comment, e.isbn13, e.title, e.authors
+FROM grades g JOIN LATERAL (SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at FROM editions WHERE work_id = g.work_id ORDER BY created_at LIMIT 1) e ON true
+WHERE g.user_id = $1 ORDER BY g.updated_at, g.work_id
+`
+
+type ExportGradesRow struct {
+	Grade   *int16
+	Comment string
+	Isbn13  *string
+	Title   string
+	Authors []string
+}
+
+func (q *Queries) ExportGrades(ctx context.Context, userID uuid.UUID) ([]ExportGradesRow, error) {
+	rows, err := q.db.Query(ctx, exportGrades, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportGradesRow{}
+	for rows.Next() {
+		var i ExportGradesRow
+		if err := rows.Scan(
+			&i.Grade,
+			&i.Comment,
+			&i.Isbn13,
+			&i.Title,
+			&i.Authors,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportReading = `-- name: ExportReading :many
+SELECT r.status, r.started_on, r.finished_on, e.isbn13, e.title, e.authors
+FROM reading_states r JOIN LATERAL (SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at FROM editions WHERE work_id = r.work_id ORDER BY created_at LIMIT 1) e ON true
+WHERE r.user_id = $1 ORDER BY r.updated_at, r.work_id
+`
+
+type ExportReadingRow struct {
+	Status     string
+	StartedOn  *time.Time
+	FinishedOn *time.Time
+	Isbn13     *string
+	Title      string
+	Authors    []string
+}
+
+func (q *Queries) ExportReading(ctx context.Context, userID uuid.UUID) ([]ExportReadingRow, error) {
+	rows, err := q.db.Query(ctx, exportReading, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportReadingRow{}
+	for rows.Next() {
+		var i ExportReadingRow
+		if err := rows.Scan(
+			&i.Status,
+			&i.StartedOn,
+			&i.FinishedOn,
+			&i.Isbn13,
+			&i.Title,
+			&i.Authors,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const externalGradeCandidates = `-- name: ExternalGradeCandidates :many
+SELECT w.id AS work_id,
+       (SELECT e.isbn13 FROM editions e WHERE e.work_id = w.id AND e.isbn13 IS NOT NULL ORDER BY e.created_at LIMIT 1)::text AS isbn13
+FROM works w
+LEFT JOIN external_grade_checks c ON c.work_id = w.id AND c.source = $1
+WHERE EXISTS (SELECT 1 FROM editions e WHERE e.work_id = w.id AND e.isbn13 IS NOT NULL)
+  AND (c.work_id IS NULL
+    OR (c.status = 'ok'    AND c.checked_at < now() - make_interval(days => $2::int))
+    OR (c.status = 'none'  AND c.checked_at < now() - make_interval(days => $3::int))
+    OR (c.status = 'error' AND c.checked_at < now() - make_interval(mins => LEAST(c.attempts * 30, 1440))))
+ORDER BY c.checked_at NULLS FIRST, w.created_at
+LIMIT $4
+`
+
+type ExternalGradeCandidatesParams struct {
+	Source  string
+	Column2 int32
+	Column3 int32
+	Limit   int32
+}
+
+type ExternalGradeCandidatesRow struct {
+	WorkID uuid.UUID
+	Isbn13 string
+}
+
+// Works with an ISBN that are due for a (re)check at a rating source, never-checked ones first.
+func (q *Queries) ExternalGradeCandidates(ctx context.Context, arg ExternalGradeCandidatesParams) ([]ExternalGradeCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, externalGradeCandidates,
+		arg.Source,
+		arg.Column2,
+		arg.Column3,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExternalGradeCandidatesRow{}
+	for rows.Next() {
+		var i ExternalGradeCandidatesRow
+		if err := rows.Scan(&i.WorkID, &i.Isbn13); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getAnyISBNOfWork = `-- name: GetAnyISBNOfWork :one
@@ -251,6 +399,24 @@ func (q *Queries) ReadingCounts(ctx context.Context, userID uuid.UUID) ([]Readin
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordExternalGradeCheck = `-- name: RecordExternalGradeCheck :exec
+INSERT INTO external_grade_checks (work_id, source, status, attempts) VALUES ($1, $2, $3, CASE WHEN $3 = 'error' THEN 1 ELSE 0 END)
+ON CONFLICT (work_id, source) DO UPDATE
+SET checked_at = now(), status = EXCLUDED.status,
+    attempts = CASE WHEN EXCLUDED.status = 'error' THEN external_grade_checks.attempts + 1 ELSE 0 END
+`
+
+type RecordExternalGradeCheckParams struct {
+	WorkID uuid.UUID
+	Source string
+	Status string
+}
+
+func (q *Queries) RecordExternalGradeCheck(ctx context.Context, arg RecordExternalGradeCheckParams) error {
+	_, err := q.db.Exec(ctx, recordExternalGradeCheck, arg.WorkID, arg.Source, arg.Status)
+	return err
 }
 
 const upsertExternalGrade = `-- name: UpsertExternalGrade :exec

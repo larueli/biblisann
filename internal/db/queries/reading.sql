@@ -49,3 +49,36 @@ SELECT coalesce(avg(grade), 0)::float8 AS average, count(grade)::int AS graded F
 
 -- name: GetAnyISBNOfWork :one
 SELECT isbn13 FROM editions WHERE work_id = $1 AND isbn13 IS NOT NULL ORDER BY created_at LIMIT 1;
+
+-- name: ExternalGradeCandidates :many
+-- Works with an ISBN that are due for a (re)check at a rating source, never-checked ones first.
+SELECT w.id AS work_id,
+       (SELECT e.isbn13 FROM editions e WHERE e.work_id = w.id AND e.isbn13 IS NOT NULL ORDER BY e.created_at LIMIT 1)::text AS isbn13
+FROM works w
+LEFT JOIN external_grade_checks c ON c.work_id = w.id AND c.source = $1
+WHERE EXISTS (SELECT 1 FROM editions e WHERE e.work_id = w.id AND e.isbn13 IS NOT NULL)
+  AND (c.work_id IS NULL
+    OR (c.status = 'ok'    AND c.checked_at < now() - make_interval(days => $2::int))
+    OR (c.status = 'none'  AND c.checked_at < now() - make_interval(days => $3::int))
+    OR (c.status = 'error' AND c.checked_at < now() - make_interval(mins => LEAST(c.attempts * 30, 1440))))
+ORDER BY c.checked_at NULLS FIRST, w.created_at
+LIMIT $4;
+
+-- name: RecordExternalGradeCheck :exec
+INSERT INTO external_grade_checks (work_id, source, status, attempts) VALUES ($1, $2, $3, CASE WHEN $3 = 'error' THEN 1 ELSE 0 END)
+ON CONFLICT (work_id, source) DO UPDATE
+SET checked_at = now(), status = EXCLUDED.status,
+    attempts = CASE WHEN EXCLUDED.status = 'error' THEN external_grade_checks.attempts + 1 ELSE 0 END;
+
+-- name: DeleteExternalGrade :exec
+DELETE FROM external_grades WHERE work_id = $1 AND source = $2;
+
+-- name: ExportReading :many
+SELECT r.status, r.started_on, r.finished_on, e.isbn13, e.title, e.authors
+FROM reading_states r JOIN LATERAL (SELECT * FROM editions WHERE work_id = r.work_id ORDER BY created_at LIMIT 1) e ON true
+WHERE r.user_id = $1 ORDER BY r.updated_at, r.work_id;
+
+-- name: ExportGrades :many
+SELECT g.grade, g.comment, e.isbn13, e.title, e.authors
+FROM grades g JOIN LATERAL (SELECT * FROM editions WHERE work_id = g.work_id ORDER BY created_at LIMIT 1) e ON true
+WHERE g.user_id = $1 ORDER BY g.updated_at, g.work_id;

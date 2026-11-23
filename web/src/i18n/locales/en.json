@@ -149,11 +149,13 @@
     "testSent": "Test sent.",
     "testFailed": "Delivery failed.",
     "import": "Import from Goodreads",
-    "importFile": "Goodreads CSV file",
+    "importFile": "Export file (CSV)",
     "imported": "Imported {{books}} new books and {{copies}} copies.",
     "backup": "Backup",
     "backupHelp": "The archive contains password hashes: store it safely.",
-    "downloadBackup": "Download a backup"
+    "downloadBackup": "Download a backup",
+    "importTitle": "Import from another service",
+    "importSource": "Source"
   },
   "book": {
     "actions": "Reading, grade, lending",
@@ -195,5 +197,34 @@
     "allow": "Allow",
     "deny": "Deny",
     "invalid": "This authorization request is invalid. Close this page."
+  },
+  "account": {
+    "sessions": "Where I am signed in",
+    "unknownDevice": "Unknown device",
+    "thisDevice": "this device",
+    "signOutOthers": "Sign out everywhere else",
+    "apps": "Authorized applications",
+    "dataTitle": "My data",
+    "dataHelp": "Export everything you own as one file (libraries you administer, lists, reading, grades, contacts) and import it again here or on another server.",
+    "exportAll": "Download all my data",
+    "importAccount": "Restore from an account export",
+    "importLibrary": "Import a library export as a new library",
+    "imported": "Imported {{libraries}} libraries and {{books}} copies.",
+    "deleteTitle": "Delete my account",
+    "deleteStart": "Delete my account…",
+    "deleteWarning": "This deletes your account and the libraries only you use. It cannot be undone: export your data first.",
+    "typeEmail": "Type your email address to confirm",
+    "promote": "If I alone administer a shared library, make another member its administrator",
+    "deleteConfirm": "Delete my account for good"
+  },
+  "admin": {
+    "users": "Accounts",
+    "admin": "admin",
+    "disabled": "disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "signOut": "Sign out everywhere",
+    "delete": "Delete",
+    "confirmDelete": "Delete the account {{email}} and the libraries only it uses?"
   }
 }

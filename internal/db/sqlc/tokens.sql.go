@@ -79,6 +79,15 @@ func (q *Queries) DeleteToken(ctx context.Context, arg DeleteTokenParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const deleteUserTokens = `-- name: DeleteUserTokens :exec
+DELETE FROM access_tokens WHERE user_id = $1 AND kind = 'pat'
+`
+
+func (q *Queries) DeleteUserTokens(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserTokens, userID)
+	return err
+}
+
 const getTokenByHash = `-- name: GetTokenByHash :one
 SELECT t.id, t.user_id, t.kind, t.scopes, t.library_ids, u.email, u.is_admin, u.disabled_at
 FROM access_tokens t JOIN users u ON u.id = t.user_id

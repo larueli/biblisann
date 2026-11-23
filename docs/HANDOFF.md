@@ -11,7 +11,8 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 - Slice 1: accounts, catalog, providers, covers, libraries, search, offline index sync and outbox, scanner, e2e.
 - Slice 2: sharing and profiles, reading status and grades, lists and series, loans, River jobs and notifications, ICS, tokens, MCP, backup/restore, S3 storage, Goodreads import, inventory, QR labels.
 - Slice 3: OIDC, TOTP and recovery, password reset, passkeys, SCIM, OAuth server for MCP, extra providers and addons, Hardcover ratings, OPDS, Valkey rate limiting.
-- ADRs 0011 to 0021, user docs (first run, organise, security, install, configuration), `docs/dev/addons.md`.
+- Follow-up: StoryGraph and LibraryThing importers, Hardcover bulk refresh job (rate limit, retry, 3-day refresh), library/account export and import, account deletion, session and OAuth grant revocation, admin user management, S3 tested with RustFS.
+- ADRs 0011 to 0022, user docs (first run, organise, security, install, configuration), `docs/dev/addons.md`.
 
 ## In progress
 

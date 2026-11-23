@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/larueli/biblisann/internal/authz"
+	"github.com/larueli/biblisann/internal/importer"
 )
 
 func (s *Server) registerExtras(a huma.API) {
@@ -48,18 +49,28 @@ func (s *Server) registerExtras(a huma.API) {
 			Message string `json:"message"`
 		} `json:"errors" nullable:"false"`
 	}
-	Register(a, huma.Operation{OperationID: "import-goodreads", Method: http.MethodPost, Path: "/v1/libraries/{id}/import/goodreads",
-		Summary:     "Import a Goodreads CSV export into a library (no metadata provider is queried)",
+	Register(a, huma.Operation{OperationID: "import-books", Method: http.MethodPost, Path: "/v1/libraries/{id}/import/{source}",
+		Summary:     "Import a Goodreads, StoryGraph or LibraryThing export into a library (no metadata provider is queried)",
 		Description: "Send the CSV file as the request body with Content-Type text/csv. Re-importing the same file does not duplicate copies.",
 		Tags:        []string{"import"}, Errors: []int{413, 422}}, PermLibraryEdit,
 		func(ctx context.Context, in *struct {
 			ID      uuid.UUID `path:"id"`
+			Source  string    `path:"source" enum:"goodreads,storygraph,librarything"`
 			RawBody []byte    `contentType:"text/csv"`
 		}) (*struct{ Body reportBody }, error) {
 			if s.Importer == nil {
 				return nil, huma.Error503ServiceUnavailable("import is not available")
 			}
-			rep, err := s.Importer.Goodreads(ctx, in.ID, bytes.NewReader(in.RawBody))
+			var rep importer.Report
+			var err error
+			switch in.Source {
+			case "goodreads":
+				rep, err = s.Importer.Goodreads(ctx, in.ID, bytes.NewReader(in.RawBody))
+			case "storygraph":
+				rep, err = s.Importer.StoryGraph(ctx, in.ID, bytes.NewReader(in.RawBody))
+			default:
+				rep, err = s.Importer.LibraryThing(ctx, in.ID, bytes.NewReader(in.RawBody))
+			}
 			if err != nil {
 				return nil, mapError(s.Log, err)
 			}

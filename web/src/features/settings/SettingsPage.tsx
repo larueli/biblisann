@@ -5,6 +5,8 @@ import { api, problemMessage, type Schemas } from "../../api/client";
 import { field, muted, primary, secondary } from "../../app/ui";
 import { useSession } from "../auth/session";
 import { useLibraries } from "../library/useLibraries";
+import { AccountSection } from "./Account";
+import { AdminUsers } from "./AdminUsers";
 import { Security } from "./Security";
 
 type ChannelKind = Schemas["ChannelBody"]["kind"];
@@ -202,12 +204,13 @@ function GoodreadsImport() {
   const { t } = useTranslation();
   const libraries = useLibraries();
   const libraryId = libraries.data?.[0]?.id;
+  const [source, setSource] = useState<"goodreads" | "storygraph" | "librarything">("goodreads");
   const imp = useMutation({
     mutationFn: async (file: File) => {
       if (!libraryId) throw new Error("no library");
       const text = await file.text();
-      const { data, error } = await api.POST("/v1/libraries/{id}/import/goodreads", {
-        params: { path: { id: libraryId } },
+      const { data, error } = await api.POST("/v1/libraries/{id}/import/{source}", {
+        params: { path: { id: libraryId, source } },
         body: text as unknown as never,
         bodySerializer: (b: unknown) => String(b),
         headers: { "Content-Type": "text/csv" },
@@ -218,10 +221,20 @@ function GoodreadsImport() {
   });
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-lg font-semibold">{t("settings.import")}</h2>
+      <h2 className="text-lg font-semibold">{t("settings.importTitle")}</h2>
+      <select
+        className={field}
+        value={source}
+        onChange={(e) => setSource(e.target.value as typeof source)}
+        aria-label={t("settings.importSource")}
+      >
+        <option value="goodreads">Goodreads</option>
+        <option value="storygraph">StoryGraph</option>
+        <option value="librarything">LibraryThing</option>
+      </select>
       <input
         type="file"
-        accept=".csv,text/csv"
+        accept=".csv,.tsv,text/csv,text/tab-separated-values"
         aria-label={t("settings.importFile")}
         onChange={(e) => e.target.files?.[0] && imp.mutate(e.target.files[0])}
       />
@@ -247,6 +260,8 @@ export function SettingsPage() {
       <Tokens />
       <Channels />
       <GoodreadsImport />
+      <AccountSection />
+      {session.data?.user.is_admin && <AdminUsers />}
       {session.data?.user.is_admin && (
         <section className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold">{t("settings.backup")}</h2>

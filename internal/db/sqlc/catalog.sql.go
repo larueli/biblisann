@@ -199,6 +199,17 @@ func (q *Queries) GetCover(ctx context.Context, id uuid.UUID) (Cover, error) {
 	return i, err
 }
 
+const getCoverSHA = `-- name: GetCoverSHA :one
+SELECT sha256 FROM covers WHERE id = $1
+`
+
+func (q *Queries) GetCoverSHA(ctx context.Context, id uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getCoverSHA, id)
+	var sha256 []byte
+	err := row.Scan(&sha256)
+	return sha256, err
+}
+
 const getEdition = `-- name: GetEdition :one
 SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at FROM editions WHERE id = $1
 `
@@ -391,6 +402,20 @@ func (q *Queries) SearchEditions(ctx context.Context, arg SearchEditionsParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const setEditionCoverIfMissing = `-- name: SetEditionCoverIfMissing :exec
+UPDATE editions SET cover_id = $2 WHERE id = $1 AND cover_id IS NULL
+`
+
+type SetEditionCoverIfMissingParams struct {
+	ID      uuid.UUID
+	CoverID *uuid.UUID
+}
+
+func (q *Queries) SetEditionCoverIfMissing(ctx context.Context, arg SetEditionCoverIfMissingParams) error {
+	_, err := q.db.Exec(ctx, setEditionCoverIfMissing, arg.ID, arg.CoverID)
+	return err
 }
 
 const updateEditionMetadata = `-- name: UpdateEditionMetadata :one

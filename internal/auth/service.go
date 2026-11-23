@@ -294,3 +294,89 @@ func hashToken(token string) []byte {
 	h := sha256.Sum256([]byte(token))
 	return h[:]
 }
+
+// SessionInfo describes a login for the "my sessions" screen. The token itself is never exposed.
+type SessionInfo struct {
+	ID        uuid.UUID
+	CreatedAt time.Time
+	LastSeen  time.Time
+	ExpiresAt time.Time
+	UserAgent string
+	Current   bool
+}
+
+// Sessions lists the user's live sessions; currentToken marks the caller's own.
+func (s *Service) Sessions(ctx context.Context, userID uuid.UUID, currentToken string) ([]SessionInfo, error) {
+	rows, err := s.q.ListUserSessions(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("auth: list sessions: %w", err)
+	}
+	cur := hashToken(currentToken)
+	out := make([]SessionInfo, len(rows))
+	for i, r := range rows {
+		out[i] = SessionInfo{r.ID, r.CreatedAt, r.LastSeen, r.ExpiresAt, r.UserAgent, currentToken != "" && string(r.TokenHash) == string(cur)}
+	}
+	return out, nil
+}
+
+// RevokeSession signs one of the user's sessions out. It reports ErrSessionNotFound for IDs that
+// are not theirs.
+func (s *Service) RevokeSession(ctx context.Context, userID, sessionID uuid.UUID) error {
+	n, err := s.q.DeleteSessionByID(ctx, dbsqlc.DeleteSessionByIDParams{ID: sessionID, UserID: userID})
+	if err != nil {
+		return fmt.Errorf("auth: revoke session: %w", err)
+	}
+	if n == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
+// RevokeOtherSessions signs the user out everywhere except the current session.
+func (s *Service) RevokeOtherSessions(ctx context.Context, userID uuid.UUID, currentToken string) (int64, error) {
+	return s.q.DeleteOtherSessions(ctx, dbsqlc.DeleteOtherSessionsParams{UserID: userID, TokenHash: hashToken(currentToken)})
+}
+
+// RevokeAllSessions signs a user out everywhere (administrator action).
+func (s *Service) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error {
+	return s.q.DeleteUserSessions(ctx, userID)
+}
+
+// SetDisabled disables or re-enables an account. Disabling also ends its sessions.
+func (s *Service) SetDisabled(ctx context.Context, userID uuid.UUID, disabled bool) error {
+	var at *time.Time
+	if disabled {
+		now := s.now()
+		at = &now
+	}
+	if err := s.q.SetUserDisabled(ctx, dbsqlc.SetUserDisabledParams{ID: userID, DisabledAt: at}); err != nil {
+		return err
+	}
+	if disabled {
+		return s.q.DeleteUserSessions(ctx, userID)
+	}
+	return nil
+}
+
+// ConfirmIdentity re-checks the caller before a destructive action: the typed email must be theirs
+// and, for accounts with a password, the password must match.
+func (s *Service) ConfirmIdentity(ctx context.Context, userID uuid.UUID, email, password string) error {
+	u, err := s.q.GetUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(strings.TrimSpace(email), u.Email) {
+		return ErrInvalidCredentials
+	}
+	if u.PasswordHash != nil {
+		if ok, _ := VerifyPassword(password, *u.PasswordHash); !ok {
+			return ErrInvalidCredentials
+		}
+	}
+	return nil
+}
+
+// ListUsers returns accounts for the administration screen.
+func (s *Service) ListUsers(ctx context.Context, limit, offset int) ([]dbsqlc.ListUsersAdminRow, error) {
+	return s.q.ListUsersAdmin(ctx, dbsqlc.ListUsersAdminParams{Limit: int32(limit), Offset: int32(offset)})
+}

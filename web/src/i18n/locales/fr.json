@@ -149,11 +149,13 @@
     "testSent": "Test envoyé.",
     "testFailed": "Échec de l'envoi.",
     "import": "Importer depuis Goodreads",
-    "importFile": "Fichier CSV Goodreads",
+    "importFile": "Fichier d'export (CSV)",
     "imported": "{{books}} nouveaux livres et {{copies}} exemplaires importés.",
     "backup": "Sauvegarde",
     "backupHelp": "L'archive contient des empreintes de mots de passe : conservez-la en lieu sûr.",
-    "downloadBackup": "Télécharger une sauvegarde"
+    "downloadBackup": "Télécharger une sauvegarde",
+    "importTitle": "Importer depuis un autre service",
+    "importSource": "Source"
   },
   "book": {
     "actions": "Lecture, note, prêt",
@@ -195,5 +197,34 @@
     "allow": "Autoriser",
     "deny": "Refuser",
     "invalid": "Cette demande d'autorisation est invalide. Fermez cette page."
+  },
+  "account": {
+    "sessions": "Où je suis connecté",
+    "unknownDevice": "Appareil inconnu",
+    "thisDevice": "cet appareil",
+    "signOutOthers": "Me déconnecter partout ailleurs",
+    "apps": "Applications autorisées",
+    "dataTitle": "Mes données",
+    "dataHelp": "Exportez tout ce qui vous appartient dans un seul fichier (bibliothèques que vous administrez, listes, lectures, notes, contacts) et réimportez-le ici ou sur un autre serveur.",
+    "exportAll": "Télécharger toutes mes données",
+    "importAccount": "Restaurer depuis un export de compte",
+    "importLibrary": "Importer un export de bibliothèque comme nouvelle bibliothèque",
+    "imported": "{{libraries}} bibliothèques et {{books}} exemplaires importés.",
+    "deleteTitle": "Supprimer mon compte",
+    "deleteStart": "Supprimer mon compte…",
+    "deleteWarning": "Cela supprime votre compte et les bibliothèques que vous seul utilisez. C'est irréversible : exportez d'abord vos données.",
+    "typeEmail": "Saisissez votre adresse e-mail pour confirmer",
+    "promote": "Si j'administre seul une bibliothèque partagée, nommer un autre membre administrateur",
+    "deleteConfirm": "Supprimer définitivement mon compte"
+  },
+  "admin": {
+    "users": "Comptes",
+    "admin": "admin",
+    "disabled": "désactivé",
+    "enable": "Activer",
+    "disable": "Désactiver",
+    "signOut": "Déconnecter partout",
+    "delete": "Supprimer",
+    "confirmDelete": "Supprimer le compte {{email}} et les bibliothèques que lui seul utilise ?"
   }
 }

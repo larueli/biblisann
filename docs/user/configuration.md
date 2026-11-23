@@ -34,7 +34,8 @@ An optional file in `KEY=value` form (full variable names, `#` comments) can be 
 | `BIBLISANN_OIDC_CLIENT_SECRET` | none | yes (`_FILE`) | OIDC client secret. |
 | `BIBLISANN_GOOGLE_BOOKS_KEY` | none | yes (`_FILE`) | Optional Google Books API key (add `google` to `BIBLISANN_PROVIDERS` to use the provider). Other providers: `loc`, `k10plus`. |
 | `BIBLISANN_ADDON_PROVIDERS_FILE` | none | no (the file holds tokens) | JSON list `[{"name":"mine","url":"https://...","token":"..."}]` of addon providers. |
-| `BIBLISANN_HARDCOVER_TOKEN` | none | yes (`_FILE`) | Enables community ratings from Hardcover. |
+| `BIBLISANN_HARDCOVER_TOKEN` | none | yes (`_FILE`) | Enables community ratings from Hardcover for every book with an ISBN, refreshed in the background. |
+| `BIBLISANN_HARDCOVER_REFRESH_DAYS`, `_PER_MINUTE` | `3`, `50` | no | Recheck a rated book after this many days; request budget per minute (Hardcover allows 60). |
 | `BIBLISANN_VALKEY_URL` | none | yes (`_FILE`) | `redis://` or `rediss://` URL; shares rate limits between replicas. |
 | `BIBLISANN_CONFIG_FILE` | none | no | Path of an optional config file. |
 

@@ -179,3 +179,8 @@ func (s *Service) ValidSCIM(ctx context.Context, secret string) bool {
 	_ = s.q.TouchToken(ctx, t.ID)
 	return true
 }
+
+// RevokeAllPATs deletes every personal access token of a user (administrator action).
+func (s *Service) RevokeAllPATs(ctx context.Context, userID uuid.UUID) error {
+	return s.q.DeleteUserTokens(ctx, userID)
+}

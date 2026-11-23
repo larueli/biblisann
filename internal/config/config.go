@@ -36,6 +36,10 @@ type Config struct {
 	AddonProvidersFile string
 	GoogleBooksKey     Secret
 	HardcoverToken     Secret
+	// HardcoverRefreshDays: recheck a rated book after this many days. HardcoverPerMinute: request
+	// budget (Hardcover allows 60 per minute).
+	HardcoverRefreshDays int
+	HardcoverPerMinute   int
 	// ValkeyURL (redis:// or rediss://, may hold a password) shares rate limits across replicas.
 	ValkeyURL Secret
 
@@ -91,41 +95,43 @@ func Load(src Sources, opts Options) (Config, error) {
 	r.loadConfigFile()
 
 	c := Config{
-		ListenAddr:         r.str("LISTEN_ADDR", ":8080"),
-		BaseURL:            r.baseURL("BASE_URL", "http://localhost:8080"),
-		TrustedProxies:     r.prefixes("TRUSTED_PROXIES"),
-		LogLevel:           r.level("LOG_LEVEL", slog.LevelInfo),
-		LogFormat:          r.oneOf("LOG_FORMAT", "json", "json", "text"),
-		ShutdownTimeout:    r.duration("SHUTDOWN_TIMEOUT", 20*time.Second),
-		MigrateOnStart:     r.boolean("MIGRATE_ON_START", true),
-		Registration:       r.oneOf("REGISTRATION", "first-user", "first-user", "open", "closed"),
-		CoversDir:          r.str("COVERS_DIR", "data/covers"),
-		Providers:          r.list("PROVIDERS", []string{"bnf", "openlibrary"}),
-		DisabledProviders:  r.list("DISABLED_PROVIDERS", nil),
-		StaticProviderFile: r.str("STATIC_PROVIDER_FILE", ""),
-		AddonProvidersFile: r.str("ADDON_PROVIDERS_FILE", ""),
-		Passkeys:           r.boolean("PASSKEYS", true),
-		OIDCIssuer:         r.str("OIDC_ISSUER", ""),
-		OIDCClientID:       r.str("OIDC_CLIENT_ID", ""),
-		OIDCScopes:         r.list("OIDC_SCOPES", nil),
-		OIDCGroupsClaim:    r.str("OIDC_GROUPS_CLAIM", "groups"),
-		OIDCAdminGroup:     r.str("OIDC_ADMIN_GROUP", ""),
-		OIDCAutoCreate:     r.boolean("OIDC_AUTO_CREATE", true),
-		OIDCLabel:          r.str("OIDC_LABEL", ""),
-		StorageBackend:     r.oneOf("STORAGE_BACKEND", "local", "local", "s3"),
-		S3Endpoint:         r.str("S3_ENDPOINT", ""),
-		S3Bucket:           r.str("S3_BUCKET", ""),
-		S3Region:           r.str("S3_REGION", ""),
-		S3AccessKey:        r.str("S3_ACCESS_KEY", ""),
-		S3UseSSL:           r.boolean("S3_USE_SSL", true),
-		S3Prefix:           r.str("S3_PREFIX", ""),
-		SMTPHost:           r.str("SMTP_HOST", ""),
-		SMTPPort:           r.integer("SMTP_PORT", 587),
-		SMTPUsername:       r.str("SMTP_USERNAME", ""),
-		SMTPFrom:           r.str("SMTP_FROM", ""),
-		SMTPMode:           r.oneOf("SMTP_MODE", "starttls", "starttls", "tls", "none"),
-		VAPIDPublicKey:     r.str("VAPID_PUBLIC_KEY", ""),
-		VAPIDSubject:       r.str("VAPID_SUBJECT", ""),
+		ListenAddr:           r.str("LISTEN_ADDR", ":8080"),
+		BaseURL:              r.baseURL("BASE_URL", "http://localhost:8080"),
+		TrustedProxies:       r.prefixes("TRUSTED_PROXIES"),
+		LogLevel:             r.level("LOG_LEVEL", slog.LevelInfo),
+		LogFormat:            r.oneOf("LOG_FORMAT", "json", "json", "text"),
+		ShutdownTimeout:      r.duration("SHUTDOWN_TIMEOUT", 20*time.Second),
+		MigrateOnStart:       r.boolean("MIGRATE_ON_START", true),
+		Registration:         r.oneOf("REGISTRATION", "first-user", "first-user", "open", "closed"),
+		CoversDir:            r.str("COVERS_DIR", "data/covers"),
+		Providers:            r.list("PROVIDERS", []string{"bnf", "openlibrary"}),
+		DisabledProviders:    r.list("DISABLED_PROVIDERS", nil),
+		StaticProviderFile:   r.str("STATIC_PROVIDER_FILE", ""),
+		AddonProvidersFile:   r.str("ADDON_PROVIDERS_FILE", ""),
+		Passkeys:             r.boolean("PASSKEYS", true),
+		HardcoverRefreshDays: r.integer("HARDCOVER_REFRESH_DAYS", 3),
+		HardcoverPerMinute:   r.integer("HARDCOVER_PER_MINUTE", 50),
+		OIDCIssuer:           r.str("OIDC_ISSUER", ""),
+		OIDCClientID:         r.str("OIDC_CLIENT_ID", ""),
+		OIDCScopes:           r.list("OIDC_SCOPES", nil),
+		OIDCGroupsClaim:      r.str("OIDC_GROUPS_CLAIM", "groups"),
+		OIDCAdminGroup:       r.str("OIDC_ADMIN_GROUP", ""),
+		OIDCAutoCreate:       r.boolean("OIDC_AUTO_CREATE", true),
+		OIDCLabel:            r.str("OIDC_LABEL", ""),
+		StorageBackend:       r.oneOf("STORAGE_BACKEND", "local", "local", "s3"),
+		S3Endpoint:           r.str("S3_ENDPOINT", ""),
+		S3Bucket:             r.str("S3_BUCKET", ""),
+		S3Region:             r.str("S3_REGION", ""),
+		S3AccessKey:          r.str("S3_ACCESS_KEY", ""),
+		S3UseSSL:             r.boolean("S3_USE_SSL", true),
+		S3Prefix:             r.str("S3_PREFIX", ""),
+		SMTPHost:             r.str("SMTP_HOST", ""),
+		SMTPPort:             r.integer("SMTP_PORT", 587),
+		SMTPUsername:         r.str("SMTP_USERNAME", ""),
+		SMTPFrom:             r.str("SMTP_FROM", ""),
+		SMTPMode:             r.oneOf("SMTP_MODE", "starttls", "starttls", "tls", "none"),
+		VAPIDPublicKey:       r.str("VAPID_PUBLIC_KEY", ""),
+		VAPIDSubject:         r.str("VAPID_SUBJECT", ""),
 	}
 	if v, ok := r.lookup("DATABASE_URL", true); ok {
 		c.DatabaseURL = Secret(v)

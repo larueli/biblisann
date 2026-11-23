@@ -42,7 +42,7 @@ Rule for every slice: demoable end to end, tested, documented, `make check` gree
 - [x] Loans and borrowing, notifications (email, Web Push, webhook/ntfy), ICS feed. Web Push is implemented server-side; the browser subscription UI and a custom service-worker push handler are still to do (needs the `injectManifest` PWA strategy)
 - [x] Places (tree, QR labels, batch scanning by scanning a label, inventory mode). A graphical shelf/layer display is not done: the tree view is plain text
 - [x] Sharing with users and groups, roles and custom permission profiles (API and ADR 0017; the web UI for sharing is not built yet)
-- [x] Logical backup and restore, cover storage migration (local to S3 and back). The S3 integration test only runs against an endpoint given by environment variables
+- [x] Logical backup and restore, cover storage migration (local to S3 and back). The S3 integration test runs against RustFS in a container
 - [x] MCP server (read-write by default, read-only option) behind scoped personal access tokens
 - [x] Imports: Goodreads CSV first
 
@@ -52,9 +52,9 @@ Rule for every slice: demoable end to end, tested, documented, `make check` gree
 - [x] 2FA (TOTP, recovery codes), passkeys (config-disable), password reset by email (passkeys tested with a software authenticator, not real devices)
 - [x] Authorization server and MCP OAuth 2.1 per the current MCP spec (not yet run against a real MCP client)
 - [x] SCIM 2.0 Users and Groups (basic filters only; not run against a real IdP)
-- [~] External grades done; Hardcover ratings fetched on demand (unverified against the live API). Two-way reading-status sync with Hardcover is **not done**
+- [~] External grades done; Hardcover ratings fetched for every book in the background with rate limiting, retry and periodic refresh (ADR 0022; unverified against the live API). Two-way reading-status sync with Hardcover is **not done**
 - [x] Addon providers over HTTP, plus Google Books, Library of Congress, K10plus (parsers tested on fixtures, not against live services)
-- [~] OPDS feed and Valkey-backed rate limiting done. **Not done:** more importers (only Goodreads), Valkey cache
+- [~] OPDS feed, Valkey-backed rate limiting, and Goodreads, StoryGraph and LibraryThing importers done. **Not done:** Valkey cache
 
 ## Open decisions (human)
 
@@ -70,10 +70,10 @@ Resolved (see ADR 0009, 0011, 0012, 0013):
 
 Added during Slices 1 to 3 (defaults taken):
 
-- [ ] **Real-device and real-service validation** is missing everywhere it matters: barcode scanning on a phone, passkeys on devices, OIDC/SCIM against a real IdP, MCP OAuth with a real client, BnF/Google/LoC/K10plus/Hardcover live responses, S3 (the integration test is opt-in).
+- [ ] **Real-device and real-service validation** is missing everywhere it matters: barcode scanning on a phone, passkeys on devices, OIDC/SCIM against a real IdP, MCP OAuth with a real client, BnF/Google/LoC/K10plus/Hardcover live responses, S3 beyond RustFS (the integration test now runs against RustFS 1.0.6).
 - [ ] **Web UI gaps**: library sharing and profile management, group management, SCIM token creation, Web Push subscription (needs a custom service worker), a graphical shelf view.
-- [ ] **Refresh-token family revocation**, **Valkey-backed cache**, **per-user Hardcover sync**, further importers (StoryGraph, LibraryThing).
-- [ ] **GDPR**: export and deletion of a single user's data is not implemented (the instance-level backup exists).
+- [ ] **Valkey-backed cache**, **per-user Hardcover reading-status sync**. Sessions and OAuth grants can now be revoked by users and administrators; a stolen refresh token is still only detected by rotation, not by revoking its whole family.
+- [x] **GDPR**: per-user export, per-library export/import and account deletion exist (ADR 0022). Orphaned cover files are not yet garbage-collected.
 - [ ] **Version policy**: Slice 3 is delivered in code, so the "stay on 0.x until Slice 3 is delivered" rule now says a `1.0.0` could be cut: decide after the real-world validation above (`Release-As: 1.0.0`).
 
 Still open (questions saved during the unattended Slice 0 build, with the default I took):

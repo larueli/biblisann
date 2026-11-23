@@ -347,3 +347,14 @@ func cleanList(in []string) []string {
 	}
 	return out
 }
+
+// AttachCover sets the edition's cover when it has none (used by imports).
+func (s *Service) AttachCover(ctx context.Context, editionID, coverID uuid.UUID) error {
+	return s.q.SetEditionCoverIfMissing(ctx, dbsqlc.SetEditionCoverIfMissingParams{ID: editionID, CoverID: &coverID})
+}
+
+// CoverHash returns the SHA-256 hex of a stored cover, which names its file in archives.
+func (s *Service) CoverHash(ctx context.Context, id uuid.UUID) (string, error) {
+	b, err := s.q.GetCoverSHA(ctx, id)
+	return hex.EncodeToString(b), err
+}

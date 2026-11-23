@@ -14,6 +14,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/google/uuid"
 
+	"github.com/larueli/biblisann/internal/account"
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/catalog"
 	"github.com/larueli/biblisann/internal/importer"
@@ -63,6 +64,7 @@ type Deps struct {
 	Hardcover interface {
 		Refresh(ctx context.Context, workID uuid.UUID) error
 	} // nil: no Hardcover token configured
+	Account  *account.Service                             // nil: exports, imports and deletion are off
 	Passkeys *passkeys.Service                            // nil: passkeys are off
 	OPDS     *opds.Handler                                // nil: no OPDS catalog
 	SCIM     *scim.Handler                                // nil: SCIM provisioning is off
@@ -113,6 +115,9 @@ func New(d Deps) (http.Handler, huma.API) {
 	srv.registerSharing(a)
 	srv.registerTokens(a)
 	srv.registerExtras(a)
+	srv.registerAccount(a)
+	mux.HandleFunc("GET /v1/libraries/{id}/export", srv.serveExport)
+	mux.HandleFunc("GET /v1/me/export", srv.serveExport)
 	srv.registerOIDC(a, mux)
 	srv.registerPasskeys(a)
 	srv.registerOAuth(a) // operations are always described; handlers answer 404 when the feature is off

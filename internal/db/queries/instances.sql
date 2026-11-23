@@ -76,3 +76,7 @@ DELETE FROM idempotency_keys WHERE created_at < now() - interval '7 days';
 
 -- name: CountInstancesOfEdition :one
 SELECT count(*) FROM instances WHERE library_id = $1 AND edition_id = $2 AND deleted_at IS NULL;
+
+-- name: ExportInstances :many
+SELECT i.id, i.edition_id, i.place_id, i.kind, i.condition, i.notes, i.acquired_on
+FROM instances i WHERE i.library_id = $1 AND i.deleted_at IS NULL ORDER BY i.created_at, i.id;

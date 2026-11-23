@@ -28,6 +28,17 @@ func (q *Queries) AddLibraryMember(ctx context.Context, arg AddLibraryMemberPara
 	return err
 }
 
+const countLibraryGroupShares = `-- name: CountLibraryGroupShares :one
+SELECT count(*)::int FROM library_group_shares WHERE library_id = $1
+`
+
+func (q *Queries) CountLibraryGroupShares(ctx context.Context, libraryID uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countLibraryGroupShares, libraryID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createLibrary = `-- name: CreateLibrary :one
 INSERT INTO libraries (name) VALUES ($1) RETURNING id, name, settings, created_at
 `
@@ -76,6 +87,15 @@ func (q *Queries) CreatePlace(ctx context.Context, arg CreatePlaceParams) (Place
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const deleteLibrary = `-- name: DeleteLibrary :exec
+DELETE FROM libraries WHERE id = $1
+`
+
+func (q *Queries) DeleteLibrary(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteLibrary, id)
+	return err
 }
 
 const deletePlace = `-- name: DeletePlace :exec
@@ -180,6 +200,36 @@ func (q *Queries) LibraryAccess(ctx context.Context, arg LibraryAccessParams) ([
 	return items, nil
 }
 
+const listAdminedLibraries = `-- name: ListAdminedLibraries :many
+SELECT l.id, l.name, l.settings FROM libraries l JOIN library_members m ON m.library_id = l.id AND m.user_id = $1 AND m.role = 'admin' ORDER BY l.name
+`
+
+type ListAdminedLibrariesRow struct {
+	ID       uuid.UUID
+	Name     string
+	Settings []byte
+}
+
+func (q *Queries) ListAdminedLibraries(ctx context.Context, userID uuid.UUID) ([]ListAdminedLibrariesRow, error) {
+	rows, err := q.db.Query(ctx, listAdminedLibraries, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdminedLibrariesRow{}
+	for rows.Next() {
+		var i ListAdminedLibrariesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Settings); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLibrariesForUser = `-- name: ListLibrariesForUser :many
 SELECT l.id, l.name, l.settings, l.created_at,
        (array_agg(a.role ORDER BY CASE a.role WHEN 'admin' THEN 0 WHEN 'edit' THEN 1 WHEN 'read' THEN 2 ELSE 3 END))[1]::text AS role
@@ -217,6 +267,36 @@ func (q *Queries) ListLibrariesForUser(ctx context.Context, userID uuid.UUID) ([
 			&i.CreatedAt,
 			&i.Role,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMembershipsOfUser = `-- name: ListMembershipsOfUser :many
+SELECT m.library_id, l.name, m.role FROM library_members m JOIN libraries l ON l.id = m.library_id WHERE m.user_id = $1 ORDER BY l.name
+`
+
+type ListMembershipsOfUserRow struct {
+	LibraryID uuid.UUID
+	Name      string
+	Role      string
+}
+
+func (q *Queries) ListMembershipsOfUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsOfUserRow, error) {
+	rows, err := q.db.Query(ctx, listMembershipsOfUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMembershipsOfUserRow{}
+	for rows.Next() {
+		var i ListMembershipsOfUserRow
+		if err := rows.Scan(&i.LibraryID, &i.Name, &i.Role); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -19,6 +19,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/larueli/biblisann/internal/account"
 	"github.com/larueli/biblisann/internal/api"
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/backup"
@@ -164,11 +165,21 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	oauthSvc := oauth.New(pool, cfg.BaseURL.String())
 	dispatcher := notify.NewDispatcher(q, log, senders...)
 
+	var hc interface {
+		Refresh(ctx context.Context, workID uuid.UUID) error
+	}
+	var hcSyncer jobs.Syncer
+	if cfg.HardcoverToken != "" {
+		h := hardcover.New(pool, fetcher, cfg.HardcoverToken.Reveal())
+		h.RefreshDays = cfg.HardcoverRefreshDays
+		h.Interval = time.Minute / time.Duration(cfg.HardcoverPerMinute)
+		hc, hcSyncer = h, h
+	}
 	jc, err := jobs.New(pool, dispatcher, log, func(ctx context.Context) error {
 		_ = oauthSvc.Purge(ctx)
 		_, err := authSvc.PurgeExpired(ctx)
 		return err
-	})
+	}, hcSyncer)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -179,12 +190,6 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			return nil, nil, err
 		}
 		limiter = v
-	}
-	var hc interface {
-		Refresh(ctx context.Context, workID uuid.UUID) error
-	}
-	if cfg.HardcoverToken != "" {
-		hc = hardcover.New(pool, fetcher, cfg.HardcoverToken.Reveal())
 	}
 	var passkeySvc *passkeys.Service
 	if cfg.Passkeys {
@@ -200,7 +205,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			RedirectURL: cfg.BaseURL.String() + "/v1/auth/oidc/callback", Scopes: cfg.OIDCScopes, GroupsClaim: cfg.OIDCGroupsClaim,
 			AdminGroup: cfg.OIDCAdminGroup, AutoCreate: cfg.OIDCAutoCreate, Label: cfg.OIDCLabel}, pool, authSvc, fetcher.Std())
 	}
-	h, _ := api.New(api.Deps{Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
+	h, _ := api.New(api.Deps{Account: account.NewService(pool, libSvc, catSvc, listsSvc, loansSvc, readingSvc), Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
 		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
 		Auth: authSvc, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
 		Lists: listsSvc, Loans: loansSvc,
@@ -218,7 +223,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 // Wrap applies the shared middleware chain.
 func Wrap(h http.Handler, cfg config.Config, log *slog.Logger) http.Handler {
 	probe := func(r *http.Request) bool { return r.URL.Path == "/healthz" || r.URL.Path == "/readyz" }
-	return httpmw.Chain(http.MaxBytesHandler(h, maxRequestBody),
+	return httpmw.Chain(limitBody(h),
 		httpmw.WithRequestID(),
 		httpmw.WithClientIP(cfg.TrustedProxies),
 		httpmw.AccessLog(log, probe),
@@ -298,4 +303,16 @@ func loadAddons(path string, f providers.Fetcher) ([]providers.Provider, error) 
 		out = append(out, providers.Addon{ProviderName: a.Name, Fetcher: f, URL: a.URL, Token: a.Token})
 	}
 	return out, nil
+}
+
+// limitBody caps request bodies: 10 MiB everywhere, 64 MiB for archive imports.
+func limitBody(next http.Handler) http.Handler {
+	small, large := http.MaxBytesHandler(next, maxRequestBody), http.MaxBytesHandler(next, 64<<20)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/libraries/import" || r.URL.Path == "/v1/me/import" {
+			large.ServeHTTP(w, r)
+			return
+		}
+		small.ServeHTTP(w, r)
+	})
 }

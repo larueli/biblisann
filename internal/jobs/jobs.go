@@ -61,6 +61,17 @@ type NotifyArgs struct {
 // Kind implements river.JobArgs.
 func (NotifyArgs) Kind() string { return "notify" }
 
+// HardcoverArgs refreshes ratings from Hardcover for the works that are due.
+type HardcoverArgs struct{}
+
+// Kind implements river.JobArgs.
+func (HardcoverArgs) Kind() string { return "hardcover_sync" }
+
+// Syncer refreshes external ratings within a request budget (see hardcover.Service.Sync).
+type Syncer interface {
+	Sync(ctx context.Context, budget int) (processed int, retryAfter time.Duration, err error)
+}
+
 // MaintenanceArgs removes expired sessions and old idempotency keys.
 type MaintenanceArgs struct{}
 
@@ -93,24 +104,32 @@ type Client struct {
 }
 
 // New builds the client with its workers and periodic jobs. Call Start to begin processing.
-func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error) (*Client, error) {
+func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error, hc Syncer) (*Client, error) {
 	workers := river.NewWorkers()
 	q := dbsqlc.New(pool)
 	river.AddWorker(workers, &reminderWorker{pool: pool, q: q})
 	river.AddWorker(workers, &notifyWorker{d: d})
 	river.AddWorker(workers, &maintenanceWorker{purge: purge, q: q})
+	periodic := []*river.PeriodicJob{
+		river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) {
+			return ReminderArgs{}, nil
+		}, &river.PeriodicJobOpts{RunOnStart: true}),
+		river.NewPeriodicJob(river.PeriodicInterval(6*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
+			return MaintenanceArgs{}, nil
+		}, nil),
+	}
+	if hc != nil {
+		river.AddWorker(workers, &hardcoverWorker{s: hc, log: log})
+		// Unique: a long run is never doubled by the next tick.
+		periodic = append(periodic, river.NewPeriodicJob(river.PeriodicInterval(10*time.Minute), func() (river.JobArgs, *river.InsertOpts) {
+			return HardcoverArgs{}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true, ByPeriod: 9 * time.Minute}}
+		}, &river.PeriodicJobOpts{RunOnStart: true}))
+	}
 	c, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		Queues:  map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}},
-		Workers: workers,
-		Logger:  log,
-		PeriodicJobs: []*river.PeriodicJob{
-			river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) {
-				return ReminderArgs{}, nil
-			}, &river.PeriodicJobOpts{RunOnStart: true}),
-			river.NewPeriodicJob(river.PeriodicInterval(6*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
-				return MaintenanceArgs{}, nil
-			}, nil),
-		},
+		Queues:       map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}},
+		Workers:      workers,
+		Logger:       log,
+		PeriodicJobs: periodic,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("jobs: client: %w", err)
@@ -224,4 +243,28 @@ func Compose(l dbsqlc.OpenLoansDueByRow, r Reminder) NotifyArgs {
 		Title:  i18n.T(l.OwnerLocale, "loan."+r.Kind+".title", l.Title),
 		Body:   i18n.T(l.OwnerLocale, bodyKey, l.Title, who, due),
 	}
+}
+
+type hardcoverWorker struct {
+	river.WorkerDefaults[HardcoverArgs]
+	s   Syncer
+	log *slog.Logger
+}
+
+// Timeout: a run makes up to 50 requests spaced by the rate limit.
+func (w *hardcoverWorker) Timeout(*river.Job[HardcoverArgs]) time.Duration { return 10 * time.Minute }
+
+func (w *hardcoverWorker) Work(ctx context.Context, _ *river.Job[HardcoverArgs]) error {
+	n, after, err := w.s.Sync(ctx, 50)
+	if err != nil {
+		return err // River retries with backoff
+	}
+	if n > 0 {
+		w.log.InfoContext(ctx, "hardcover ratings refreshed", "works", n)
+	}
+	if after > 0 {
+		w.log.WarnContext(ctx, "hardcover asked to slow down", "retry_after", after.String())
+		return river.JobSnooze(after)
+	}
+	return nil
 }

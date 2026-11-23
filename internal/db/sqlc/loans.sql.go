@@ -198,6 +198,44 @@ func (q *Queries) GetLoan(ctx context.Context, id uuid.UUID) (Loan, error) {
 	return i, err
 }
 
+const listAllLoansOfOwner = `-- name: ListAllLoansOfOwner :many
+SELECT id, library_id, owner_id, direction, instance_id, contact_id, counterparty, title, lent_on, due_on, returned_on, notes, created_at FROM loans WHERE owner_id = $1 ORDER BY created_at, id
+`
+
+func (q *Queries) ListAllLoansOfOwner(ctx context.Context, ownerID uuid.UUID) ([]Loan, error) {
+	rows, err := q.db.Query(ctx, listAllLoansOfOwner, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Loan{}
+	for rows.Next() {
+		var i Loan
+		if err := rows.Scan(
+			&i.ID,
+			&i.LibraryID,
+			&i.OwnerID,
+			&i.Direction,
+			&i.InstanceID,
+			&i.ContactID,
+			&i.Counterparty,
+			&i.Title,
+			&i.LentOn,
+			&i.DueOn,
+			&i.ReturnedOn,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChannels = `-- name: ListChannels :many
 SELECT id, user_id, kind, target, config, enabled, created_at FROM notification_channels WHERE user_id = $1 ORDER BY created_at
 `
@@ -345,6 +383,69 @@ func (q *Queries) ListLoans(ctx context.Context, arg ListLoansParams) ([]ListLoa
 			&i.Notes,
 			&i.CreatedAt,
 			&i.ContactName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLoansInLibrary = `-- name: ListLoansInLibrary :many
+SELECT l.id, l.library_id, l.owner_id, l.direction, l.instance_id, l.contact_id, l.counterparty, l.title, l.lent_on, l.due_on, l.returned_on, l.notes, l.created_at, e.isbn13 AS edition_isbn13 FROM loans l
+LEFT JOIN instances i ON i.id = l.instance_id LEFT JOIN editions e ON e.id = i.edition_id
+WHERE l.library_id = $1 AND l.owner_id = $2 ORDER BY l.created_at, l.id
+`
+
+type ListLoansInLibraryParams struct {
+	LibraryID uuid.UUID
+	OwnerID   uuid.UUID
+}
+
+type ListLoansInLibraryRow struct {
+	ID            uuid.UUID
+	LibraryID     uuid.UUID
+	OwnerID       uuid.UUID
+	Direction     string
+	InstanceID    *uuid.UUID
+	ContactID     *uuid.UUID
+	Counterparty  string
+	Title         string
+	LentOn        time.Time
+	DueOn         *time.Time
+	ReturnedOn    *time.Time
+	Notes         string
+	CreatedAt     time.Time
+	EditionIsbn13 *string
+}
+
+func (q *Queries) ListLoansInLibrary(ctx context.Context, arg ListLoansInLibraryParams) ([]ListLoansInLibraryRow, error) {
+	rows, err := q.db.Query(ctx, listLoansInLibrary, arg.LibraryID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLoansInLibraryRow{}
+	for rows.Next() {
+		var i ListLoansInLibraryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LibraryID,
+			&i.OwnerID,
+			&i.Direction,
+			&i.InstanceID,
+			&i.ContactID,
+			&i.Counterparty,
+			&i.Title,
+			&i.LentOn,
+			&i.DueOn,
+			&i.ReturnedOn,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.EditionIsbn13,
 		); err != nil {
 			return nil, err
 		}

@@ -83,6 +83,14 @@ type ExternalGrade struct {
 	FetchedAt time.Time
 }
 
+type ExternalGradeCheck struct {
+	WorkID    uuid.UUID
+	Source    string
+	CheckedAt time.Time
+	Status    string
+	Attempts  int32
+}
+
 type Grade struct {
 	UserID    uuid.UUID
 	WorkID    uuid.UUID
@@ -325,6 +333,7 @@ type Session struct {
 	ExpiresAt time.Time
 	LastSeen  time.Time
 	UserAgent string
+	ID        uuid.UUID
 }
 
 type User struct {

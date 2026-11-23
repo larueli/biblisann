@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/authz"
 	"github.com/larueli/biblisann/internal/catalog"
@@ -62,5 +64,80 @@ func TestGoodreads(t *testing.T) {
 	bctx := authz.With(ctx, &authz.Principal{UserID: bob.ID, Via: "session"})
 	if _, err := im.Goodreads(bctx, l.ID, strings.NewReader(csvFile)); err == nil {
 		t.Error("non-member import accepted")
+	}
+}
+
+const storyGraphCSV = "Title,Authors,Contributors,ISBN/UID,Format,Read Status,Date Added,Last Date Read,Dates Read,Read Count,Moods,Pace,Star Rating,Review,Owned?\n" +
+	`Dune,Frank Herbert,,9780441172719,paperback,read,2024/01/01,2024/03/05,2024/02/01-2024/03/05,1,,,4.75,"Superb, truly",Yes` + "\n" +
+	`Hobbit,J.R.R. Tolkien,,,,to-read,2024/01/01,,,0,,,0,,No` + "\n" +
+	`Quit book,"A, B",,,,did-not-finish,2024/01/01,,,0,,,2,,No` + "\n" +
+	`Reading now,C,,,,currently-reading,2024/01/01,,,0,,,0,,Yes` + "\n"
+
+const libraryThingTSV = "Book Id\tTitle\tPrimary Author\tPublication\tDate\tReview\tRating\tPage Count\tDate Read\tISBN\n" +
+	"1\tDune\tHerbert, Frank\tAce, 1990\t1990\tGreat\t4.5\t412\t2024-03-05\t[0441172717]\n" +
+	"2\tUnrated\tDoe, Jane\tSome Press (London), 2001\t2001\t\t0\t\t\t[]\n"
+
+func setup(t *testing.T) (context.Context, *importer.Importer, *library.Service, *reading.Service, uuid.UUID) {
+	ctx := context.Background()
+	pool := dbtest.Pool(t)
+	a, _ := auth.NewService(pool, auth.RegistrationOpen)
+	u, _ := a.Register(ctx, "me@example.org", "tulips in the garden", "Me")
+	uctx := authz.With(ctx, &authz.Principal{UserID: u.ID, Via: "session"})
+	lib := library.NewService(pool)
+	l, _ := lib.CreateLibrary(uctx, "Home")
+	rd := reading.NewService(pool)
+	return uctx, importer.New(pool, catalog.NewService(pool, catalog.Config{}), lib, rd, lists.NewService(pool, lib)), lib, rd, l.ID
+}
+
+func TestStoryGraph(t *testing.T) {
+	ctx, im, lib, rd, libID := setup(t)
+	rep, err := im.StoryGraph(ctx, libID, strings.NewReader(storyGraphCSV))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Rows != 4 || rep.EditionsCreated != 4 || rep.InstancesAdded != 2 || rep.WishlistAdded != 1 {
+		t.Errorf("report: %+v", rep)
+	}
+	st, _ := rd.Stats(ctx)
+	if st.ByStatus["read"] != 1 || st.ByStatus["to_read"] != 1 || st.ByStatus["abandoned"] != 1 || st.ByStatus["reading"] != 1 {
+		t.Errorf("stats: %+v", st)
+	}
+	// 4.75 stars rounds to 10, 2 stars to 4: average 7
+	if st.AverageGrade != 7 || st.Graded != 2 {
+		t.Errorf("grades: %+v", st)
+	}
+	page, _ := lib.ListInstances(ctx, libID, "", 10)
+	if len(page.Items) != 2 {
+		t.Errorf("instances %d", len(page.Items))
+	}
+	if rep2, _ := im.StoryGraph(ctx, libID, strings.NewReader(storyGraphCSV)); rep2.InstancesAdded != 0 || rep2.EditionsCreated != 0 {
+		t.Errorf("re-import: %+v", rep2)
+	}
+	if _, err := im.StoryGraph(ctx, libID, strings.NewReader("Title,Author\nx,y\n")); err == nil {
+		t.Error("a Goodreads-looking file must not pass as StoryGraph")
+	}
+}
+
+func TestLibraryThing(t *testing.T) {
+	ctx, im, lib, rd, libID := setup(t)
+	rep, err := im.LibraryThing(ctx, libID, strings.NewReader(libraryThingTSV))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Rows != 2 || rep.EditionsCreated != 2 || rep.InstancesAdded != 2 || rep.Grades != 1 {
+		t.Errorf("report: %+v", rep)
+	}
+	page, _ := lib.ListInstances(ctx, libID, "", 10)
+	var dune bool
+	for _, i := range page.Items {
+		if i.Title == "Dune" && len(i.Authors) == 1 && i.Authors[0] == "Frank Herbert" && i.Isbn13 != nil && *i.Isbn13 == "9780441172719" {
+			dune = true
+		}
+	}
+	if !dune {
+		t.Errorf("Dune not imported with author and ISBN-13: %+v", page.Items)
+	}
+	if st, _ := rd.Stats(ctx); st.ByStatus["read"] != 1 || st.AverageGrade != 9 {
+		t.Errorf("stats %+v", st)
 	}
 }

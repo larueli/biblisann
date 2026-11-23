@@ -106,6 +106,49 @@ func (q *Queries) DeleteOldIdempotency(ctx context.Context) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const exportInstances = `-- name: ExportInstances :many
+SELECT i.id, i.edition_id, i.place_id, i.kind, i.condition, i.notes, i.acquired_on
+FROM instances i WHERE i.library_id = $1 AND i.deleted_at IS NULL ORDER BY i.created_at, i.id
+`
+
+type ExportInstancesRow struct {
+	ID         uuid.UUID
+	EditionID  uuid.UUID
+	PlaceID    *uuid.UUID
+	Kind       string
+	Condition  string
+	Notes      string
+	AcquiredOn *time.Time
+}
+
+func (q *Queries) ExportInstances(ctx context.Context, libraryID uuid.UUID) ([]ExportInstancesRow, error) {
+	rows, err := q.db.Query(ctx, exportInstances, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportInstancesRow{}
+	for rows.Next() {
+		var i ExportInstancesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EditionID,
+			&i.PlaceID,
+			&i.Kind,
+			&i.Condition,
+			&i.Notes,
+			&i.AcquiredOn,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getIdempotency = `-- name: GetIdempotency :one
 SELECT request_hash, response_status, response_body FROM idempotency_keys WHERE user_id = $1 AND key = $2
 `

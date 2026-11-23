@@ -306,3 +306,47 @@ func (s *Service) Resolve(ctx context.Context, secret string) (*authz.Principal,
 
 // Purge removes expired access tokens.
 func (s *Service) Purge(ctx context.Context) error { return s.q.PurgeOAuth(ctx) }
+
+// Grant is an application the user authorized.
+type Grant struct {
+	ClientID string
+	Name     string
+	Scopes   []string
+	Since    time.Time
+}
+
+// Grants lists the applications with a live refresh token for the user.
+func (s *Service) Grants(ctx context.Context, userID uuid.UUID) ([]Grant, error) {
+	rows, err := s.q.ListOAuthGrants(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Grant, len(rows))
+	for i, r := range rows {
+		out[i] = Grant{r.ClientID, r.Name, r.Scopes, r.Since}
+	}
+	return out, nil
+}
+
+// RevokeGrant removes an application's access: its refresh tokens and its live access tokens.
+func (s *Service) RevokeGrant(ctx context.Context, userID uuid.UUID, clientID string) error {
+	n, err := s.q.RevokeOAuthRefreshForClient(ctx, dbsqlc.RevokeOAuthRefreshForClientParams{UserID: userID, ClientID: clientID})
+	if err != nil {
+		return err
+	}
+	if err := s.q.RevokeOAuthAccessForClient(ctx, dbsqlc.RevokeOAuthAccessForClientParams{UserID: userID, ClientID: clientID}); err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrInvalidClient
+	}
+	return nil
+}
+
+// RevokeAll removes every OAuth grant of a user (administrator action, or account deletion).
+func (s *Service) RevokeAll(ctx context.Context, userID uuid.UUID) error {
+	if err := s.q.RevokeAllOAuthRefreshForUser(ctx, userID); err != nil {
+		return err
+	}
+	return s.q.RevokeAllOAuthAccessForUser(ctx, userID)
+}

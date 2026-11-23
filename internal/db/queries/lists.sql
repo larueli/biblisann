@@ -49,3 +49,12 @@ SELECT e.series_name, coalesce(array_agg(DISTINCT e.series_position ORDER BY e.s
 FROM instances i JOIN editions e ON e.id = i.edition_id
 WHERE i.library_id = $1 AND i.deleted_at IS NULL AND e.series_name <> ''
 GROUP BY e.series_name ORDER BY e.series_name;
+
+-- name: ListPersonalLists :many
+SELECT * FROM lists WHERE owner_id = $1 ORDER BY (kind = 'wishlist') DESC, name, id;
+
+-- name: ListLibraryLists :many
+SELECT * FROM lists WHERE library_id = $1 ORDER BY name, id;
+
+-- name: ListItemsOfList :many
+SELECT li.*, e.isbn13 AS edition_isbn13 FROM list_items li LEFT JOIN editions e ON e.id = li.edition_id WHERE li.list_id = $1 ORDER BY li.added_at, li.id;

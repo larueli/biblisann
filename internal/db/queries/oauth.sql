@@ -35,3 +35,20 @@ DELETE FROM oauth_access_tokens WHERE expires_at <= now();
 
 -- name: RevokeOAuthForClient :exec
 DELETE FROM oauth_refresh_tokens WHERE user_id = $1 AND client_id = $2;
+
+-- name: ListOAuthGrants :many
+SELECT c.id AS client_id, c.name, array_agg(DISTINCT s ORDER BY s)::text[] AS scopes, min(r.created_at)::timestamptz AS since
+FROM oauth_refresh_tokens r JOIN oauth_clients c ON c.id = r.client_id, unnest(r.scopes) AS s
+WHERE r.user_id = $1 GROUP BY c.id, c.name ORDER BY since;
+
+-- name: RevokeOAuthRefreshForClient :execrows
+DELETE FROM oauth_refresh_tokens WHERE user_id = $1 AND client_id = $2;
+
+-- name: RevokeOAuthAccessForClient :exec
+DELETE FROM oauth_access_tokens WHERE user_id = $1 AND client_id = $2;
+
+-- name: RevokeAllOAuthRefreshForUser :exec
+DELETE FROM oauth_refresh_tokens WHERE user_id = $1;
+
+-- name: RevokeAllOAuthAccessForUser :exec
+DELETE FROM oauth_access_tokens WHERE user_id = $1;

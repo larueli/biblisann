@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/larueli/biblisann/internal/account"
 	"github.com/larueli/biblisann/internal/api"
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/catalog"
@@ -116,6 +117,7 @@ func newServer(t *testing.T) (*httptest.Server, *auth.Service) {
 	catSvc := catalog.NewService(pool, catalog.Config{Providers: []providers.Provider{fakeProvider{}}, Covers: covers, Log: log})
 	h, _ := api.New(api.Deps{Version: "test", DB: pool, Log: log, BaseURL: &url.URL{Scheme: "http", Host: "localhost:8080"},
 		Auth: authSvc, Library: lib, Catalog: catSvc,
+		Account:  account.NewService(pool, lib, catSvc, lists.NewService(pool, lib), loans.NewService(pool, lib), reading.NewService(pool)),
 		Importer: importer.New(pool, catSvc, lib, reading.NewService(pool), lists.NewService(pool, lib)),
 		Backup:   func(_ context.Context, w io.Writer) error { _, err := io.WriteString(w, "TAR"); return err },
 		Scan:     scan.New(catSvc, lib), Reading: reading.NewService(pool), Lists: lists.NewService(pool, lib), Loans: loans.NewService(pool, lib),
@@ -421,5 +423,117 @@ func TestMFAOverAPI(t *testing.T) {
 	}
 	if st, _ := c.w("POST", "/v1/auth/password-reset", map[string]string{"email": "me@example.org"}); st != 503 {
 		t.Errorf("reset without mailer: %d", st)
+	}
+}
+
+func TestSessionsExportImportDelete(t *testing.T) {
+	srv, authSvc := newServer(t)
+	c := &client{t: t, srv: srv}
+	c.do("POST", "/v1/auth/register", map[string]string{"email": "admin@example.org", "password": "tulips in the garden"}, nil)
+	c.login("admin@example.org", "tulips in the garden")
+	other := &client{t: t, srv: srv}
+	other.login("admin@example.org", "tulips in the garden")
+
+	// sessions: list shows both, mine is flagged; revoke the other one
+	_, out, _ := c.do("GET", "/v1/me/sessions", nil, nil)
+	list := out["_array"].([]any)
+	if len(list) != 3 { // registration, and two logins
+		t.Fatalf("sessions: %v", out)
+	}
+	var otherID string
+	for _, e := range list {
+		m := e.(map[string]any)
+		if m["current"] != true {
+			otherID = m["id"].(string)
+			if st, _ := c.w("DELETE", "/v1/me/sessions/"+otherID, nil); st != 204 {
+				t.Errorf("revoke: %d", st)
+			}
+		}
+	}
+	if st, _, _ := other.do("GET", "/v1/libraries", nil, nil); st != 401 {
+		t.Errorf("revoked session still works: %d", st)
+	}
+	if st, _ := c.w("DELETE", "/v1/me/sessions/"+otherID, nil); st != 404 {
+		t.Errorf("double revoke: %d", st)
+	}
+
+	// library export, then import as a new library
+	_, lib := c.w("POST", "/v1/libraries", map[string]string{"name": "Home"})
+	libID := lib["id"].(string)
+	c.w("POST", "/v1/libraries/"+libID+"/scan", map[string]any{"isbn": "9782070612758"}, "Idempotency-Key", "scan-key-0001")
+	req, _ := http.NewRequest("GET", srv.URL+"/v1/libraries/"+libID+"/export", nil)
+	req.AddCookie(c.cookie)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "application/x-tar" || len(archive) < 512 {
+		t.Fatalf("export %d %s %d bytes", resp.StatusCode, resp.Header.Get("Content-Type"), len(archive))
+	}
+	req, _ = http.NewRequest("POST", srv.URL+"/v1/libraries/import", bytes.NewReader(archive))
+	req.Header.Set("Content-Type", "application/x-tar")
+	req.Header.Set("X-CSRF-Token", c.csrf)
+	req.AddCookie(c.cookie)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rep map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&rep)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 || rep["instances"].(float64) != 1 {
+		t.Errorf("import %d %v", resp.StatusCode, rep)
+	}
+	req, _ = http.NewRequest("POST", srv.URL+"/v1/me/import", strings.NewReader("garbage"))
+	req.Header.Set("Content-Type", "application/x-tar")
+	req.Header.Set("X-CSRF-Token", c.csrf)
+	req.AddCookie(c.cookie)
+	resp, _ = http.DefaultClient.Do(req)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 422 {
+		t.Errorf("garbage import: %d", resp.StatusCode)
+	}
+
+	// administration: only admins; disabling signs the user out
+	if _, err := authSvc.CreateUser(context.Background(), "bob@example.org", "tulips in the garden", "Bob", false); err != nil {
+		t.Fatal(err)
+	}
+	bob := &client{t: t, srv: srv}
+	bob.login("bob@example.org", "tulips in the garden")
+	if st, _, _ := bob.do("GET", "/v1/admin/users", nil, nil); st != 404 {
+		t.Errorf("non-admin listing users: %d", st)
+	}
+	_, users, _ := c.do("GET", "/v1/admin/users", nil, nil)
+	var bobID string
+	for _, u := range users["_array"].([]any) {
+		if u.(map[string]any)["email"] == "bob@example.org" {
+			bobID = u.(map[string]any)["id"].(string)
+		}
+	}
+	if st, _ := c.w("PUT", "/v1/admin/users/"+bobID+"/disabled", map[string]bool{"disabled": true}); st != 204 {
+		t.Errorf("disable: %d", st)
+	}
+	if st, _, _ := bob.do("GET", "/v1/libraries", nil, nil); st != 401 {
+		t.Errorf("disabled user keeps access: %d", st)
+	}
+	if st, _ := c.w("POST", "/v1/admin/users/"+bobID+"/revoke-sessions", nil); st != 204 {
+		t.Errorf("revoke sessions: %d", st)
+	}
+
+	// self-deletion needs the typed email and the password
+	if st, _ := c.w("DELETE", "/v1/me", map[string]any{"confirm_email": "admin@example.org", "password": "wrong wrong wrong"}); st != 401 {
+		t.Errorf("wrong password: %d", st)
+	}
+	if st, _ := c.w("DELETE", "/v1/me", map[string]any{"confirm_email": "someone@else.org", "password": "tulips in the garden"}); st != 401 {
+		t.Errorf("wrong email: %d", st)
+	}
+	// the only active admin cannot leave
+	if st, _ := c.w("DELETE", "/v1/me", map[string]any{"confirm_email": "admin@example.org", "password": "tulips in the garden"}); st != 409 {
+		t.Errorf("last admin deletion: %d", st)
+	}
+	if st, _ := c.w("DELETE", "/v1/admin/users/"+bobID, nil); st != 204 {
+		t.Errorf("admin deletes bob: %d", st)
 	}
 }

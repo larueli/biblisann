@@ -59,3 +59,11 @@ DELETE FROM notification_channels WHERE id = $1 AND user_id = $2;
 
 -- name: SetChannelEnabled :exec
 UPDATE notification_channels SET enabled = $3 WHERE id = $1 AND user_id = $2;
+
+-- name: ListLoansInLibrary :many
+SELECT l.*, e.isbn13 AS edition_isbn13 FROM loans l
+LEFT JOIN instances i ON i.id = l.instance_id LEFT JOIN editions e ON e.id = i.edition_id
+WHERE l.library_id = $1 AND l.owner_id = $2 ORDER BY l.created_at, l.id;
+
+-- name: ListAllLoansOfOwner :many
+SELECT * FROM loans WHERE owner_id = $1 ORDER BY created_at, id;

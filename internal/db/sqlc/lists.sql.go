@@ -164,6 +164,87 @@ func (q *Queries) GetWishlist(ctx context.Context, ownerID *uuid.UUID) (List, er
 	return i, err
 }
 
+const listItemsOfList = `-- name: ListItemsOfList :many
+SELECT li.id, li.list_id, li.edition_id, li.title, li.authors, li.isbn13, li.series_name, li.series_position, li.note, li.added_at, e.isbn13 AS edition_isbn13 FROM list_items li LEFT JOIN editions e ON e.id = li.edition_id WHERE li.list_id = $1 ORDER BY li.added_at, li.id
+`
+
+type ListItemsOfListRow struct {
+	ID             uuid.UUID
+	ListID         uuid.UUID
+	EditionID      *uuid.UUID
+	Title          string
+	Authors        []string
+	Isbn13         *string
+	SeriesName     string
+	SeriesPosition *float64
+	Note           string
+	AddedAt        time.Time
+	EditionIsbn13  *string
+}
+
+func (q *Queries) ListItemsOfList(ctx context.Context, listID uuid.UUID) ([]ListItemsOfListRow, error) {
+	rows, err := q.db.Query(ctx, listItemsOfList, listID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListItemsOfListRow{}
+	for rows.Next() {
+		var i ListItemsOfListRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ListID,
+			&i.EditionID,
+			&i.Title,
+			&i.Authors,
+			&i.Isbn13,
+			&i.SeriesName,
+			&i.SeriesPosition,
+			&i.Note,
+			&i.AddedAt,
+			&i.EditionIsbn13,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLibraryLists = `-- name: ListLibraryLists :many
+SELECT id, owner_id, library_id, name, kind, created_at FROM lists WHERE library_id = $1 ORDER BY name, id
+`
+
+func (q *Queries) ListLibraryLists(ctx context.Context, libraryID *uuid.UUID) ([]List, error) {
+	rows, err := q.db.Query(ctx, listLibraryLists, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []List{}
+	for rows.Next() {
+		var i List
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.LibraryID,
+			&i.Name,
+			&i.Kind,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listListItems = `-- name: ListListItems :many
 SELECT li.id, li.list_id, li.edition_id, li.title, li.authors, li.isbn13, li.series_name, li.series_position, li.note, li.added_at,
   EXISTS (
@@ -239,6 +320,37 @@ ORDER BY (l.kind = 'wishlist') DESC, l.name
 
 func (q *Queries) ListListsForUser(ctx context.Context, ownerID *uuid.UUID) ([]List, error) {
 	rows, err := q.db.Query(ctx, listListsForUser, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []List{}
+	for rows.Next() {
+		var i List
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.LibraryID,
+			&i.Name,
+			&i.Kind,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPersonalLists = `-- name: ListPersonalLists :many
+SELECT id, owner_id, library_id, name, kind, created_at FROM lists WHERE owner_id = $1 ORDER BY (kind = 'wishlist') DESC, name, id
+`
+
+func (q *Queries) ListPersonalLists(ctx context.Context, ownerID *uuid.UUID) ([]List, error) {
+	rows, err := q.db.Query(ctx, listPersonalLists, ownerID)
 	if err != nil {
 		return nil, err
 	}

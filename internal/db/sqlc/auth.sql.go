@@ -12,6 +12,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const countAdminUsers = `-- name: CountAdminUsers :one
+SELECT count(*)::int FROM users WHERE is_admin AND disabled_at IS NULL
+`
+
+func (q *Queries) CountAdminUsers(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, countAdminUsers)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countUsers = `-- name: CountUsers :one
 SELECT count(*) FROM users
 `
@@ -96,12 +107,55 @@ func (q *Queries) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const deleteOtherSessions = `-- name: DeleteOtherSessions :execrows
+DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2
+`
+
+type DeleteOtherSessionsParams struct {
+	UserID    uuid.UUID
+	TokenHash []byte
+}
+
+func (q *Queries) DeleteOtherSessions(ctx context.Context, arg DeleteOtherSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOtherSessions, arg.UserID, arg.TokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteSession = `-- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = $1
 `
 
 func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 	_, err := q.db.Exec(ctx, deleteSession, tokenHash)
+	return err
+}
+
+const deleteSessionByID = `-- name: DeleteSessionByID :execrows
+DELETE FROM sessions WHERE id = $1 AND user_id = $2
+`
+
+type DeleteSessionByIDParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) DeleteSessionByID(ctx context.Context, arg DeleteSessionByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSessionByID, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
 	return err
 }
 
@@ -190,6 +244,106 @@ func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const listUserSessions = `-- name: ListUserSessions :many
+SELECT id, token_hash, created_at, last_seen, expires_at, user_agent FROM sessions
+WHERE user_id = $1 AND expires_at > now() ORDER BY last_seen DESC
+`
+
+type ListUserSessionsRow struct {
+	ID        uuid.UUID
+	TokenHash []byte
+	CreatedAt time.Time
+	LastSeen  time.Time
+	ExpiresAt time.Time
+	UserAgent string
+}
+
+func (q *Queries) ListUserSessions(ctx context.Context, userID uuid.UUID) ([]ListUserSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserSessionsRow{}
+	for rows.Next() {
+		var i ListUserSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TokenHash,
+			&i.CreatedAt,
+			&i.LastSeen,
+			&i.ExpiresAt,
+			&i.UserAgent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersAdmin = `-- name: ListUsersAdmin :many
+SELECT id, email, display_name, is_admin, disabled_at, created_at FROM users ORDER BY created_at, id LIMIT $1 OFFSET $2
+`
+
+type ListUsersAdminParams struct {
+	Limit  int32
+	Offset int32
+}
+
+type ListUsersAdminRow struct {
+	ID          uuid.UUID
+	Email       string
+	DisplayName string
+	IsAdmin     bool
+	DisabledAt  *time.Time
+	CreatedAt   time.Time
+}
+
+func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) ([]ListUsersAdminRow, error) {
+	rows, err := q.db.Query(ctx, listUsersAdmin, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsersAdminRow{}
+	for rows.Next() {
+		var i ListUsersAdminRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.IsAdmin,
+			&i.DisabledAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setUserDisabled = `-- name: SetUserDisabled :exec
+UPDATE users SET disabled_at = $2 WHERE id = $1
+`
+
+type SetUserDisabledParams struct {
+	ID         uuid.UUID
+	DisabledAt *time.Time
+}
+
+func (q *Queries) SetUserDisabled(ctx context.Context, arg SetUserDisabledParams) error {
+	_, err := q.db.Exec(ctx, setUserDisabled, arg.ID, arg.DisabledAt)
+	return err
 }
 
 const touchSession = `-- name: TouchSession :exec

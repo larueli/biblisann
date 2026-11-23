@@ -36,3 +36,25 @@ DELETE FROM sessions WHERE user_id = $1;
 
 -- name: DeleteExpiredSessions :execrows
 DELETE FROM sessions WHERE expires_at <= now();
+
+-- name: ListUserSessions :many
+SELECT id, token_hash, created_at, last_seen, expires_at, user_agent FROM sessions
+WHERE user_id = $1 AND expires_at > now() ORDER BY last_seen DESC;
+
+-- name: DeleteSessionByID :execrows
+DELETE FROM sessions WHERE id = $1 AND user_id = $2;
+
+-- name: DeleteOtherSessions :execrows
+DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2;
+
+-- name: SetUserDisabled :exec
+UPDATE users SET disabled_at = $2 WHERE id = $1;
+
+-- name: ListUsersAdmin :many
+SELECT id, email, display_name, is_admin, disabled_at, created_at FROM users ORDER BY created_at, id LIMIT $1 OFFSET $2;
+
+-- name: CountAdminUsers :one
+SELECT count(*)::int FROM users WHERE is_admin AND disabled_at IS NULL;
+
+-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1;

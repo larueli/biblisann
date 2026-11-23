@@ -101,6 +101,7 @@ type LendInput struct {
 	ContactID    *uuid.UUID
 	Counterparty string // used when there is no contact
 	DueOn        *time.Time
+	LentOn       *time.Time // defaults to today (set by imports)
 	Notes        string
 }
 
@@ -136,7 +137,7 @@ func (s *Service) Lend(ctx context.Context, in LendInput) (dbsqlc.Loan, error) {
 		return dbsqlc.Loan{}, err
 	}
 	l, err := s.q.CreateLoan(ctx, dbsqlc.CreateLoanParams{LibraryID: inst.LibraryID, OwnerID: p.UserID, Direction: "lent",
-		InstanceID: &in.InstanceID, ContactID: in.ContactID, Counterparty: name, Title: ed.Title, LentOn: today(), DueOn: in.DueOn, Notes: in.Notes})
+		InstanceID: &in.InstanceID, ContactID: in.ContactID, Counterparty: name, Title: ed.Title, LentOn: dayOr(in.LentOn), DueOn: in.DueOn, Notes: in.Notes})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return dbsqlc.Loan{}, ErrAlreadyLent
@@ -150,6 +151,7 @@ type BorrowInput struct {
 	Title        string
 	Counterparty string // person or library
 	DueOn        *time.Time
+	LentOn       *time.Time // defaults to today (set by imports)
 	Notes        string
 }
 
@@ -164,10 +166,17 @@ func (s *Service) Borrow(ctx context.Context, in BorrowInput) (dbsqlc.Loan, erro
 		return dbsqlc.Loan{}, ErrInvalid
 	}
 	return s.q.CreateLoan(ctx, dbsqlc.CreateLoanParams{LibraryID: in.LibraryID, OwnerID: p.UserID, Direction: "borrowed",
-		Counterparty: who, Title: title, LentOn: today(), DueOn: in.DueOn, Notes: in.Notes})
+		Counterparty: who, Title: title, LentOn: dayOr(in.LentOn), DueOn: in.DueOn, Notes: in.Notes})
 }
 
 func today() time.Time { return time.Now().UTC().Truncate(24 * time.Hour) }
+
+func dayOr(t *time.Time) time.Time {
+	if t != nil {
+		return *t
+	}
+	return today()
+}
 
 func (s *Service) mine(ctx context.Context, id uuid.UUID) (dbsqlc.Loan, error) {
 	p, err := principal(ctx, true)

@@ -58,3 +58,9 @@ SELECT * FROM editions
 WHERE work_id = $1 AND isbn13 IS NULL AND publisher = $2 AND language = $3
   AND published_year IS NOT DISTINCT FROM sqlc.narg('year')::int
 ORDER BY created_at LIMIT 1;
+
+-- name: SetEditionCoverIfMissing :exec
+UPDATE editions SET cover_id = $2 WHERE id = $1 AND cover_id IS NULL;
+
+-- name: GetCoverSHA :one
+SELECT sha256 FROM covers WHERE id = $1;

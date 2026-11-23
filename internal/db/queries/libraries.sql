@@ -65,3 +65,15 @@ SELECT i.id, i.edition_id, e.title, e.isbn13
 FROM instances i JOIN editions e ON e.id = i.edition_id
 WHERE i.place_id IN (SELECT tree.id FROM tree) AND i.deleted_at IS NULL
 ORDER BY e.title;
+
+-- name: ListMembershipsOfUser :many
+SELECT m.library_id, l.name, m.role FROM library_members m JOIN libraries l ON l.id = m.library_id WHERE m.user_id = $1 ORDER BY l.name;
+
+-- name: CountLibraryGroupShares :one
+SELECT count(*)::int FROM library_group_shares WHERE library_id = $1;
+
+-- name: DeleteLibrary :exec
+DELETE FROM libraries WHERE id = $1;
+
+-- name: ListAdminedLibraries :many
+SELECT l.id, l.name, l.settings FROM libraries l JOIN library_members m ON m.library_id = l.id AND m.user_id = $1 AND m.role = 'admin' ORDER BY l.name;

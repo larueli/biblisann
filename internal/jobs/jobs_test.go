@@ -86,7 +86,7 @@ func TestReminderEndToEnd(t *testing.T) {
 
 	cap := &capture{}
 	d := notify.NewDispatcher(q, slog.New(slog.NewTextHandler(io.Discard, nil)), cap)
-	c, err := jobs.New(pool, d, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	c, err := jobs.New(pool, d, slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

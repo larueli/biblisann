@@ -10,6 +10,7 @@ import (
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/authz"
 	"github.com/larueli/biblisann/internal/catalog"
+	"github.com/larueli/biblisann/internal/importer"
 	"github.com/larueli/biblisann/internal/library"
 	"github.com/larueli/biblisann/internal/lists"
 	"github.com/larueli/biblisann/internal/loans"
@@ -41,7 +42,7 @@ func mapError(log *slog.Logger, err error) error {
 	case errors.Is(err, library.ErrIdempotencyConflict):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, library.ErrInvalid), errors.Is(err, reading.ErrInvalid), errors.Is(err, lists.ErrInvalid),
-		errors.Is(err, loans.ErrInvalid), errors.Is(err, tokens.ErrInvalid), errors.Is(err, catalog.ErrInvalidISBN), errors.Is(err, catalog.ErrInvalidEdition),
+		errors.Is(err, loans.ErrInvalid), errors.Is(err, importer.ErrFormat), errors.Is(err, tokens.ErrInvalid), errors.Is(err, catalog.ErrInvalidISBN), errors.Is(err, catalog.ErrInvalidEdition),
 		errors.Is(err, auth.ErrInvalidEmail):
 		return huma.Error422UnprocessableEntity(err.Error())
 	case errors.As(err, &weak):

@@ -7,23 +7,63 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/moby/moby/api/types/container"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// TestS3 runs against any S3-compatible endpoint given by the environment (MinIO, Garage, AWS):
+// TestS3 runs against RustFS (an S3-compatible server) started in a memory-capped container, or
+// against any endpoint given by the environment (MinIO, Garage, AWS):
 //
-//	BIBLISANN_TEST_S3_ENDPOINT=localhost:9000 BIBLISANN_TEST_S3_BUCKET=test \
-//	BIBLISANN_TEST_S3_ACCESS_KEY=... BIBLISANN_TEST_S3_SECRET_KEY=... go test ./internal/storage
-//
-// It is skipped otherwise: no S3 server image is stable enough to start from the test itself.
+//	BIBLISANN_TEST_S3_ENDPOINT=host:9000 BIBLISANN_TEST_S3_BUCKET=b BIBLISANN_TEST_S3_ACCESS_KEY=k \
+//	BIBLISANN_TEST_S3_SECRET_KEY=s go test ./internal/storage
 func TestS3(t *testing.T) {
-	ep := os.Getenv("BIBLISANN_TEST_S3_ENDPOINT")
-	if ep == "" {
-		t.Skip("set BIBLISANN_TEST_S3_ENDPOINT to run the S3 integration test")
-	}
 	ctx := context.Background()
-	s, err := NewS3(ctx, S3Config{Endpoint: ep, Bucket: os.Getenv("BIBLISANN_TEST_S3_BUCKET"),
+	cfg := S3Config{Endpoint: os.Getenv("BIBLISANN_TEST_S3_ENDPOINT"), Bucket: os.Getenv("BIBLISANN_TEST_S3_BUCKET"),
 		AccessKey: os.Getenv("BIBLISANN_TEST_S3_ACCESS_KEY"), SecretKey: os.Getenv("BIBLISANN_TEST_S3_SECRET_KEY"),
-		UseSSL: os.Getenv("BIBLISANN_TEST_S3_SSL") == "1", Prefix: "biblisann-test"})
+		UseSSL: os.Getenv("BIBLISANN_TEST_S3_SSL") == "1", Prefix: "biblisann-test"}
+	if cfg.Endpoint == "" {
+		if testing.Short() {
+			t.Skip("integration test: needs Docker")
+		}
+		testcontainers.SkipIfProviderIsNotHealthy(t)
+		ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{Started: true, ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "rustfs/rustfs:1.0.6",
+			ExposedPorts: []string{"9000/tcp"},
+			Env:          map[string]string{"RUSTFS_ACCESS_KEY": "biblisann-test", "RUSTFS_SECRET_KEY": "biblisann-test-secret"},
+			// Small and bounded: this host may have little RAM and no swap.
+			HostConfigModifier: func(hc *container.HostConfig) { hc.Memory = 384 << 20; hc.MemorySwap = 384 << 20 },
+			WaitingFor:         wait.ForListeningPort("9000/tcp").WithStartupTimeout(90 * time.Second),
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		testcontainers.CleanupContainer(t, ctr)
+		ep, err := ctr.PortEndpoint(ctx, "9000/tcp", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.Endpoint, cfg.Bucket, cfg.AccessKey, cfg.SecretKey = ep, "covers", "biblisann-test", "biblisann-test-secret"
+		admin, err := minio.New(ep, &minio.Options{Creds: credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, "")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var mkErr error
+		for range 30 { // the port opens before the object layer is ready
+			if mkErr = admin.MakeBucket(ctx, cfg.Bucket, minio.MakeBucketOptions{}); mkErr == nil {
+				break
+			}
+			time.Sleep(time.Second)
+		}
+		if mkErr != nil {
+			t.Fatal(mkErr)
+		}
+	}
+	s, err := NewS3(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
