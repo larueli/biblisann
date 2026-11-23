@@ -111,6 +111,27 @@ type GroupMember struct {
 	UserID  uuid.UUID
 }
 
+type HardcoverBookState struct {
+	UserID       uuid.UUID
+	WorkID       uuid.UUID
+	HcBookID     int64
+	HcUserBookID *int64
+	Status       string
+	Grade        *int16
+	SyncedAt     time.Time
+}
+
+type HardcoverLink struct {
+	UserID     uuid.UUID
+	TokenEnc   []byte
+	Mode       string
+	PullOffset int32
+	NextSyncAt time.Time
+	LastSyncAt *time.Time
+	LastError  string
+	CreatedAt  time.Time
+}
+
 type IdempotencyKey struct {
 	UserID         uuid.UUID
 	Key            string
@@ -149,10 +170,11 @@ type InstanceSetting struct {
 }
 
 type Library struct {
-	ID        uuid.UUID
-	Name      string
-	Settings  []byte
-	CreatedAt time.Time
+	ID                   uuid.UUID
+	Name                 string
+	Settings             []byte
+	CreatedAt            time.Time
+	ChangesPrunedThrough int64
 }
 
 type LibraryGroupShare struct {

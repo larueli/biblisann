@@ -13,7 +13,7 @@ IMAGE ?= biblisann:dev
 VERSION ?= dev
 ZENSICAL_VERSION ?= 0.1.3
 
-.PHONY: e2e help hooks task check commit-lint docs-check fmt lint test vuln generate generate-check web-check build dev dev-down docker docs docs-serve
+.PHONY: api-compat e2e help hooks task check commit-lint docs-check fmt lint test vuln generate generate-check web-check build dev dev-down docker docs docs-serve
 
 help: ## List targets
 > @grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -74,6 +74,9 @@ build: ## Build the web app, then the static binary into bin/biblisann
 dev: ## Start PostgreSQL and the app with Compose (http://localhost:8080)
 > @scripts/dev-secrets.sh
 > docker compose -f deploy/compose/compose.yaml up --build
+
+api-compat: ## Fail on breaking OpenAPI changes against a git ref (BASE=origin/main)
+> @scripts/api-compat.sh "$${BASE:-origin/main}"
 
 e2e: build ## Run the Playwright smoke test against a local server (needs Docker for PostgreSQL)
 > @scripts/e2e.sh

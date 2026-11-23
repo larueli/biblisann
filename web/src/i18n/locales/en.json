@@ -226,5 +226,25 @@
     "signOut": "Sign out everywhere",
     "delete": "Delete",
     "confirmDelete": "Delete the account {{email}} and the libraries only it uses?"
+  },
+  "footer": {
+    "source": "Source code",
+    "api": "API documentation"
+  },
+  "hardcover": {
+    "title": "Hardcover",
+    "help": "Keep your reading status and ratings in step with your Hardcover account. Books are matched by ISBN; if both sides changed a book, the most recent edit wins. Your token is stored encrypted.",
+    "direction": "Direction",
+    "both": "Both ways",
+    "pull": "Hardcover to Biblisann only",
+    "push": "Biblisann to Hardcover only",
+    "token": "Hardcover API token",
+    "tokenOptional": "New token (leave empty to keep the current one)",
+    "link": "Link Hardcover",
+    "update": "Save",
+    "syncNow": "Synchronize now",
+    "unlink": "Unlink",
+    "lastSync": "Last synchronization: {{when}}",
+    "synced": "Done: {{pulled}} updated here, {{pushed}} sent to Hardcover."
   }
 }

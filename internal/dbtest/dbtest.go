@@ -7,6 +7,7 @@ package dbtest
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,7 +20,16 @@ import (
 	"github.com/larueli/biblisann/internal/db"
 )
 
-const image = "postgres:18-alpine"
+// defaultImage is the PostgreSQL the suite runs on; set BIBLISANN_TEST_PG_IMAGE to try another one
+// (CI runs the suite on every supported major version).
+const defaultImage = "postgres:18-alpine"
+
+func image() string {
+	if v := os.Getenv("BIBLISANN_TEST_PG_IMAGE"); v != "" {
+		return v
+	}
+	return defaultImage
+}
 
 var (
 	once    sync.Once
@@ -29,7 +39,7 @@ var (
 )
 
 func start(ctx context.Context) {
-	ctr, err := postgres.Run(ctx, image,
+	ctr, err := postgres.Run(ctx, image(),
 		postgres.WithDatabase("postgres"), postgres.WithUsername("test"), postgres.WithPassword("test"),
 		// Small and fast: this host may have little RAM and no swap.
 		testcontainers.WithCmdArgs("-c", "shared_buffers=16MB", "-c", "max_connections=50", "-c", "fsync=off", "-c", "work_mem=2MB"),

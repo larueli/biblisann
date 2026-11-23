@@ -54,6 +54,13 @@ spec:
           env:
             - name: BIBLISANN_DATABASE_URL_FILE
               value: /run/secrets/database/url
+            {{- if .Values.metrics.tokenSecret.name }}
+            - name: BIBLISANN_METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.metrics.tokenSecret.name }}
+                  key: {{ .Values.metrics.tokenSecret.key }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -61,11 +68,11 @@ spec:
             - name: http
               containerPort: 8080
           startupProbe:
-            httpGet: {path: /healthz, port: http}
+            httpGet: {path: /startupz, port: http}
             periodSeconds: 2
             failureThreshold: 30
           livenessProbe:
-            httpGet: {path: /healthz, port: http}
+            httpGet: {path: /startupz, port: http}
             periodSeconds: 20
           readinessProbe:
             httpGet: {path: /readyz, port: http}

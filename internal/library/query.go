@@ -152,6 +152,9 @@ type Index struct {
 	Cursor  int64
 	Entries []IndexEntry
 	HasMore bool
+	// Reset tells the client its cursor is older than the retained history (deletions were
+	// forgotten): it must drop its local copy of the library and download everything again.
+	Reset bool
 }
 
 // SyncIndex returns the changes of a library after the cursor (0 means everything). The client
@@ -167,11 +170,17 @@ func (s *Service) SyncIndex(ctx context.Context, libraryID uuid.UUID, since int6
 	if limit < 100 {
 		limit = 100
 	}
+	reset := false
+	if since > 0 {
+		if horizon, err := s.q.GetPrunedThrough(ctx, libraryID); err == nil && since < horizon {
+			reset, since = true, 0
+		}
+	}
 	changes, err := s.q.ListChanges(ctx, dbsqlc.ListChangesParams{LibraryID: libraryID, Seq: since, Limit: int32(limit + 1)})
 	if err != nil {
 		return Index{}, fmt.Errorf("library: changes: %w", err)
 	}
-	idx := Index{Cursor: since}
+	idx := Index{Cursor: since, Reset: reset}
 	if len(changes) > limit {
 		changes = changes[:limit]
 		idx.HasMore = true

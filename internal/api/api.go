@@ -17,6 +17,7 @@ import (
 	"github.com/larueli/biblisann/internal/account"
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/catalog"
+	"github.com/larueli/biblisann/internal/hcsync"
 	"github.com/larueli/biblisann/internal/importer"
 	"github.com/larueli/biblisann/internal/library"
 	"github.com/larueli/biblisann/internal/lists"
@@ -30,6 +31,7 @@ import (
 	"github.com/larueli/biblisann/internal/reading"
 	"github.com/larueli/biblisann/internal/scan"
 	"github.com/larueli/biblisann/internal/scim"
+	"github.com/larueli/biblisann/internal/telemetry"
 	"github.com/larueli/biblisann/internal/tokens"
 )
 
@@ -64,13 +66,18 @@ type Deps struct {
 	Hardcover interface {
 		Refresh(ctx context.Context, workID uuid.UUID) error
 	} // nil: no Hardcover token configured
-	Account  *account.Service                             // nil: exports, imports and deletion are off
-	Passkeys *passkeys.Service                            // nil: passkeys are off
-	OPDS     *opds.Handler                                // nil: no OPDS catalog
-	SCIM     *scim.Handler                                // nil: SCIM provisioning is off
-	Backup   func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
-	MCP      http.Handler                                 // the MCP endpoint, mounted at /mcp (nil: disabled)
-	Extra    func(huma.API, *Server)                      // hook for later slices to register operations
+	Account       *account.Service                             // nil: exports, imports and deletion are off
+	Metrics       *telemetry.Metrics                           // nil: no /metrics endpoint
+	MetricsToken  string                                       // bearer token for /metrics
+	MetricsPublic bool                                         // true: /metrics needs no authentication (protect it at the reverse proxy)
+	SourceURL     string                                       // where the source of this version lives (AGPL section 13)
+	HCSync        *hcsync.Service                              // nil: per-user Hardcover sync is off
+	Passkeys      *passkeys.Service                            // nil: passkeys are off
+	OPDS          *opds.Handler                                // nil: no OPDS catalog
+	SCIM          *scim.Handler                                // nil: SCIM provisioning is off
+	Backup        func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
+	MCP           http.Handler                                 // the MCP endpoint, mounted at /mcp (nil: disabled)
+	Extra         func(huma.API, *Server)                      // hook for later slices to register operations
 }
 
 // Server holds what route handlers share.
@@ -84,10 +91,17 @@ func New(d Deps) (http.Handler, huma.API) {
 	mux := http.NewServeMux()
 	a := humago.New(mux, config(d.Version))
 
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+	// Probe routes: never authenticated, never cached, never logged (they are polled constantly).
+	//   /livez, /healthz  the process is up (Kubernetes liveness, Docker HEALTHCHECK)
+	//   /startupz         the server finished starting (Kubernetes startup probe)
+	//   /readyz           ready to serve: the database answers (Kubernetes readiness, load balancers)
+	//   /health           the same checks as JSON, with details for humans and dashboards
+	alive := func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+	}
+	mux.HandleFunc("GET /livez", alive)
+	mux.HandleFunc("GET /healthz", alive)
+	ready := func(w http.ResponseWriter, r *http.Request) {
 		if d.DB != nil {
 			if err := d.DB.Ping(r.Context()); err != nil {
 				writeProblem(w, http.StatusServiceUnavailable, "database unavailable")
@@ -95,7 +109,34 @@ func New(d Deps) (http.Handler, huma.API) {
 			}
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	}
+	mux.HandleFunc("GET /readyz", ready)
+	mux.HandleFunc("GET /startupz", ready)
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		type check struct {
+			Status    string `json:"status"`
+			LatencyMS int64  `json:"latency_ms,omitempty"`
+		}
+		body := struct {
+			Status  string           `json:"status"`
+			Version string           `json:"version"`
+			Checks  map[string]check `json:"checks"`
+		}{Status: "ok", Version: d.Version, Checks: map[string]check{}}
+		code := http.StatusOK
+		if d.DB != nil {
+			start := time.Now()
+			c := check{Status: "ok"}
+			if err := d.DB.Ping(r.Context()); err != nil {
+				c.Status, body.Status, code = "down", "degraded", http.StatusServiceUnavailable // details stay in the logs
+			}
+			c.LatencyMS = time.Since(start).Milliseconds()
+			body.Checks["database"] = c
+		}
+		writeJSON(w, code, body)
 	})
+	if d.Metrics != nil {
+		mux.Handle("GET /metrics", d.Metrics.Handler(d.MetricsToken, d.MetricsPublic))
+	}
 
 	if d.Log == nil {
 		d.Log = slog.Default()
@@ -105,11 +146,13 @@ func New(d Deps) (http.Handler, huma.API) {
 	}
 	srv := &Server{Deps: d, secure: d.BaseURL.Scheme == "https"}
 	registerVersion(a, d.Version)
+	registerAbout(a, d.Version, d.SourceURL)
 	srv.registerAuth(a)
 	srv.registerLibraries(a)
 	srv.registerCatalog(a)
 	srv.registerSync(a)
 	srv.registerReading(a)
+	srv.registerHardcoverSync(a)
 	srv.registerLists(a)
 	srv.registerLoans(a)
 	srv.registerSharing(a)
@@ -151,6 +194,9 @@ func New(d Deps) (http.Handler, huma.API) {
 		mux.Handle("/", d.Web)
 	}
 	var h http.Handler = mux
+	if d.Metrics != nil {
+		h = d.Metrics.Wrap(mux) // innermost: the route pattern is known after the mux matched
+	}
 	if d.Auth != nil {
 		h = (&Authenticator{Auth: d.Auth, BaseURL: d.BaseURL, Secure: srv.secure, Tokens: d.Tokens}).Middleware(h)
 	}

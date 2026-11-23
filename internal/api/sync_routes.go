@@ -13,6 +13,7 @@ import (
 type syncBody struct {
 	Cursor  int64                `json:"cursor" doc:"Store this and send it back as ?cursor= next time."`
 	HasMore bool                 `json:"has_more" doc:"true: call again immediately with the new cursor."`
+	Reset   bool                 `json:"reset" doc:"true: the cursor was too old; delete the local copy of this library, then apply these entries and keep downloading."`
 	Entries []library.IndexEntry `json:"entries" nullable:"false" doc:"Upserts, and tombstones (deleted=true) to remove locally."`
 }
 
@@ -31,6 +32,6 @@ func (s *Server) registerSync(a huma.API) {
 			if idx.Entries == nil {
 				idx.Entries = []library.IndexEntry{}
 			}
-			return &struct{ Body syncBody }{syncBody{Cursor: idx.Cursor, HasMore: idx.HasMore, Entries: idx.Entries}}, nil
+			return &struct{ Body syncBody }{syncBody{Cursor: idx.Cursor, HasMore: idx.HasMore, Reset: idx.Reset, Entries: idx.Entries}}, nil
 		})
 }

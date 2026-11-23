@@ -537,3 +537,17 @@ func TestSessionsExportImportDelete(t *testing.T) {
 		t.Errorf("admin deletes bob: %d", st)
 	}
 }
+
+func TestHardcoverLinkIsOffWithoutKey(t *testing.T) {
+	srv, _ := newServer(t) // no BIBLISANN_SECRET_KEY, so no Hardcover service
+	c := &client{t: t, srv: srv}
+	c.do("POST", "/v1/auth/register", map[string]string{"email": "me@example.org", "password": "tulips in the garden"}, nil)
+	c.login("me@example.org", "tulips in the garden")
+	_, out, _ := c.do("GET", "/v1/me/hardcover", nil, nil)
+	if out["available"] != false || out["linked"] != false {
+		t.Errorf("status: %v", out)
+	}
+	if st, _ := c.w("PUT", "/v1/me/hardcover", map[string]string{"mode": "both", "token": "x"}); st != 403 {
+		t.Errorf("link without a service: %d", st)
+	}
+}

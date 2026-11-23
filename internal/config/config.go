@@ -36,6 +36,15 @@ type Config struct {
 	AddonProvidersFile string
 	GoogleBooksKey     Secret
 	HardcoverToken     Secret
+	// SourceURL is where the exact source of this running version can be obtained (AGPL-3.0 section 13).
+	// Forks that modify the code must point it at their own source.
+	SourceURL string
+	// MetricsToken protects /metrics (bearer). MetricsPublic removes the authentication (the operator
+	// protects the route, for example at the reverse proxy). With neither, /metrics does not exist.
+	MetricsToken  Secret
+	MetricsPublic bool
+	// GCSoftDeleteDays: how long a deleted copy can be restored before it is purged.
+	GCSoftDeleteDays int
 	// HardcoverRefreshDays: recheck a rated book after this many days. HardcoverPerMinute: request
 	// budget (Hardcover allows 60 per minute).
 	HardcoverRefreshDays int
@@ -109,6 +118,9 @@ func Load(src Sources, opts Options) (Config, error) {
 		StaticProviderFile:   r.str("STATIC_PROVIDER_FILE", ""),
 		AddonProvidersFile:   r.str("ADDON_PROVIDERS_FILE", ""),
 		Passkeys:             r.boolean("PASSKEYS", true),
+		GCSoftDeleteDays:     r.integer("GC_SOFT_DELETE_DAYS", 90),
+		MetricsPublic:        r.boolean("METRICS_PUBLIC", false),
+		SourceURL:            r.httpsURL("SOURCE_URL", "https://github.com/larueli/biblisann"),
 		HardcoverRefreshDays: r.integer("HARDCOVER_REFRESH_DAYS", 3),
 		HardcoverPerMinute:   r.integer("HARDCOVER_PER_MINUTE", 50),
 		OIDCIssuer:           r.str("OIDC_ISSUER", ""),
@@ -144,6 +156,9 @@ func Load(src Sources, opts Options) (Config, error) {
 	}
 	if c.OIDCIssuer != "" && (c.OIDCClientID == "" || c.OIDCClientSecret == "") {
 		r.fail("%sOIDC_ISSUER needs OIDC_CLIENT_ID and OIDC_CLIENT_SECRET (or OIDC_CLIENT_SECRET_FILE)", prefix)
+	}
+	if v, ok := r.lookup("METRICS_TOKEN", true); ok {
+		c.MetricsToken = Secret(strings.TrimSpace(v))
 	}
 	if v, ok := r.lookup("HARDCOVER_TOKEN", true); ok {
 		c.HardcoverToken = Secret(v)
@@ -334,4 +349,15 @@ func (r *reader) integer(name string, def int) int {
 		return def
 	}
 	return n
+}
+
+// httpsURL parses an absolute http(s) URL without credentials.
+func (r *reader) httpsURL(name, def string) string {
+	v := r.str(name, def)
+	u, err := url.Parse(v)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
+		r.fail("%s%s: must be an absolute http(s) URL", prefix, name)
+		return def
+	}
+	return strings.TrimSuffix(u.String(), "/")
 }

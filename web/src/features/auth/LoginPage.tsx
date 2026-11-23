@@ -3,6 +3,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api/client";
+import { Footer } from "../../app/Footer";
 import { field, muted, primary } from "../../app/ui";
 import { LanguageSwitcher } from "../home/LanguageSwitcher";
 import { passkeysSupported } from "./passkeys";
@@ -160,6 +161,7 @@ export function LoginPage() {
           {sso.data.label || t("auth.sso.button")}
         </a>
       )}
+      <Footer />
     </main>
   );
 }

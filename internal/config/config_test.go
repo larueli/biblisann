@@ -174,3 +174,23 @@ func mustURL(t *testing.T) *url.URL {
 	}
 	return c.BaseURL
 }
+
+func TestDefaultsOfLaterSettings(t *testing.T) {
+	c, err := Load(env(nil), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.GCSoftDeleteDays != 90 || c.SourceURL != "https://github.com/larueli/biblisann" || c.MetricsPublic || c.MetricsToken != "" ||
+		c.HardcoverRefreshDays != 3 || c.HardcoverPerMinute != 50 || !c.Passkeys {
+		t.Errorf("defaults: %+v", c)
+	}
+	c, err = Load(env(map[string]string{"BIBLISANN_SOURCE_URL": "https://git.example.org/me/fork/", "BIBLISANN_METRICS_PUBLIC": "true"}), Options{})
+	if err != nil || c.SourceURL != "https://git.example.org/me/fork" || !c.MetricsPublic {
+		t.Errorf("overrides: %+v %v", c, err)
+	}
+	for _, bad := range []string{"ftp://x.example", "not a url", "https://u:p@x.example"} {
+		if _, err := Load(env(map[string]string{"BIBLISANN_SOURCE_URL": bad}), Options{}); err == nil {
+			t.Errorf("SOURCE_URL %q accepted", bad)
+		}
+	}
+}

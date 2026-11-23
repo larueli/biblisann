@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { useAuthActions, useSession } from "../features/auth/session";
 import { LanguageSwitcher } from "../features/home/LanguageSwitcher";
+import { Footer } from "./Footer";
 import { muted } from "./ui";
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </Link>
       </nav>
       {children}
+      <Footer />
     </div>
   );
 }

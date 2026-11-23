@@ -40,7 +40,7 @@ func (q *Queries) CountLibraryGroupShares(ctx context.Context, libraryID uuid.UU
 }
 
 const createLibrary = `-- name: CreateLibrary :one
-INSERT INTO libraries (name) VALUES ($1) RETURNING id, name, settings, created_at
+INSERT INTO libraries (name) VALUES ($1) RETURNING id, name, settings, created_at, changes_pruned_through
 `
 
 func (q *Queries) CreateLibrary(ctx context.Context, name string) (Library, error) {
@@ -51,6 +51,7 @@ func (q *Queries) CreateLibrary(ctx context.Context, name string) (Library, erro
 		&i.Name,
 		&i.Settings,
 		&i.CreatedAt,
+		&i.ChangesPrunedThrough,
 	)
 	return i, err
 }
@@ -108,7 +109,7 @@ func (q *Queries) DeletePlace(ctx context.Context, id uuid.UUID) error {
 }
 
 const getLibrary = `-- name: GetLibrary :one
-SELECT id, name, settings, created_at FROM libraries WHERE id = $1
+SELECT id, name, settings, created_at, changes_pruned_through FROM libraries WHERE id = $1
 `
 
 func (q *Queries) GetLibrary(ctx context.Context, id uuid.UUID) (Library, error) {
@@ -119,6 +120,7 @@ func (q *Queries) GetLibrary(ctx context.Context, id uuid.UUID) (Library, error)
 		&i.Name,
 		&i.Settings,
 		&i.CreatedAt,
+		&i.ChangesPrunedThrough,
 	)
 	return i, err
 }
@@ -385,7 +387,7 @@ func (q *Queries) PlaceSubtreeInstances(ctx context.Context, id uuid.UUID) ([]Pl
 }
 
 const updateLibrary = `-- name: UpdateLibrary :one
-UPDATE libraries SET name = $2, settings = $3 WHERE id = $1 RETURNING id, name, settings, created_at
+UPDATE libraries SET name = $2, settings = $3 WHERE id = $1 RETURNING id, name, settings, created_at, changes_pruned_through
 `
 
 type UpdateLibraryParams struct {
@@ -402,6 +404,7 @@ func (q *Queries) UpdateLibrary(ctx context.Context, arg UpdateLibraryParams) (L
 		&i.Name,
 		&i.Settings,
 		&i.CreatedAt,
+		&i.ChangesPrunedThrough,
 	)
 	return i, err
 }

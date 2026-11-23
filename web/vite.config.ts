@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
@@ -10,6 +11,29 @@ const keepGitkeep = (): Plugin => ({
   name: "keep-gitkeep",
   generateBundle() {
     this.emitFile({ type: "asset", fileName: ".gitkeep", source: "" });
+  },
+});
+
+// Interactive API documentation viewers, copied from their npm packages into the build so that the
+// server hosts everything itself (no third-party CDN at runtime). See docs/dev/api-docs.md.
+const apiDocViewers: [from: string, to: string][] = [
+  ["swagger-ui-dist/swagger-ui-bundle.js", "swagger-ui-bundle.js"],
+  ["swagger-ui-dist/swagger-ui.css", "swagger-ui.css"],
+  ["redoc/bundles/redoc.standalone.js", "redoc.standalone.js"],
+  ["@stoplight/elements/web-components.min.js", "elements.js"],
+  ["@stoplight/elements/styles.min.css", "elements.css"],
+  ["@scalar/api-reference/dist/browser/standalone.js", "scalar.js"],
+];
+const vendorApiDocs = (): Plugin => ({
+  name: "vendor-api-docs",
+  generateBundle() {
+    for (const [from, to] of apiDocViewers) {
+      this.emitFile({
+        type: "asset",
+        fileName: `docs/vendor/${to}`,
+        source: readFileSync(`node_modules/${from}`),
+      });
+    }
   },
 });
 
@@ -37,11 +61,23 @@ export default defineConfig({
       },
       workbox: {
         // Server routes must never be answered by the SPA shell.
-        navigateFallbackDenylist: [/^\/v1\//, /^\/openapi\./, /^\/healthz$/, /^\/readyz$/],
+        navigateFallbackDenylist: [
+          /^\/v1\//,
+          /^\/openapi/,
+          /^\/docs/,
+          /^\/mcp/,
+          /^\/oauth\/(token|register)/,
+          /^\/\.well-known\//,
+          /^\/scim\//,
+          /^\/opds\//,
+          /^\/(healthz|livez|readyz|startupz|health|metrics)$/,
+        ],
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+        globIgnores: ["docs/**"], // the API viewers are large and not part of the app
       },
     }),
     keepGitkeep(),
+    vendorApiDocs(),
   ],
   build: {
     outDir: "../internal/webui/dist",

@@ -52,6 +52,16 @@ disabledProviders: []
 extraEnv: []
 extraEnvFrom: []
 
+# Prometheus metrics at /metrics. The route does not exist unless you give it a bearer token
+# (tokenSecret) or declare it public (public: true, only when something else protects it, such as a
+# NetworkPolicy or the ingress). OpenTelemetry traces: set OTEL_EXPORTER_OTLP_ENDPOINT through extraEnv.
+metrics:
+  tokenSecret: {name: "", key: token}
+  public: false
+  serviceMonitor:
+    enabled: false   # needs the Prometheus Operator CRDs
+    interval: 30s
+
 service:
   type: ClusterIP
   port: 80

@@ -22,6 +22,7 @@ import (
 	"github.com/larueli/biblisann/internal/backup"
 	"github.com/larueli/biblisann/internal/config"
 	"github.com/larueli/biblisann/internal/db"
+	"github.com/larueli/biblisann/internal/gc"
 	"github.com/larueli/biblisann/internal/storage"
 	"github.com/larueli/biblisann/internal/version"
 )
@@ -40,6 +41,7 @@ commands:
   backup       write a logical backup (tar) to stdout
   restore      load a backup from stdin into an empty instance
   migrate-covers <from> <to>  copy cover files between local and s3
+  gc           remove unreferenced data now (also runs daily in the server)
   vapid        generate Web Push (VAPID) keys
   version      print the version
 `
@@ -75,6 +77,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = restoreCmd(ctx, os.Stdin)
 	case "migrate-covers":
 		err = migrateCovers(ctx, args[1:])
+	case "gc":
+		err = gcCmd(ctx, stdout)
 	case "vapid":
 		var priv, pub string
 		if priv, pub, err = webpush.GenerateVAPIDKeys(); err == nil {
@@ -220,4 +224,24 @@ func migrateCovers(ctx context.Context, args []string) error {
 	}
 	_, _ = fmt.Fprintf(os.Stderr, "copied %d files from %s to %s\n", n, args[0], args[1])
 	return nil
+}
+
+func gcCmd(ctx context.Context, out io.Writer) error {
+	cfg, pool, err := openPool(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	covers, err := app.OpenStorage(ctx, cfg, cfg.StorageBackend)
+	if err != nil {
+		return err
+	}
+	opts := gc.Defaults()
+	opts.SoftDeleteDays = cfg.GCSoftDeleteDays
+	rep, err := gc.Run(ctx, pool, covers, opts, newLogger(cfg, os.Stderr))
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(out, rep.String())
+	return err
 }

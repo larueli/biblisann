@@ -109,3 +109,25 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - run: cd web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
       - run: make e2e VERSION=ci
+
+  # Breaking OpenAPI changes (oasdiff) against the target branch. A pull request whose title is a
+  # Conventional Commit marked breaking ("feat(api)!: ...") is allowed to break.
+  api-compat:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: Compare with the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$PR_TITLE" =~ ^[a-z]+(\([^\)]+\))?!: ]]; then export BREAKING=1; fi
+          scripts/api-compat.sh "origin/${BASE_REF}"

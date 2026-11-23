@@ -1,6 +1,6 @@
 # Install
 
-Biblisann is one static binary that embeds the web app. The only required service is PostgreSQL (18 recommended).
+Biblisann is one static binary that embeds the web app. The only required service is PostgreSQL (tested on 18 and 19).
 
 Set `BIBLISANN_BASE_URL` to the public address users type in their browser (scheme and host, no path). Passkeys, OAuth and cookies depend on it.
 

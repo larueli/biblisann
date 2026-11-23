@@ -12,6 +12,7 @@ export async function syncIndex(libraryId: string, db: BiblisannDB = defaultDb):
     });
     if (error || !data) throw new Error("sync failed");
     await db.transaction("rw", db.index, db.meta, async () => {
+      if (data.reset) await db.index.where("libraryId").equals(libraryId).delete(); // history was compacted past our cursor
       for (const e of data.entries) {
         if (e.deleted) {
           await db.index.delete(e.id);

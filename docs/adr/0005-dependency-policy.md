@@ -54,6 +54,10 @@ Supply-chain attacks (typosquatting, hallucinated package names, abandoned packa
 | `github.com/redis/go-redis/v9` | Valkey/Redis client for shared rate limits | BSD-2-Clause | `valkey-io/valkey-go` (newer, smaller community) | Slice 3 |
 | `github.com/fxamacker/cbor/v2` (tests only) | CBOR for the software authenticator in passkey tests | MIT | hand-rolled encoder | Slice 3 |
 | `github.com/go-jose/go-jose/v4` (tests only; also a dependency of go-oidc) | Sign ID tokens in the fake OIDC provider | Apache-2.0 | none | Slice 3 |
+| `github.com/prometheus/client_golang` | Prometheus metrics at `/metrics` | Apache-2.0 | OpenTelemetry metrics SDK (heavier, same data) | Slice 3 follow-up |
+| `go.opentelemetry.io/otel`, `otel/sdk`, `otlptracehttp`, `contrib/.../otelhttp` | OpenTelemetry traces over OTLP/HTTP, configured by the standard `OTEL_*` variables | Apache-2.0 | none (the standard) | Slice 3 follow-up |
+| `github.com/oasdiff/oasdiff` (CI tool, `go run`, not linked) | Breaking OpenAPI change detection | Apache-2.0 | `openapi-diff` (Java) | Slice 3 follow-up |
+| `swagger-ui-dist`, `redoc`, `@stoplight/elements`, `@scalar/api-reference` (build time: their prebuilt bundles are copied into the app) | Self-hosted interactive API documentation | Apache-2.0, MIT, Apache-2.0, MIT | CDN-loaded viewers (third-party scripts at runtime: rejected) | Slice 3 follow-up |
 | `zensical` (docs build tool, run with `uvx`, not part of the product) | Documentation site | MIT | MkDocs Material (see ADR 0012) | Slice 0 |
 
 ## Consequences

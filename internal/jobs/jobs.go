@@ -72,6 +72,18 @@ type Syncer interface {
 	Sync(ctx context.Context, budget int) (processed int, retryAfter time.Duration, err error)
 }
 
+// UserSyncArgs synchronizes the users whose Hardcover link is due.
+type UserSyncArgs struct{}
+
+// Kind implements river.JobArgs.
+func (UserSyncArgs) Kind() string { return "hardcover_user_sync" }
+
+// UserSyncer runs the per-user Hardcover synchronization (see hcsync.Service).
+type UserSyncer interface {
+	DueUsers(ctx context.Context, limit int) ([]uuid.UUID, error)
+	SyncUserForJob(ctx context.Context, userID uuid.UUID) error
+}
+
 // MaintenanceArgs removes expired sessions and old idempotency keys.
 type MaintenanceArgs struct{}
 
@@ -104,7 +116,7 @@ type Client struct {
 }
 
 // New builds the client with its workers and periodic jobs. Call Start to begin processing.
-func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error, hc Syncer) (*Client, error) {
+func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error, hc Syncer, us UserSyncer) (*Client, error) {
 	workers := river.NewWorkers()
 	q := dbsqlc.New(pool)
 	river.AddWorker(workers, &reminderWorker{pool: pool, q: q})
@@ -123,6 +135,12 @@ func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(
 		// Unique: a long run is never doubled by the next tick.
 		periodic = append(periodic, river.NewPeriodicJob(river.PeriodicInterval(10*time.Minute), func() (river.JobArgs, *river.InsertOpts) {
 			return HardcoverArgs{}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true, ByPeriod: 9 * time.Minute}}
+		}, &river.PeriodicJobOpts{RunOnStart: true}))
+	}
+	if us != nil {
+		river.AddWorker(workers, &userSyncWorker{s: us, log: log})
+		periodic = append(periodic, river.NewPeriodicJob(river.PeriodicInterval(5*time.Minute), func() (river.JobArgs, *river.InsertOpts) {
+			return UserSyncArgs{}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true, ByPeriod: 4 * time.Minute}}
 		}, &river.PeriodicJobOpts{RunOnStart: true}))
 	}
 	c, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
@@ -265,6 +283,29 @@ func (w *hardcoverWorker) Work(ctx context.Context, _ *river.Job[HardcoverArgs])
 	if after > 0 {
 		w.log.WarnContext(ctx, "hardcover asked to slow down", "retry_after", after.String())
 		return river.JobSnooze(after)
+	}
+	return nil
+}
+
+type userSyncWorker struct {
+	river.WorkerDefaults[UserSyncArgs]
+	s   UserSyncer
+	log *slog.Logger
+}
+
+func (w *userSyncWorker) Timeout(*river.Job[UserSyncArgs]) time.Duration { return 15 * time.Minute }
+
+// Work syncs a few due users per run; a failing user is recorded on their own link and never
+// stops the others.
+func (w *userSyncWorker) Work(ctx context.Context, _ *river.Job[UserSyncArgs]) error {
+	ids, err := w.s.DueUsers(ctx, 5)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := w.s.SyncUserForJob(ctx, id); err != nil {
+			w.log.WarnContext(ctx, "hardcover user sync failed", "user", id.String(), "error", err)
+		}
 	}
 	return nil
 }

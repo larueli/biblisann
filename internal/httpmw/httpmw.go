@@ -10,6 +10,8 @@ import (
 	"net/netip"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Middleware wraps a handler.
@@ -86,6 +88,14 @@ func contains(prefixes []netip.Prefix, a netip.Addr) bool {
 	return false
 }
 
+// traceID returns the OpenTelemetry trace ID of the context, if any.
+func traceID(ctx context.Context) string {
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		return sc.TraceID().String()
+	}
+	return ""
+}
+
 // WithClientIP stores the resolved client address in the request context.
 func WithClientIP(trusted []netip.Prefix) Middleware {
 	return func(next http.Handler) http.Handler {
@@ -116,9 +126,15 @@ func SecurityHeaders(hsts bool) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := w.Header()
-			h.Set("Content-Security-Policy",
-				"default-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; "+
-					"frame-ancestors 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'")
+			csp := "default-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; " +
+				"frame-ancestors 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'"
+			if strings.HasPrefix(r.URL.Path, "/docs/") {
+				// The API viewers (served by this app, same origin) inject inline styles, load fonts from
+				// data: URLs and use blob: workers. Scripts stay restricted to this origin.
+				csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+					"font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+			}
+			h.Set("Content-Security-Policy", csp)
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "no-referrer")
 			h.Set("Cross-Origin-Opener-Policy", "same-origin")
@@ -175,7 +191,7 @@ func AccessLog(log *slog.Logger, skip func(*http.Request) bool) Middleware {
 			log.InfoContext(r.Context(), "request",
 				"method", r.Method, "path", r.URL.Path, "status", sw.status,
 				"duration_ms", time.Since(start).Milliseconds(),
-				"client_ip", ClientIP(r.Context()).String(), "request_id", RequestID(r.Context()))
+				"client_ip", ClientIP(r.Context()).String(), "request_id", RequestID(r.Context()), "trace_id", traceID(r.Context()))
 		})
 	}
 }

@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/v1/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Version, license and where to get the source */
+        get: operations["get-about"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/users": {
         parameters: {
             query?: never;
@@ -912,6 +929,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/hardcover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Hardcover link and its direction */
+        get: operations["get-hardcover-link"];
+        /**
+         * Link my Hardcover account, or change the sync direction
+         * @description mode: pull (Hardcover to Biblisann), push (Biblisann to Hardcover) or both. The token is only needed the first time; it is verified, then stored encrypted. Reading status and ratings are synchronized, matched by ISBN.
+         */
+        put: operations["put-hardcover-link"];
+        post?: never;
+        /** Unlink Hardcover (forgets the token; local and Hardcover data stay as they are) */
+        delete: operations["delete-hardcover-link"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/hardcover/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Synchronize with Hardcover now (one budgeted pass; large libraries continue in the background) */
+        post: operations["sync-hardcover-now"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/import": {
         parameters: {
             query?: never;
@@ -1438,6 +1494,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AboutOutputBody: {
+            docs_url: string;
+            /** @example AGPL-3.0-or-later */
+            license: string;
+            openapi_url: string;
+            /** @description Where the exact source of this running version can be obtained (AGPL-3.0 section 13). */
+            source_url: string;
+            /** @example 0.4.0 */
+            version: string;
+        };
         "Add-list-itemRequest": {
             authors?: string[] | null;
             /** @description When set, title, authors and ISBN come from the edition. */
@@ -1730,6 +1796,16 @@ export interface components {
             name: string;
             profile_id?: string;
             role: string;
+        };
+        HardcoverBody: {
+            /** @description false when the server has no BIBLISANN_SECRET_KEY to store tokens. */
+            available: boolean;
+            last_error?: string;
+            /** Format: date-time */
+            last_sync_at?: string;
+            linked: boolean;
+            /** @enum {string} */
+            mode?: "pull" | "push" | "both";
         };
         ImportReportBody: {
             /** Format: int64 */
@@ -2028,6 +2104,12 @@ export interface components {
             fetched_at: string;
             provider: string;
         };
+        "Put-hardcover-linkRequest": {
+            /** @enum {string} */
+            mode: "pull" | "push" | "both";
+            /** @description Your Hardcover API token. */
+            token?: string;
+        };
         ReadingBody: {
             /**
              * Format: date
@@ -2160,6 +2242,14 @@ export interface components {
                 [key: string]: number;
             };
         };
+        "Sync-hardcover-nowResponse": {
+            /** @description true: more remains and will continue in the background. */
+            more: boolean;
+            /** Format: int64 */
+            pulled: number;
+            /** Format: int64 */
+            pushed: number;
+        };
         SyncBody: {
             /**
              * Format: int64
@@ -2170,6 +2260,8 @@ export interface components {
             entries: components["schemas"]["IndexEntry"][];
             /** @description true: call again immediately with the new cursor. */
             has_more: boolean;
+            /** @description true: the cursor was too old; delete the local copy of this library, then apply these entries and keep downloading. */
+            reset: boolean;
         };
         TokenBody: {
             /** Format: date-time */
@@ -2237,6 +2329,35 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "get-about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AboutOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "admin-list-users": {
         parameters: {
             query?: {
@@ -5581,6 +5702,196 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-hardcover-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HardcoverBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-hardcover-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Put-hardcover-linkRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HardcoverBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-hardcover-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "sync-hardcover-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sync-hardcover-nowResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

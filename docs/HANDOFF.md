@@ -12,7 +12,8 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 - Slice 2: sharing and profiles, reading status and grades, lists and series, loans, River jobs and notifications, ICS, tokens, MCP, backup/restore, S3 storage, Goodreads import, inventory, QR labels.
 - Slice 3: OIDC, TOTP and recovery, password reset, passkeys, SCIM, OAuth server for MCP, extra providers and addons, Hardcover ratings, OPDS, Valkey rate limiting.
 - Follow-up: StoryGraph and LibraryThing importers, Hardcover bulk refresh job (rate limit, retry, 3-day refresh), library/account export and import, account deletion, session and OAuth grant revocation, admin user management, S3 tested with RustFS.
-- ADRs 0011 to 0022, user docs (first run, organise, security, install, configuration), `docs/dev/addons.md`.
+- Follow-up 2: garbage collection (`biblisann gc`, daily), probe routes, Prometheus and OpenTelemetry, self-hosted API docs at `/docs/`, `/v1/about` and footer, `oasdiff` CI gate, two-way Hardcover sync per user, PostgreSQL 19 tested.
+- ADRs 0011 to 0023, user docs (first run, organise, security, install, configuration), `docs/dev/addons.md`.
 
 ## In progress
 

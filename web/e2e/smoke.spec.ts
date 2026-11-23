@@ -42,3 +42,42 @@ test("scan to list: register, create a library, add a book by ISBN, find it", as
   await page.getByLabel("Search title, author, ISBN…").fill("petit prnce"); // typo on purpose
   await expect(page.getByText("Le Petit Prince")).toBeVisible();
 });
+
+// The API viewers are hosted by the server itself and must work under its Content-Security-Policy.
+for (const viewer of ["swagger", "redoc", "elements", "scalar"]) {
+  test(`API documentation viewer: ${viewer}`, async ({ page }) => {
+    const violations: string[] = [];
+    const errors: string[] = [];
+    page.on("console", (m) => {
+      // Redoc tries to show its "powered by" logo from cdn.redoc.ly: the policy blocks it, as intended.
+      if (/content security policy/i.test(m.text())) {
+        if (!m.text().includes("cdn.redoc.ly")) violations.push(m.text());
+      } else if (m.type() === "error") errors.push(m.text());
+    });
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await page.goto(`/docs/${viewer}.html`);
+    await expect(page.getByText("Biblisann API").first(), errors.join(" | ")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText(/list-libraries|\/v1\/libraries|Libraries/i).first()).toBeAttached({
+      timeout: 20_000,
+    });
+    expect(violations).toEqual([]);
+  });
+}
+
+test("probe routes and the spec variants answer without authentication", async ({ request }) => {
+  for (const path of [
+    "/livez",
+    "/healthz",
+    "/readyz",
+    "/startupz",
+    "/health",
+    "/openapi.yaml",
+    "/openapi-3.0.json",
+    "/docs/",
+  ]) {
+    expect((await request.get(path)).ok(), path).toBeTruthy();
+  }
+  expect((await request.get("/metrics")).status()).toBe(404); // no token and not public: the route does not exist
+});

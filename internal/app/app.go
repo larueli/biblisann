@@ -27,7 +27,9 @@ import (
 	"github.com/larueli/biblisann/internal/config"
 	"github.com/larueli/biblisann/internal/db"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
+	"github.com/larueli/biblisann/internal/gc"
 	"github.com/larueli/biblisann/internal/hardcover"
+	"github.com/larueli/biblisann/internal/hcsync"
 	"github.com/larueli/biblisann/internal/httpmw"
 	"github.com/larueli/biblisann/internal/importer"
 	"github.com/larueli/biblisann/internal/jobs"
@@ -47,6 +49,7 @@ import (
 	"github.com/larueli/biblisann/internal/scan"
 	"github.com/larueli/biblisann/internal/scim"
 	"github.com/larueli/biblisann/internal/storage"
+	"github.com/larueli/biblisann/internal/telemetry"
 	"github.com/larueli/biblisann/internal/tokens"
 	"github.com/larueli/biblisann/internal/version"
 	"github.com/larueli/biblisann/internal/webui"
@@ -86,7 +89,20 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 			log.Warn("jobs did not stop cleanly", "error", err)
 		}
 	}()
+	shutdownTracing, err := telemetry.SetupTracing(ctx, version.Version())
+	if err != nil {
+		return fmt.Errorf("tracing: %w", err)
+	}
+	defer func() {
+		flush, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracing(flush)
+	}()
 	handler := Wrap(root, cfg, log)
+	if telemetry.TracingEnabled() {
+		handler = telemetry.Middleware(handler) // outermost: every middleware below sees the span
+		log.Info("OpenTelemetry tracing is on")
+	}
 
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.ListenAddr)
 	if err != nil {
@@ -175,11 +191,30 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		h.Interval = time.Minute / time.Duration(cfg.HardcoverPerMinute)
 		hc, hcSyncer = h, h
 	}
+	var hcs *hcsync.Service
+	var userSyncer jobs.UserSyncer
+	if cfg.SecretKey != "" {
+		key, _ := base64.StdEncoding.DecodeString(cfg.SecretKey.Reveal())
+		hcs = hcsync.New(pool, key, func(token string) hcsync.Remote { return hardcover.NewUserClient(fetcher, token) }, readingSvc)
+		hcs.Interval = time.Minute / time.Duration(cfg.HardcoverPerMinute)
+		userSyncer = hcs
+	}
 	jc, err := jobs.New(pool, dispatcher, log, func(ctx context.Context) error {
 		_ = oauthSvc.Purge(ctx)
-		_, err := authSvc.PurgeExpired(ctx)
-		return err
-	}, hcSyncer)
+		if _, err := authSvc.PurgeExpired(ctx); err != nil {
+			return err
+		}
+		opts := gc.Defaults()
+		opts.SoftDeleteDays = cfg.GCSoftDeleteDays
+		rep, err := gc.Run(ctx, pool, covers, opts, log)
+		if err != nil {
+			return err
+		}
+		if rep != (gc.Report{}) {
+			log.InfoContext(ctx, "garbage collection", "removed", rep.String())
+		}
+		return nil
+	}, hcSyncer, userSyncer)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -205,7 +240,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			RedirectURL: cfg.BaseURL.String() + "/v1/auth/oidc/callback", Scopes: cfg.OIDCScopes, GroupsClaim: cfg.OIDCGroupsClaim,
 			AdminGroup: cfg.OIDCAdminGroup, AutoCreate: cfg.OIDCAutoCreate, Label: cfg.OIDCLabel}, pool, authSvc, fetcher.Std())
 	}
-	h, _ := api.New(api.Deps{Account: account.NewService(pool, libSvc, catSvc, listsSvc, loansSvc, readingSvc), Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
+	h, _ := api.New(api.Deps{HCSync: hcs, SourceURL: cfg.SourceURL, Metrics: telemetry.New(version.Version(), pool), MetricsToken: cfg.MetricsToken.Reveal(), MetricsPublic: cfg.MetricsPublic, Account: account.NewService(pool, libSvc, catSvc, listsSvc, loansSvc, readingSvc), Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
 		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
 		Auth: authSvc, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
 		Lists: listsSvc, Loans: loansSvc,
@@ -222,7 +257,13 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 
 // Wrap applies the shared middleware chain.
 func Wrap(h http.Handler, cfg config.Config, log *slog.Logger) http.Handler {
-	probe := func(r *http.Request) bool { return r.URL.Path == "/healthz" || r.URL.Path == "/readyz" }
+	probe := func(r *http.Request) bool {
+		switch r.URL.Path {
+		case "/healthz", "/livez", "/readyz", "/startupz", "/health", "/metrics":
+			return true
+		}
+		return false
+	}
 	return httpmw.Chain(limitBody(h),
 		httpmw.WithRequestID(),
 		httpmw.WithClientIP(cfg.TrustedProxies),

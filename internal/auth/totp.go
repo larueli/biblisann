@@ -1,18 +1,17 @@
 package auth
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // RFC 6238 specifies HMAC-SHA1 for compatibility with authenticator apps
 	"encoding/base32"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/larueli/biblisann/internal/secretbox"
 )
 
 const (
@@ -63,40 +62,8 @@ func totpURI(issuer, account string, secret []byte) string {
 	return fmt.Sprintf("otpauth://totp/%s:%s?%s", url.PathEscape(issuer), url.PathEscape(account), v.Encode())
 }
 
-// seal encrypts with AES-256-GCM; the nonce is prepended.
-func seal(key, plain []byte) ([]byte, error) {
-	gcm, err := newGCM(key)
-	if err != nil {
-		return nil, err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, err
-	}
-	return gcm.Seal(nonce, nonce, plain, nil), nil
-}
-
-func open(key, sealed []byte) ([]byte, error) {
-	gcm, err := newGCM(key)
-	if err != nil {
-		return nil, err
-	}
-	if len(sealed) < gcm.NonceSize() {
-		return nil, errors.New("auth: sealed value too short")
-	}
-	return gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():], nil)
-}
-
-func newGCM(key []byte) (cipher.AEAD, error) {
-	if len(key) != 32 {
-		return nil, errors.New("auth: secret key must be 32 bytes")
-	}
-	b, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	return cipher.NewGCM(b)
-}
+func seal(key, plain []byte) ([]byte, error)  { return secretbox.Seal(key, plain) }
+func open(key, sealed []byte) ([]byte, error) { return secretbox.Open(key, sealed) }
 
 // CurrentTOTP returns the valid code for a base32 secret at time t (used by tests and tooling).
 func CurrentTOTP(b32 string, t time.Time) string {

@@ -7,6 +7,7 @@ import { useSession } from "../auth/session";
 import { useLibraries } from "../library/useLibraries";
 import { AccountSection } from "./Account";
 import { AdminUsers } from "./AdminUsers";
+import { Hardcover } from "./Hardcover";
 import { Security } from "./Security";
 
 type ChannelKind = Schemas["ChannelBody"]["kind"];
@@ -260,6 +261,7 @@ export function SettingsPage() {
       <Tokens />
       <Channels />
       <GoodreadsImport />
+      <Hardcover />
       <AccountSection />
       {session.data?.user.is_admin && <AdminUsers />}
       {session.data?.user.is_admin && (

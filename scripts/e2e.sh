@@ -17,4 +17,4 @@ BIBLISANN_PROVIDERS=static BIBLISANN_STATIC_PROVIDER_FILE="$PWD/web/e2e/fixtures
   ./bin/biblisann serve >"$tmp/app.log" 2>&1 &
 app_pid=$!
 for _ in $(seq 1 30); do curl -fs http://127.0.0.1:18080/readyz >/dev/null && break; sleep 1; done
-(cd web && BIBLISANN_E2E_URL=http://127.0.0.1:18080 pnpm run e2e) || { cat "$tmp/app.log"; exit 1; }
+(cd web && BIBLISANN_E2E_URL=http://127.0.0.1:18080 pnpm run e2e -- ${E2E_ARGS:-}) || { cat "$tmp/app.log"; exit 1; }

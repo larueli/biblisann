@@ -37,14 +37,25 @@ An optional file in `KEY=value` form (full variable names, `#` comments) can be 
 | `BIBLISANN_HARDCOVER_TOKEN` | none | yes (`_FILE`) | Enables community ratings from Hardcover for every book with an ISBN, refreshed in the background. |
 | `BIBLISANN_HARDCOVER_REFRESH_DAYS`, `_PER_MINUTE` | `3`, `50` | no | Recheck a rated book after this many days; request budget per minute (Hardcover allows 60). |
 | `BIBLISANN_VALKEY_URL` | none | yes (`_FILE`) | `redis://` or `rediss://` URL; shares rate limits between replicas. |
+| `BIBLISANN_METRICS_TOKEN` | none | yes (`_FILE`) | Enables `/metrics` (Prometheus) protected by `Authorization: Bearer <token>`. |
+| `BIBLISANN_METRICS_PUBLIC` | `false` | no | `true` enables `/metrics` **without** authentication: only behind a reverse proxy or network policy that protects it. Without a token and without this flag the route does not exist. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` (and the other standard `OTEL_*` variables) | none | no | Sends OpenTelemetry traces over OTLP/HTTP. Not set: tracing is off. |
+| `BIBLISANN_SOURCE_URL` | `https://github.com/larueli/biblisann` | no | Where users can get the source of this version (shown in the footer; AGPL section 13). **Forks that change the code must set their own.** |
+| `BIBLISANN_GC_SOFT_DELETE_DAYS` | `90` | no | How long a deleted copy can be restored before the daily cleanup purges it. |
 | `BIBLISANN_CONFIG_FILE` | none | no | Path of an optional config file. |
 
 ## Endpoints for operators
 
 | Path | Purpose |
 |------|---------|
-| `/healthz` | Liveness: the process answers. |
-| `/readyz` | Readiness: the database answers. |
+| `/livez`, `/healthz` | Liveness: the process answers (Docker `HEALTHCHECK`, Kubernetes liveness). |
+| `/startupz` | Startup: the server finished starting (Kubernetes startup probe). |
+| `/readyz` | Readiness: the database answers (Kubernetes readiness, load balancers). |
+| `/health` | The same checks as JSON, with versions and latency (humans, dashboards). `503` when degraded. |
+| `/metrics` | Prometheus metrics, only when enabled (see `BIBLISANN_METRICS_*`). |
+| `/docs/` | Interactive API documentation (Swagger UI, Redoc, Stoplight Elements, Scalar), self-hosted. |
+| `/openapi.json`, `/openapi.yaml`, `/openapi-3.0.json`, `/openapi-3.0.yaml` | The API description in OpenAPI 3.1 and 3.0. |
+| `/v1/about` | Version, license and source URL. |
 | `/v1/version` | Running version. |
 | `/mcp` | MCP endpoint (bearer token or OAuth). |
 | `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server` | OAuth discovery for MCP clients. |

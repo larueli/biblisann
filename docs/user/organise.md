@@ -48,3 +48,7 @@ Covers live in `BIBLISANN_COVERS_DIR`, or in an S3-compatible bucket with `BIBLI
 ## Community ratings
 
 With a Hardcover token configured, the server fetches Hardcover's rating for every book with an ISBN in the background (about 50 requests a minute at most, retried when Hardcover is busy or down) and refreshes them every few days. They appear next to your own grade and never replace it.
+
+## Hardcover (two-way)
+
+*Settings > Hardcover*: paste your Hardcover API token and choose the direction: **both ways**, **Hardcover to Biblisann only**, or **Biblisann to Hardcover only**. Reading status and your rating are kept in step, books are matched by ISBN, and when both sides changed a book the most recent edit wins. A large library syncs a bit at a time in the background (Hardcover allows about 60 requests a minute). *Unlink* forgets the token and leaves your data untouched on both sides. If Hardcover rejects the token, the screen asks you to link again.
