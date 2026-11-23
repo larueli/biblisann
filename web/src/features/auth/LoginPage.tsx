@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../../api/client";
 import { field, muted, primary } from "../../app/ui";
 import { LanguageSwitcher } from "../home/LanguageSwitcher";
+import { passkeysSupported } from "./passkeys";
 import { useAuthActions } from "./session";
 
 /** Only same-origin paths are accepted as a post-login destination (no open redirect). */
@@ -15,7 +16,7 @@ export function safeNext(next: string | undefined): string | null {
 
 export function LoginPage() {
   const { t } = useTranslation();
-  const { login, register, completeMfa } = useAuthActions();
+  const { login, register, completeMfa, passkeyLogin } = useAuthActions();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { next?: string; sso?: string };
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -142,6 +143,18 @@ export function LoginPage() {
           </>
         )}
       </form>
+      {passkeysSupported() && mfaToken === null && (
+        <>
+          <button
+            type="button"
+            className={primary}
+            onClick={() => passkeyLogin.mutate(undefined, { onSuccess: done })}
+          >
+            {t("auth.passkey")}
+          </button>
+          {passkeyLogin.isError && <p role="alert">{t("auth.passkeyFailed")}</p>}
+        </>
+      )}
       {sso.data?.enabled && mfaToken === null && (
         <a className={`${primary} text-center`} href="/v1/auth/oidc/login">
           {sso.data.label || t("auth.sso.button")}

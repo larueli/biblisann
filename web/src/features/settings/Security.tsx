@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, problemMessage } from "../../api/client";
 import { field, muted, primary, secondary } from "../../app/ui";
+import { createPasskey, passkeysSupported } from "../auth/passkeys";
 
 export function Security() {
   const { t } = useTranslation();
@@ -54,11 +55,70 @@ export function Security() {
       await qc.invalidateQueries({ queryKey: ["security"] });
     },
   });
-  if (!sec.data?.mfa_available) return null;
+  const passkeys = useQuery({
+    queryKey: ["passkeys"],
+    enabled: sec.data?.passkeys_available === true,
+    queryFn: async () => (await api.GET("/v1/me/passkeys")).data ?? [],
+  });
+  const [pkName, setPkName] = useState("");
+  const addPasskey = useMutation({
+    mutationFn: async () => {
+      const begin = await api.POST("/v1/me/passkeys/begin");
+      if (!begin.data) throw new Error(problemMessage(begin.error));
+      const credential = await createPasskey(begin.data.options);
+      const { response, error } = await api.POST("/v1/me/passkeys/finish", {
+        body: { session_id: begin.data.session_id, name: pkName || "Passkey", credential },
+      });
+      if (!response.ok) throw new Error(problemMessage(error));
+    },
+    onSuccess: async () => {
+      setPkName("");
+      await qc.invalidateQueries({ queryKey: ["passkeys"] });
+    },
+  });
+  const removePasskey = useMutation({
+    mutationFn: async (id: string) => {
+      await api.DELETE("/v1/me/passkeys/{id}", { params: { path: { id } } });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["passkeys"] }),
+  });
+  if (!sec.data?.mfa_available && !sec.data?.passkeys_available) return null;
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-lg font-semibold">{t("security.title")}</h2>
-      {sec.data.mfa_enabled ? (
+      {sec.data.passkeys_available && passkeysSupported() && (
+        <div className="flex flex-col gap-2">
+          <h3 className="font-semibold">{t("security.passkeys")}</h3>
+          <ul className="flex flex-col gap-1">
+            {passkeys.data?.map((p) => (
+              <li key={p.id} className="flex items-center justify-between">
+                <span>{p.name}</span>
+                <button
+                  type="button"
+                  className={secondary}
+                  onClick={() => removePasskey.mutate(p.id)}
+                >
+                  {t("settings.revoke")}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <input
+              className={field}
+              value={pkName}
+              onChange={(e) => setPkName(e.target.value)}
+              placeholder={t("security.passkeyName")}
+              aria-label={t("security.passkeyName")}
+            />
+            <button type="button" className={primary} onClick={() => addPasskey.mutate()}>
+              {t("security.addPasskey")}
+            </button>
+          </div>
+          {addPasskey.isError && <p role="alert">{t("auth.passkeyFailed")}</p>}
+        </div>
+      )}
+      {!sec.data.mfa_available ? null : sec.data.mfa_enabled ? (
         <>
           <p>{t("security.enabled")}</p>
           <div className="flex gap-2">

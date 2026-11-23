@@ -58,14 +58,14 @@ type Service struct {
 	pool *pgxpool.Pool
 	q    *dbsqlc.Queries
 	auth *auth.Service
-	http *http.Client
+	http *http.Client //nolint:forbidigo // the SSRF-safe client from safehttp.Client.Std
 
 	mu       sync.Mutex
 	provider *gooidc.Provider
 }
 
 // New creates the service. client carries the discovery and token traffic (use safehttp's Std).
-func New(cfg Config, pool *pgxpool.Pool, a *auth.Service, client *http.Client) *Service {
+func New(cfg Config, pool *pgxpool.Pool, a *auth.Service, client *http.Client) *Service { //nolint:forbidigo // the SSRF-safe client from safehttp.Client.Std
 	if len(cfg.Scopes) == 0 {
 		cfg.Scopes = []string{gooidc.ScopeOpenID, "email", "profile", "groups"}
 	}

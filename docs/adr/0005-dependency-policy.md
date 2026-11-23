@@ -49,6 +49,11 @@ Supply-chain attacks (typosquatting, hallucinated package names, abandoned packa
 | `github.com/modelcontextprotocol/go-sdk` | MCP server (streamable HTTP) | MIT/Apache-2.0 | `mark3labs/mcp-go` (community) | Slice 2 |
 | `qrcode` (web) | QR labels for places, generated in the browser | MIT | `qrcode-generator` | Slice 2 |
 | `github.com/moby/moby/api` (tests only) | Docker host-config types to cap test container memory | Apache-2.0 | none (needed by the testcontainers option) | Slice 3 |
+| `github.com/coreos/go-oidc/v3`, `golang.org/x/oauth2` | OIDC sign-in (the default list names `zitadel/oidc` "or equivalent certified library": go-oidc is the widely deployed client library) | Apache-2.0 / BSD-3-Clause | `zitadel/oidc` (server-oriented, larger) | Slice 3 |
+| `github.com/go-webauthn/webauthn` | Passkeys (WebAuthn ceremonies and verification) | BSD-3-Clause | own implementation (error-prone) | Slice 3 |
+| `github.com/redis/go-redis/v9` | Valkey/Redis client for shared rate limits | BSD-2-Clause | `valkey-io/valkey-go` (newer, smaller community) | Slice 3 |
+| `github.com/fxamacker/cbor/v2` (tests only) | CBOR for the software authenticator in passkey tests | MIT | hand-rolled encoder | Slice 3 |
+| `github.com/go-jose/go-jose/v4` (tests only; also a dependency of go-oidc) | Sign ID tokens in the fake OIDC provider | Apache-2.0 | none | Slice 3 |
 | `zensical` (docs build tool, run with `uvx`, not part of the product) | Documentation site | MIT | MkDocs Material (see ADR 0012) | Slice 0 |
 
 ## Consequences

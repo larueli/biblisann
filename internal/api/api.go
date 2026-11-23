@@ -12,6 +12,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/google/uuid"
 
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/catalog"
@@ -23,6 +24,7 @@ import (
 	"github.com/larueli/biblisann/internal/oauth"
 	"github.com/larueli/biblisann/internal/oidc"
 	"github.com/larueli/biblisann/internal/opds"
+	"github.com/larueli/biblisann/internal/passkeys"
 	"github.com/larueli/biblisann/internal/ratelimit"
 	"github.com/larueli/biblisann/internal/reading"
 	"github.com/larueli/biblisann/internal/scan"
@@ -41,23 +43,27 @@ type Deps struct {
 	DB      Pinger       // nil in spec-export mode
 	Web     http.Handler // the SPA; nil answers 404
 
-	Log      *slog.Logger
-	BaseURL  *url.URL
-	Auth     *auth.Service
-	Library  *library.Service
-	Catalog  *catalog.Service
-	Scan     *scan.Service
-	Reading  *reading.Service
-	Lists    *lists.Service
-	Loans    *loans.Service
-	TokenSvc *tokens.Service
-	Notify   *notify.Dispatcher
-	Channels *notify.Channels
-	Limiter  ratelimit.Limiter // login and registration throttling
-	Tokens   TokenResolver
-	Importer *importer.Importer
-	OIDC     *oidc.Service                                // nil: single sign-on is off
-	OAuth    *oauth.Service                               // nil: the MCP authorization server is off
+	Log       *slog.Logger
+	BaseURL   *url.URL
+	Auth      *auth.Service
+	Library   *library.Service
+	Catalog   *catalog.Service
+	Scan      *scan.Service
+	Reading   *reading.Service
+	Lists     *lists.Service
+	Loans     *loans.Service
+	TokenSvc  *tokens.Service
+	Notify    *notify.Dispatcher
+	Channels  *notify.Channels
+	Limiter   ratelimit.Limiter // login and registration throttling
+	Tokens    TokenResolver
+	Importer  *importer.Importer
+	OIDC      *oidc.Service  // nil: single sign-on is off
+	OAuth     *oauth.Service // nil: the MCP authorization server is off
+	Hardcover interface {
+		Refresh(ctx context.Context, workID uuid.UUID) error
+	} // nil: no Hardcover token configured
+	Passkeys *passkeys.Service                            // nil: passkeys are off
 	OPDS     *opds.Handler                                // nil: no OPDS catalog
 	SCIM     *scim.Handler                                // nil: SCIM provisioning is off
 	Backup   func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
@@ -108,6 +114,7 @@ func New(d Deps) (http.Handler, huma.API) {
 	srv.registerTokens(a)
 	srv.registerExtras(a)
 	srv.registerOIDC(a, mux)
+	srv.registerPasskeys(a)
 	srv.registerOAuth(a) // operations are always described; handlers answer 404 when the feature is off
 	if d.OAuth != nil {
 		limiter := d.Limiter

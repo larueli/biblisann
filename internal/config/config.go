@@ -35,6 +35,7 @@ type Config struct {
 	// It holds secrets: keep it out of the repository (its path is plain configuration).
 	AddonProvidersFile string
 	GoogleBooksKey     Secret
+	HardcoverToken     Secret
 	// ValkeyURL (redis:// or rediss://, may hold a password) shares rate limits across replicas.
 	ValkeyURL Secret
 
@@ -47,6 +48,9 @@ type Config struct {
 	OIDCAdminGroup   string
 	OIDCAutoCreate   bool
 	OIDCLabel        string
+
+	// Passkeys enables WebAuthn sign-in (set false when sign-in is delegated to OIDC).
+	Passkeys bool
 
 	// SecretKey (base64, 32 bytes) seals secrets at rest (TOTP). Without it two-factor is off.
 	// Generate with: openssl rand -base64 32
@@ -100,6 +104,7 @@ func Load(src Sources, opts Options) (Config, error) {
 		DisabledProviders:  r.list("DISABLED_PROVIDERS", nil),
 		StaticProviderFile: r.str("STATIC_PROVIDER_FILE", ""),
 		AddonProvidersFile: r.str("ADDON_PROVIDERS_FILE", ""),
+		Passkeys:           r.boolean("PASSKEYS", true),
 		OIDCIssuer:         r.str("OIDC_ISSUER", ""),
 		OIDCClientID:       r.str("OIDC_CLIENT_ID", ""),
 		OIDCScopes:         r.list("OIDC_SCOPES", nil),
@@ -133,6 +138,9 @@ func Load(src Sources, opts Options) (Config, error) {
 	}
 	if c.OIDCIssuer != "" && (c.OIDCClientID == "" || c.OIDCClientSecret == "") {
 		r.fail("%sOIDC_ISSUER needs OIDC_CLIENT_ID and OIDC_CLIENT_SECRET (or OIDC_CLIENT_SECRET_FILE)", prefix)
+	}
+	if v, ok := r.lookup("HARDCOVER_TOKEN", true); ok {
+		c.HardcoverToken = Secret(v)
 	}
 	if v, ok := r.lookup("VALKEY_URL", true); ok {
 		c.ValkeyURL = Secret(v)

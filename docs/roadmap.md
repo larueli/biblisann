@@ -1,6 +1,6 @@
 # Roadmap
 
-Current slice: **3 (Identity and ecosystem)** in progress; Slice 0 and Slice 1 are code complete (Slice 0 items that need the GitHub repository are still open, see `docs/dev/github.md`). Update this line and the checkboxes in the same PR as the work.
+Current slice: **3 (Identity and ecosystem)**, code complete except the items marked `[~]` or open below; Slice 0 and Slice 1 are code complete (Slice 0 items that need the GitHub repository are still open, see `docs/dev/github.md`). Update this line and the checkboxes in the same PR as the work.
 
 Rule for every slice: demoable end to end, tested, documented, `make check` green, ADRs written for decisions taken.
 
@@ -48,13 +48,13 @@ Rule for every slice: demoable end to end, tested, documented, `make check` gree
 
 ## Slice 3: Identity and ecosystem
 
-- [ ] OIDC with autodiscovery, group sync, admin group, safe account linking
-- [ ] 2FA (TOTP, recovery codes), passkeys (config-disable), password reset by email
-- [ ] Authorization server and MCP OAuth 2.1 per the current MCP spec
-- [ ] SCIM 2.0 Users and Groups
-- [ ] Hardcover sync, external grades
-- [ ] Addon providers over HTTP, plus Google Books, Library of Congress, K10plus
-- [ ] OPDS feed, more importers, Valkey-backed rate limiting and cache for HA
+- [x] OIDC with autodiscovery, group sync, admin group, safe account linking (tested against a fake provider, not a real IdP)
+- [x] 2FA (TOTP, recovery codes), passkeys (config-disable), password reset by email (passkeys tested with a software authenticator, not real devices)
+- [x] Authorization server and MCP OAuth 2.1 per the current MCP spec (not yet run against a real MCP client)
+- [x] SCIM 2.0 Users and Groups (basic filters only; not run against a real IdP)
+- [~] External grades done; Hardcover ratings fetched on demand (unverified against the live API). Two-way reading-status sync with Hardcover is **not done**
+- [x] Addon providers over HTTP, plus Google Books, Library of Congress, K10plus (parsers tested on fixtures, not against live services)
+- [~] OPDS feed and Valkey-backed rate limiting done. **Not done:** more importers (only Goodreads), Valkey cache
 
 ## Open decisions (human)
 
@@ -67,6 +67,14 @@ Resolved (see ADR 0009, 0011, 0012, 0013):
 - [x] UI language: browser language, English fallback. Metadata lookup settings per library, per user and per request (ADR 0013).
 - [x] Releaser token: GitHub App.
 - [x] Pre-1.0: stay on `0.x` until Slice 3 is delivered, then cut `1.0.0` deliberately (`Release-As: 1.0.0`).
+
+Added during Slices 1 to 3 (defaults taken):
+
+- [ ] **Real-device and real-service validation** is missing everywhere it matters: barcode scanning on a phone, passkeys on devices, OIDC/SCIM against a real IdP, MCP OAuth with a real client, BnF/Google/LoC/K10plus/Hardcover live responses, S3 (the integration test is opt-in).
+- [ ] **Web UI gaps**: library sharing and profile management, group management, SCIM token creation, Web Push subscription (needs a custom service worker), a graphical shelf view.
+- [ ] **Refresh-token family revocation**, **Valkey-backed cache**, **per-user Hardcover sync**, further importers (StoryGraph, LibraryThing).
+- [ ] **GDPR**: export and deletion of a single user's data is not implemented (the instance-level backup exists).
+- [ ] **Version policy**: Slice 3 is delivered in code, so the "stay on 0.x until Slice 3 is delivered" rule now says a `1.0.0` could be cut: decide after the real-world validation above (`Release-As: 1.0.0`).
 
 Still open (questions saved during the unattended Slice 0 build, with the default I took):
 

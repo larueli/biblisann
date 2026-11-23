@@ -42,7 +42,9 @@
       "denied": "Sign-in was cancelled.",
       "refused": "This identity is not allowed to sign in here (is its email verified?).",
       "error": "Single sign-on failed."
-    }
+    },
+    "passkey": "Sign in with a passkey",
+    "passkeyFailed": "The passkey could not be used."
   },
   "library": {
     "search": "Search title, author, ISBN…",
@@ -178,7 +180,10 @@
     "qrAlt": "QR code for your authenticator app",
     "confirm": "Confirm",
     "enable": "Turn on two-factor authentication",
-    "recoveryOnce": "Recovery codes, shown once. Each works once if you lose your device:"
+    "recoveryOnce": "Recovery codes, shown once. Each works once if you lose your device:",
+    "passkeys": "Passkeys",
+    "passkeyName": "Name (for example My phone)",
+    "addPasskey": "Add a passkey"
   },
   "oauth": {
     "title": "Allow {{client}} to use your library?",

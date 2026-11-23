@@ -85,10 +85,10 @@ func validRedirect(raw string) bool {
 	if err != nil || u.Fragment != "" || len(raw) > 500 || u.User != nil {
 		return false
 	}
-	switch {
-	case u.Scheme == "https":
+	switch u.Scheme {
+	case "https":
 		return u.Host != ""
-	case u.Scheme == "http":
+	case "http":
 		h := u.Hostname()
 		return h == "localhost" || h == "127.0.0.1" || h == "::1"
 	}

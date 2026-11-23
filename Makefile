@@ -51,8 +51,9 @@ lint: ## Lint Go and web code
 test: ## Run Go tests with the race detector (Docker needed for testcontainers)
 > @if [ -f go.mod ]; then GOMEMLIMIT=1GiB go test -p 2 -race -count=1 ./...; else echo "test: no go.mod yet, skipped"; fi
 
-vuln: ## Scan Go and web dependencies for known vulnerabilities
-> @if [ -f go.mod ]; then go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...; else echo "vuln: no go.mod yet, skipped"; fi
+vuln: ## Scan the Go binary and the web dependencies for known vulnerabilities
+# Binary mode scans what ships and needs far less memory than source mode (which gets OOM-killed on small hosts).
+> @if [ -f go.mod ]; then mkdir -p bin && CGO_ENABLED=0 GOMEMLIMIT=1GiB go build -trimpath -o bin/biblisann-vulncheck ./cmd/biblisann && GOMEMLIMIT=1GiB go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -mode=binary bin/biblisann-vulncheck; rc=$$?; rm -f bin/biblisann-vulncheck; exit $$rc; else echo "vuln: no go.mod yet, skipped"; fi
 > @if [ -f web/package.json ]; then cd web && pnpm audit --prod --audit-level high; fi
 
 generate: ## Regenerate sqlc code, the OpenAPI spec and the web API client

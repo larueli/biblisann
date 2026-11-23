@@ -165,7 +165,7 @@ func (h *Handler) libraryFeed(w http.ResponseWriter, r *http.Request) {
 			}{"text", "ISBN " + *i.Isbn13}
 		}
 		if i.CoverID != nil {
-			c := self[:strings.Index(self, "/libraries/")] + "/covers/" + i.CoverID.String()
+			c := h.base + "/opds/" + tok + "/covers/" + i.CoverID.String()
 			e.Links = append(e.Links, link{"http://opds-spec.org/image/thumbnail", c + "?thumb=1", "image/jpeg"}, link{"http://opds-spec.org/image", c, "image/jpeg"})
 		}
 		f.Entries = append(f.Entries, e)

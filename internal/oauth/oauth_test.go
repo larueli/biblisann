@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -76,7 +77,7 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	// validation
 	bad := req
 	bad.RedirectURI = "https://client.example/other"
-	if _, _, err := svc.Validate(ctx, bad); err != oauth.ErrInvalidClient {
+	if _, _, err := svc.Validate(ctx, bad); !errors.Is(err, oauth.ErrInvalidClient) {
 		t.Errorf("redirect mismatch: %v", err)
 	}
 	bad = req
@@ -91,7 +92,7 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	}
 	bad = req
 	bad.Scope = "read admin"
-	if _, _, err := svc.Validate(ctx, bad); err != oauth.ErrInvalidScope {
+	if _, _, err := svc.Validate(ctx, bad); !errors.Is(err, oauth.ErrInvalidScope) {
 		t.Errorf("unknown scope: %v", err)
 	}
 

@@ -23,11 +23,13 @@ nav = [
     { "Overview" = "user/index.md" },
     { "First run" = "user/first-run.md" },
     { "Organise and lend" = "user/organise.md" },
+    { "Sign-in and security" = "user/security.md" },
     { "Install" = "user/install.md" },
     { "Configuration" = "user/configuration.md" },
   ] },
   { "Developers" = [
     { "Architecture" = "dev/architecture.md" },
+    { "Addon providers" = "dev/addons.md" },
     { "GitHub setup" = "dev/github.md" },
     { "Versioning and releases" = "dev/versioning.md" },
     { "Windows setup" = "dev/setup-windows.md" },

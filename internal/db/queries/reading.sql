@@ -46,3 +46,6 @@ GROUP BY 1 ORDER BY 1 DESC;
 
 -- name: AverageGrade :one
 SELECT coalesce(avg(grade), 0)::float8 AS average, count(grade)::int AS graded FROM grades WHERE user_id = $1 AND grade IS NOT NULL;
+
+-- name: GetAnyISBNOfWork :one
+SELECT isbn13 FROM editions WHERE work_id = $1 AND isbn13 IS NOT NULL ORDER BY created_at LIMIT 1;

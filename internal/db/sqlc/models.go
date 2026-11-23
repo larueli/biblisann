@@ -351,6 +351,23 @@ type UserTotp struct {
 	LastStep    int64
 }
 
+type WebauthnCredential struct {
+	ID         []byte
+	UserID     uuid.UUID
+	Name       string
+	Credential []byte
+	CreatedAt  time.Time
+	LastUsed   *time.Time
+}
+
+type WebauthnSession struct {
+	ID        string
+	UserID    *uuid.UUID
+	Kind      string
+	Data      []byte
+	ExpiresAt time.Time
+}
+
 type Work struct {
 	ID        uuid.UUID
 	Title     string

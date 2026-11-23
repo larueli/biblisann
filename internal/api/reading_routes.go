@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
+	"github.com/larueli/biblisann/internal/hardcover"
 )
 
 type readingBody struct {
@@ -75,6 +77,25 @@ func (s *Server) registerReading(a huma.API) {
 				return nil, mapError(s.Log, err)
 			}
 			return &struct{ Body readingBody }{readingBody{st.Status, toDate(st.StartedOn), toDate(st.FinishedOn)}}, nil
+		})
+	Register(a, huma.Operation{OperationID: "refresh-external-grades", Method: http.MethodPost, Path: "/v1/works/{id}/external-grades/refresh",
+		Summary: "Fetch the community rating of a work from Hardcover", Tags: []string{"reading"}, DefaultStatus: http.StatusNoContent,
+		Errors: []int{404, 502, 503}}, PermAuthenticated,
+		func(ctx context.Context, in *workPath) (*struct{}, error) {
+			if s.Hardcover == nil {
+				return nil, huma.Error503ServiceUnavailable("Hardcover is not configured on this server")
+			}
+			if _, err := s.Reading.Get(ctx, in.ID); err != nil { // checks the work exists and the caller may read
+				return nil, mapError(s.Log, err)
+			}
+			if err := s.Hardcover.Refresh(ctx, in.ID); err != nil {
+				if errors.Is(err, hardcover.ErrNoData) {
+					return nil, huma.Error404NotFound("no rating available for this book")
+				}
+				s.Log.Warn("hardcover refresh failed", "error", err)
+				return nil, huma.NewError(http.StatusBadGateway, "Hardcover request failed")
+			}
+			return nil, nil
 		})
 	Register(a, huma.Operation{OperationID: "clear-reading-status", Method: http.MethodDelete, Path: "/v1/works/{id}/reading",
 		Summary: "Clear my reading status", Tags: []string{"reading"}, DefaultStatus: http.StatusNoContent}, PermAuthenticated,

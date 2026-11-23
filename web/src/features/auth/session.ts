@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, problemMessage, setCsrfToken } from "../../api/client";
+import { getPasskey } from "./passkeys";
 
 export function useSession() {
   return useQuery({
@@ -49,6 +50,19 @@ export function useAuthActions() {
     },
     onSuccess: done,
   });
+  const passkeyLogin = useMutation({
+    mutationFn: async () => {
+      const begin = await api.POST("/v1/auth/passkey/begin");
+      if (!begin.data) throw new Error(problemMessage(begin.error));
+      const credential = await getPasskey(begin.data.options);
+      const { data, error } = await api.POST("/v1/auth/passkey/finish", {
+        body: { session_id: begin.data.session_id, credential },
+      });
+      if (!data) throw new Error(problemMessage(error));
+      setCsrfToken(data.csrf_token ?? "");
+    },
+    onSuccess: done,
+  });
   const logout = useMutation({
     mutationFn: async () => {
       await api.POST("/v1/auth/logout");
@@ -59,5 +73,5 @@ export function useAuthActions() {
       await qc.invalidateQueries({ queryKey: ["libraries"] });
     },
   });
-  return { login, register, logout, completeMfa };
+  return { login, register, logout, completeMfa, passkeyLogin };
 }

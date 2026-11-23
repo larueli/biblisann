@@ -56,6 +56,17 @@ func (q *Queries) DeleteReadingState(ctx context.Context, arg DeleteReadingState
 	return err
 }
 
+const getAnyISBNOfWork = `-- name: GetAnyISBNOfWork :one
+SELECT isbn13 FROM editions WHERE work_id = $1 AND isbn13 IS NOT NULL ORDER BY created_at LIMIT 1
+`
+
+func (q *Queries) GetAnyISBNOfWork(ctx context.Context, workID uuid.UUID) (*string, error) {
+	row := q.db.QueryRow(ctx, getAnyISBNOfWork, workID)
+	var isbn13 *string
+	err := row.Scan(&isbn13)
+	return isbn13, err
+}
+
 const getGrade = `-- name: GetGrade :one
 SELECT user_id, work_id, grade, comment, updated_at FROM grades WHERE user_id = $1 AND work_id = $2
 `

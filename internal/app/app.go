@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/larueli/biblisann/internal/api"
@@ -24,6 +26,7 @@ import (
 	"github.com/larueli/biblisann/internal/config"
 	"github.com/larueli/biblisann/internal/db"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
+	"github.com/larueli/biblisann/internal/hardcover"
 	"github.com/larueli/biblisann/internal/httpmw"
 	"github.com/larueli/biblisann/internal/importer"
 	"github.com/larueli/biblisann/internal/jobs"
@@ -35,6 +38,7 @@ import (
 	"github.com/larueli/biblisann/internal/oauth"
 	"github.com/larueli/biblisann/internal/oidc"
 	"github.com/larueli/biblisann/internal/opds"
+	"github.com/larueli/biblisann/internal/passkeys"
 	"github.com/larueli/biblisann/internal/providers"
 	"github.com/larueli/biblisann/internal/ratelimit"
 	"github.com/larueli/biblisann/internal/reading"
@@ -176,13 +180,27 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		}
 		limiter = v
 	}
+	var hc interface {
+		Refresh(ctx context.Context, workID uuid.UUID) error
+	}
+	if cfg.HardcoverToken != "" {
+		hc = hardcover.New(pool, fetcher, cfg.HardcoverToken.Reveal())
+	}
+	var passkeySvc *passkeys.Service
+	if cfg.Passkeys {
+		if ps, err := passkeys.New(pool, cfg.BaseURL, "Biblisann"); err != nil {
+			log.Warn("passkeys disabled", "error", err)
+		} else {
+			passkeySvc = ps
+		}
+	}
 	var oidcSvc *oidc.Service
 	if cfg.OIDCIssuer != "" {
 		oidcSvc = oidc.New(oidc.Config{Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret.Reveal(),
 			RedirectURL: cfg.BaseURL.String() + "/v1/auth/oidc/callback", Scopes: cfg.OIDCScopes, GroupsClaim: cfg.OIDCGroupsClaim,
 			AdminGroup: cfg.OIDCAdminGroup, AutoCreate: cfg.OIDCAutoCreate, Label: cfg.OIDCLabel}, pool, authSvc, fetcher.Std())
 	}
-	h, _ := api.New(api.Deps{OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
+	h, _ := api.New(api.Deps{Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
 		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
 		Auth: authSvc, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
 		Lists: listsSvc, Loans: loansSvc,

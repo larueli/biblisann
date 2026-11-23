@@ -28,6 +28,14 @@ An optional file in `KEY=value` form (full variable names, `#` comments) can be 
 | `BIBLISANN_SMTP_HOST`, `_PORT` (587), `_USERNAME`, `_FROM`, `_MODE` | none | no | Outgoing email. `_FROM` is required with a host. `_MODE`: `starttls` (default), `tls`, `none` (trusted local relay only). |
 | `BIBLISANN_SMTP_PASSWORD` | none | yes (`_FILE`) | SMTP password; only sent over TLS. |
 | `BIBLISANN_VAPID_PUBLIC_KEY`, `BIBLISANN_VAPID_PRIVATE_KEY` | none | private key: yes (`_FILE`) | Web Push keys; generate with `biblisann vapid`. Set both or none. `BIBLISANN_VAPID_SUBJECT` is the contact URL (defaults to the base URL). |
+| `BIBLISANN_SECRET_KEY` | none | yes (`_FILE`) | Base64 of 32 random bytes (`openssl rand -base64 32`). Seals authenticator secrets; without it two-factor is off. Losing it disables enrolled authenticators. |
+| `BIBLISANN_PASSKEYS` | `true` | no | `false` turns passkey sign-in off. Passkeys need `BIBLISANN_BASE_URL` to be the real https address (or localhost). |
+| `BIBLISANN_OIDC_ISSUER`, `_CLIENT_ID`, `_SCOPES`, `_GROUPS_CLAIM` (`groups`), `_ADMIN_GROUP`, `_AUTO_CREATE` (`true`), `_LABEL` | none | no | Single sign-on. Redirect URI to register at the provider: `<BASE_URL>/v1/auth/oidc/callback`. |
+| `BIBLISANN_OIDC_CLIENT_SECRET` | none | yes (`_FILE`) | OIDC client secret. |
+| `BIBLISANN_GOOGLE_BOOKS_KEY` | none | yes (`_FILE`) | Optional Google Books API key (add `google` to `BIBLISANN_PROVIDERS` to use the provider). Other providers: `loc`, `k10plus`. |
+| `BIBLISANN_ADDON_PROVIDERS_FILE` | none | no (the file holds tokens) | JSON list `[{"name":"mine","url":"https://...","token":"..."}]` of addon providers. |
+| `BIBLISANN_HARDCOVER_TOKEN` | none | yes (`_FILE`) | Enables community ratings from Hardcover. |
+| `BIBLISANN_VALKEY_URL` | none | yes (`_FILE`) | `redis://` or `rediss://` URL; shares rate limits between replicas. |
 | `BIBLISANN_CONFIG_FILE` | none | no | Path of an optional config file. |
 
 ## Endpoints for operators
@@ -37,7 +45,10 @@ An optional file in `KEY=value` form (full variable names, `#` comments) can be 
 | `/healthz` | Liveness: the process answers. |
 | `/readyz` | Readiness: the database answers. |
 | `/v1/version` | Running version. |
-| `/mcp` | MCP endpoint (bearer token). |
+| `/mcp` | MCP endpoint (bearer token or OAuth). |
+| `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server` | OAuth discovery for MCP clients. |
+| `/scim/v2/` | SCIM 2.0 provisioning (token created by an administrator). |
+| `/opds/<feed token>/` | OPDS catalog. |
 | `/openapi.json`, `/openapi.yaml` | API description (no authentication). |
 
 ## Kubernetes note

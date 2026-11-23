@@ -42,7 +42,9 @@
       "denied": "Connexion annulée.",
       "refused": "Cette identité ne peut pas se connecter ici (son e-mail est-il vérifié ?).",
       "error": "Échec de la connexion unique."
-    }
+    },
+    "passkey": "Se connecter avec une passkey",
+    "passkeyFailed": "La passkey n'a pas pu être utilisée."
   },
   "library": {
     "search": "Rechercher titre, auteur, ISBN…",
@@ -178,7 +180,10 @@
     "qrAlt": "QR code pour votre application d'authentification",
     "confirm": "Confirmer",
     "enable": "Activer l'authentification à deux facteurs",
-    "recoveryOnce": "Codes de secours, affichés une seule fois. Chacun sert une fois si vous perdez votre appareil :"
+    "recoveryOnce": "Codes de secours, affichés une seule fois. Chacun sert une fois si vous perdez votre appareil :",
+    "passkeys": "Passkeys",
+    "passkeyName": "Nom (par exemple Mon téléphone)",
+    "addPasskey": "Ajouter une passkey"
   },
   "oauth": {
     "title": "Autoriser {{client}} à utiliser votre bibliothèque ?",

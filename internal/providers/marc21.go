@@ -85,7 +85,7 @@ func parseMarc(body []byte) (*Record, error) {
 	}
 	r.Series = trim(m.first("490", "a"))
 	if v := trim(m.first("490", "v")); v != "" {
-		if n, err := strconv.ParseFloat(strings.TrimLeft(v, "v.bd no "), 64); err == nil {
+		if n, err := strconv.ParseFloat(strings.TrimLeft(v, "v.bdno "), 64); err == nil {
 			r.SeriesPos = &n
 		}
 	}

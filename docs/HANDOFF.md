@@ -4,16 +4,14 @@ Read at the start of every session, rewrite at the end. Keep it under 60 lines. 
 
 ## Current slice and task
 
-Slice 0 (Foundations) is code complete on branch `feat/0-foundations` (worktree `../biblisann-wt/0-foundations`). `make check` is green there. Nothing is committed or pushed yet unless `git log` says otherwise; the GitHub repository does not exist yet.
+Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at the owner's request; nothing is pushed, the GitHub repository does not exist yet). What remains is validation on real devices and services, the web screens listed in the roadmap, and the GitHub-side setup of Slice 0.
 
 ## Done since last handoff
 
-- Decisions recorded: ADR 0011 (AGPL, `larueli/biblisann`), 0012 (Zensical docs), 0013 (UI language, metadata scope); ADR 0009 updated (GitHub App, 0.x until Slice 3).
-- Go: config (env, `_FILE`, file, conflicts), httpmw (trusted proxies), api (Huma, RFC 9457, `x-permission`), db (pgx, goose, advisory lock, sqlc, testcontainers), safehttp, webui embed, app lifecycle, `cmd/biblisann` (serve, migrate, healthcheck, openapi, version).
-- Web: Vite + React + TS strict, i18n (en, fr), PWA, generated API client, Biome, Vitest, Playwright smoke.
-- Deploy: Dockerfile (distroless, digest-pinned), Compose, Helm chart (external DB or CNPG).
-- CI/hooks: actions pinned by SHA, hook revs frozen, zizmor on, `e2e` job, `docs` workflow, App-token step in the release workflow.
-- Docs: user and dev skeletons, Zensical site with landing placeholder, `docs/dev/github.md`.
+- Slice 1: accounts, catalog, providers, covers, libraries, search, offline index sync and outbox, scanner, e2e.
+- Slice 2: sharing and profiles, reading status and grades, lists and series, loans, River jobs and notifications, ICS, tokens, MCP, backup/restore, S3 storage, Goodreads import, inventory, QR labels.
+- Slice 3: OIDC, TOTP and recovery, password reset, passkeys, SCIM, OAuth server for MCP, extra providers and addons, Hardcover ratings, OPDS, Valkey rate limiting.
+- ADRs 0011 to 0021, user docs (first run, organise, security, install, configuration), `docs/dev/addons.md`.
 
 ## In progress
 
@@ -21,19 +19,20 @@ Slice 0 (Foundations) is code complete on branch `feat/0-foundations` (worktree 
 
 ## Next
 
-1. Human: create the GitHub repository, the releaser App and settings (`docs/dev/github.md`), push the branch, open the PR (title `feat: slice 0 foundations`), check CI on GitHub.
-2. Answer the open decisions at the end of `docs/roadmap.md`.
-3. Slice 1 starts with the scanner spike (real phone), then schema and local auth.
+1. Human: create the GitHub repository, releaser App and settings (`docs/dev/github.md`); push `main`; check CI (`e2e` job runs `scripts/e2e.sh`).
+2. Real-world validation list in `docs/roadmap.md` (open decisions): phone scanning first.
+3. Decide `1.0.0` timing (roadmap, "Version policy").
 
 ## Gotchas and decisions not yet in an ADR
 
-- This machine's `node` is a bun shim: run web tooling with `PATH=/usr/bin:$PATH` (real Node 26). CI uses Node 24 (`web/.nvmrc`).
-- TypeScript is pinned to 5.9.3 because `openapi-typescript` does not work on TypeScript 7.
-- pnpm refuses releases younger than 24 h (`web/pnpm-workspace.yaml`); do not add exclusions, pick an older version.
-- `make commit-lint` needs `.pre-commit-config.yaml` staged.
-- `api/openapi.json` is generated with version `0.0.0`; the server serves the real version.
-- Verify the Codex model IDs in `.codex/agents/*.toml` with `/model` (see `docs/agents.md`).
+- **RAM**: the host has no swap. Run Go tests with `-p 1` (or 2) and `GOMEMLIMIT`; `make test`/`make lint` already do. Do not run two `make check` at once. Never `pkill -f` a pattern that matches your own shell command.
+- `node` on this machine is a bun shim: use `PATH=/usr/bin:$PATH` for web tooling.
+- Tests start one small PostgreSQL container per package (`internal/dbtest`); Docker must be running.
+- TypeScript is pinned to 5.9.3 (`openapi-typescript` needs it); pnpm refuses releases younger than 24 h.
+- `make generate` regenerates sqlc, `api/openapi.json` and the web client; the pre-push hook fails if they are stale.
+- Migrations 00002 to 00008 were edited freely before any release; from the first release they are immutable.
+- Huma does not flatten embedded structs in schemas: inline fields in response types.
 
 ## Commands that matter right now
 
-- `make check`, `make build`, `make dev`, `make generate`, `make docs`
+- `make check` (slow: tests with containers), `make build`, `make dev`, `make e2e`, `make generate`, `make docs`
