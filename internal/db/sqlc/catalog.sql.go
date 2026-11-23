@@ -110,6 +110,55 @@ func (q *Queries) CreateWork(ctx context.Context, arg CreateWorkParams) (Work, e
 	return i, err
 }
 
+const findIsbnlessEdition = `-- name: FindIsbnlessEdition :one
+SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at FROM editions
+WHERE work_id = $1 AND isbn13 IS NULL AND publisher = $2 AND language = $3
+  AND published_year IS NOT DISTINCT FROM $4::int
+ORDER BY created_at LIMIT 1
+`
+
+type FindIsbnlessEditionParams struct {
+	WorkID    uuid.UUID
+	Publisher string
+	Language  string
+	Year      *int32
+}
+
+func (q *Queries) FindIsbnlessEdition(ctx context.Context, arg FindIsbnlessEditionParams) (Edition, error) {
+	row := q.db.QueryRow(ctx, findIsbnlessEdition,
+		arg.WorkID,
+		arg.Publisher,
+		arg.Language,
+		arg.Year,
+	)
+	var i Edition
+	err := row.Scan(
+		&i.ID,
+		&i.WorkID,
+		&i.Isbn13,
+		&i.Isbn10,
+		&i.Ean,
+		&i.Title,
+		&i.Subtitle,
+		&i.Authors,
+		&i.Publisher,
+		&i.PublishedYear,
+		&i.Language,
+		&i.Pages,
+		&i.Description,
+		&i.SeriesName,
+		&i.SeriesPosition,
+		&i.CoverID,
+		&i.Provenance,
+		&i.LockedFields,
+		&i.SearchText,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const findWorkByTitleAuthors = `-- name: FindWorkByTitleAuthors :one
 SELECT id, title, authors, created_at FROM works
 WHERE lower(immutable_unaccent(title)) = lower(immutable_unaccent($1::text)) AND authors = $2::text[]

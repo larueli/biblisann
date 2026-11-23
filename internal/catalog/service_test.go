@@ -123,12 +123,15 @@ func TestCreateManualWithoutISBNAndWorkReuse(t *testing.T) {
 	if err != nil || !c1 {
 		t.Fatal(err)
 	}
-	b, c2, err := svc.Create(ctx, uid, catalog.EditionInput{Title: "ZINE", Authors: []string{"Me"}}, "", nil)
+	b, c2, err := svc.Create(ctx, uid, catalog.EditionInput{Title: "ZINE", Authors: []string{"Me"}, Publisher: "Second press"}, "", nil)
 	if err != nil || !c2 {
 		t.Fatal(err)
 	}
 	if a.ID == b.ID || a.WorkID != b.WorkID {
 		t.Error("two ISBN-less editions of the same work: distinct editions, same work")
+	}
+	if same, created, _ := svc.Create(ctx, uid, catalog.EditionInput{Title: "zine", Authors: []string{"Me"}}, "", nil); created || same.ID != a.ID {
+		t.Error("an identical manual entry must reuse the edition")
 	}
 	if _, _, err := svc.Create(ctx, uid, catalog.EditionInput{Title: "  "}, "", nil); err == nil {
 		t.Error("empty title accepted")

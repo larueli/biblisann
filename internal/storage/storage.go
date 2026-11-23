@@ -101,3 +101,52 @@ func (l *Local) Delete(_ context.Context, key string) error {
 	}
 	return nil
 }
+
+// Lister is implemented by stores that can enumerate their keys.
+type Lister interface {
+	List(ctx context.Context) ([]string, error)
+}
+
+// List returns every blob key in the directory.
+func (l *Local) List(_ context.Context) ([]string, error) {
+	var out []string
+	err := filepath.WalkDir(l.dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && keyRe.MatchString(d.Name()) {
+			out = append(out, d.Name())
+		}
+		return nil
+	})
+	return out, err
+}
+
+// Copy copies every blob of src into dst. It returns the number of blobs copied. Blobs already
+// present in dst are overwritten with identical content (content-addressed), so the operation can
+// be repeated after an interruption.
+func Copy(ctx context.Context, src Store, dst Store) (int, error) {
+	l, ok := src.(Lister)
+	if !ok {
+		return 0, errors.New("storage: source cannot list its keys")
+	}
+	keys, err := l.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for i, k := range keys {
+		rc, err := src.Open(ctx, k)
+		if err != nil {
+			return i, fmt.Errorf("storage: read %s: %w", k, err)
+		}
+		data, err := io.ReadAll(io.LimitReader(rc, 32<<20))
+		_ = rc.Close()
+		if err != nil {
+			return i, err
+		}
+		if err := dst.Put(ctx, k, data); err != nil {
+			return i, err
+		}
+	}
+	return len(keys), nil
+}

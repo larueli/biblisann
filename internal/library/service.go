@@ -35,30 +35,53 @@ type Service struct {
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool, q: dbsqlc.New(pool)} }
 
 // Require checks that the caller has at least need in the library and returns the principal.
-// A caller with no membership gets ErrNotFound, so library IDs cannot be probed.
+// A caller with no access gets ErrNotFound, so library IDs cannot be probed.
 func (s *Service) Require(ctx context.Context, q *dbsqlc.Queries, libraryID uuid.UUID, need authz.Role) (*authz.Principal, error) {
+	perm := authz.PermRead
+	switch need {
+	case authz.RoleEdit:
+		perm = authz.PermWrite
+	case authz.RoleAdmin:
+		perm = authz.PermAdmin
+	}
+	return s.RequirePerm(ctx, q, libraryID, perm)
+}
+
+// RequirePerm checks one permission in a library, taking direct and group grants into account.
+func (s *Service) RequirePerm(ctx context.Context, q *dbsqlc.Queries, libraryID uuid.UUID, perm string) (*authz.Principal, error) {
 	p, err := authz.From(ctx)
 	if err != nil {
 		return nil, err
 	}
 	scope := "read"
-	if need >= authz.RoleEdit {
+	if perm != authz.PermRead {
 		scope = "write"
 	}
 	if !p.HasScope(scope) && (scope != "read" || !p.HasScope("write")) {
 		return nil, ErrForbidden
 	}
+	if !p.AllowsLibrary(libraryID) {
+		return nil, ErrNotFound
+	}
 	if q == nil {
 		q = s.q
 	}
-	role, err := q.GetLibraryRole(ctx, dbsqlc.GetLibraryRoleParams{LibraryID: libraryID, UserID: p.UserID})
-	if errors.Is(err, pgx.ErrNoRows) {
+	rows, err := q.LibraryAccess(ctx, dbsqlc.LibraryAccessParams{LibraryID: libraryID, UserID: p.UserID})
+	if err != nil {
+		return nil, fmt.Errorf("library: access: %w", err)
+	}
+	if len(rows) == 0 {
 		return nil, ErrNotFound
 	}
-	if err != nil {
-		return nil, fmt.Errorf("library: role: %w", err)
+	var have []string
+	for _, r := range rows {
+		if r.Role == "custom" {
+			have = append(have, r.Permissions...)
+		} else {
+			have = append(have, authz.RolePermissions(r.Role)...)
+		}
 	}
-	if !authz.Allows(authz.ParseRole(role), need) {
+	if !authz.HasPermission(have, perm) {
 		return nil, ErrForbidden
 	}
 	return p, nil
@@ -102,7 +125,17 @@ func (s *Service) ListLibraries(ctx context.Context) ([]dbsqlc.ListLibrariesForU
 	if !p.HasScope("read") && !p.HasScope("write") {
 		return nil, ErrForbidden
 	}
-	return s.q.ListLibrariesForUser(ctx, p.UserID)
+	rows, err := s.q.ListLibrariesForUser(ctx, p.UserID)
+	if err != nil || p.LibraryIDs == nil {
+		return rows, err
+	}
+	out := rows[:0] // tokens limited to some libraries only see those
+	for _, r := range rows {
+		if p.AllowsLibrary(r.ID) {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 // GetLibrary returns a library the caller can read, with the caller's role.
@@ -142,7 +175,7 @@ func validPlace(in PlaceInput) bool {
 
 // CreatePlace adds a place (editors and administrators).
 func (s *Service) CreatePlace(ctx context.Context, libraryID uuid.UUID, in PlaceInput) (dbsqlc.Place, error) {
-	if _, err := s.Require(ctx, nil, libraryID, authz.RoleEdit); err != nil {
+	if _, err := s.RequirePerm(ctx, nil, libraryID, authz.PermPlace); err != nil {
 		return dbsqlc.Place{}, err
 	}
 	if !validPlace(in) {
@@ -194,7 +227,7 @@ func (s *Service) UpdatePlace(ctx context.Context, placeID uuid.UUID, in PlaceIn
 	if err != nil {
 		return pl, err
 	}
-	if _, err := s.Require(ctx, nil, pl.LibraryID, authz.RoleEdit); err != nil {
+	if _, err := s.RequirePerm(ctx, nil, pl.LibraryID, authz.PermPlace); err != nil {
 		return dbsqlc.Place{}, err
 	}
 	if !validPlace(in) {
@@ -220,7 +253,7 @@ func (s *Service) DeletePlace(ctx context.Context, placeID uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	if _, err := s.Require(ctx, nil, pl.LibraryID, authz.RoleEdit); err != nil {
+	if _, err := s.RequirePerm(ctx, nil, pl.LibraryID, authz.PermPlace); err != nil {
 		return err
 	}
 	return s.q.DeletePlace(ctx, placeID)

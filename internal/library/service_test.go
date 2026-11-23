@@ -261,3 +261,120 @@ func TestPlacesTreeRules(t *testing.T) {
 		t.Error("deleting a place must unset the copies' place")
 	}
 }
+
+func TestGroupSharingAndCustomProfiles(t *testing.T) {
+	e := newEnv(t)
+	adminCtx, _ := e.user(t, "admin@example.org") // not marked instance admin by the helper
+	adminP, _ := authz.From(adminCtx)
+	adminP.IsAdmin = true
+	reader, readerID := e.user(t, "reader@example.org")
+	lib, _ := e.lib.CreateLibrary(adminCtx, "Shared")
+	ed := e.edition(t, adminP.UserID, "", "Zine")
+
+	if _, err := e.lib.CreateGroup(reader, "family"); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("non-admin group creation: %v", err)
+	}
+	g, err := e.lib.CreateGroup(adminCtx, "Family")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.lib.CreateGroup(adminCtx, "family"); !errors.Is(err, library.ErrConflict) {
+		t.Errorf("duplicate group: %v", err)
+	}
+	if err := e.lib.SetGroupMember(adminCtx, g.ID, "reader@example.org", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.lib.ListInstances(reader, lib.ID, "", 5); !errors.Is(err, authz.ErrNotFound) {
+		t.Fatalf("before sharing: %v", err)
+	}
+	if err := e.lib.ShareWithGroup(adminCtx, lib.ID, g.ID, library.Grant{Role: "read"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.lib.ListInstances(reader, lib.ID, "", 5); err != nil {
+		t.Errorf("group read access: %v", err)
+	}
+	if ls, _ := e.lib.ListLibraries(reader); len(ls) != 1 || ls[0].Role != "read" {
+		t.Errorf("libraries via group: %+v", ls)
+	}
+	if _, err := e.lib.AddInstance(reader, lib.ID, library.InstanceInput{EditionID: ed.ID}, ""); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("read-only via group must not write: %v", err)
+	}
+
+	// A custom profile allows adding copies but nothing else.
+	pr, err := e.lib.CreateProfile(adminCtx, lib.ID, "contributor", []string{authz.PermRead, authz.PermWrite})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.lib.CreateProfile(adminCtx, lib.ID, "bad", []string{"root"}); !errors.Is(err, library.ErrInvalid) {
+		t.Errorf("unknown permission: %v", err)
+	}
+	if err := e.lib.ShareWithUser(adminCtx, lib.ID, "reader@example.org", library.Grant{Role: "custom", ProfileID: &pr.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.lib.AddInstance(reader, lib.ID, library.InstanceInput{EditionID: ed.ID}, ""); err != nil {
+		t.Errorf("custom profile write: %v", err)
+	}
+	if _, err := e.lib.CreatePlace(reader, lib.ID, library.PlaceInput{Name: "x"}); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("profile lacks place.write: %v", err)
+	}
+	if _, err := e.lib.ListSharing(reader, lib.ID); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("profile lacks share: %v", err)
+	}
+	// A profile from another library cannot be used.
+	other, _ := e.lib.CreateLibrary(adminCtx, "Other")
+	if err := e.lib.ShareWithUser(adminCtx, other.ID, "reader@example.org", library.Grant{Role: "custom", ProfileID: &pr.ID}); !errors.Is(err, library.ErrInvalid) {
+		t.Errorf("foreign profile: %v", err)
+	}
+	// The last administrator cannot be demoted or removed.
+	if err := e.lib.ShareWithUser(adminCtx, lib.ID, "admin@example.org", library.Grant{Role: "read"}); !errors.Is(err, library.ErrLastAdmin) {
+		t.Errorf("demote last admin: %v", err)
+	}
+	if err := e.lib.UnshareUser(adminCtx, lib.ID, adminP.UserID); !errors.Is(err, library.ErrLastAdmin) {
+		t.Errorf("remove last admin: %v", err)
+	}
+	if err := e.lib.UnshareUser(adminCtx, lib.ID, readerID); err != nil {
+		t.Fatal(err)
+	}
+	// Token restricted to another library cannot see this one.
+	tok := authz.With(context.Background(), &authz.Principal{UserID: adminP.UserID, Via: "token", Scopes: []string{"read", "write"}, LibraryIDs: []uuid.UUID{other.ID}})
+	if _, err := e.lib.ListInstances(tok, lib.ID, "", 5); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("token library restriction: %v", err)
+	}
+	if ls, _ := e.lib.ListLibraries(tok); len(ls) != 1 || ls[0].ID != other.ID {
+		t.Errorf("token library listing: %+v", ls)
+	}
+}
+
+func TestInventory(t *testing.T) {
+	e := newEnv(t)
+	ctx, uid := e.user(t, "a@example.org")
+	lib, _ := e.lib.CreateLibrary(ctx, "L")
+	house, _ := e.lib.CreatePlace(ctx, lib.ID, library.PlaceInput{Name: "House"})
+	shelf, _ := e.lib.CreatePlace(ctx, lib.ID, library.PlaceInput{Name: "Shelf", ParentID: &house.ID})
+	add := func(isbn, title string) {
+		ed := e.edition(t, uid, isbn, title)
+		if _, err := e.lib.AddInstance(ctx, lib.ID, library.InstanceInput{EditionID: ed.ID, PlaceID: &shelf.ID}, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("9782070612758", "Present")
+	add("9780306406157", "Gone")
+	ed := e.edition(t, uid, "", "Zine")
+	_, _ = e.lib.AddInstance(ctx, lib.ID, library.InstanceInput{EditionID: ed.ID, PlaceID: &shelf.ID}, "")
+
+	res, err := e.lib.Inventory(ctx, house.ID, []string{"978-2-07-061275-8", "9791032703687"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Found) != 1 || res.Found[0] != "Present" || len(res.Missing) != 1 || res.Missing[0] != "Gone" ||
+		len(res.Unexpected) != 1 || len(res.Unscanable) != 1 {
+		t.Errorf("inventory: %+v", res)
+	}
+	if _, err := e.lib.Inventory(ctx, house.ID, []string{"nope"}); !errors.Is(err, library.ErrInvalid) {
+		t.Errorf("bad isbn: %v", err)
+	}
+	other, _ := e.user(t, "b@example.org")
+	if _, err := e.lib.Inventory(other, house.ID, nil); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("foreign place: %v", err)
+	}
+}

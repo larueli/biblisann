@@ -55,6 +55,21 @@ type Principal struct {
 	Scopes []string
 	// Via is "session" or "token".
 	Via string
+	// LibraryIDs restricts a token to some libraries. nil means every accessible library.
+	LibraryIDs []uuid.UUID
+}
+
+// AllowsLibrary reports whether the principal may touch the library at all (token restriction).
+func (p *Principal) AllowsLibrary(id uuid.UUID) bool {
+	if p.LibraryIDs == nil {
+		return true
+	}
+	for _, l := range p.LibraryIDs {
+		if l == id {
+			return true
+		}
+	}
+	return false
 }
 
 type ctxKey struct{}
@@ -88,3 +103,51 @@ func (p *Principal) HasScope(scope string) bool {
 
 // Allows reports whether have is enough for need.
 func Allows(have, need Role) bool { return have != RoleNone && have >= need }
+
+// Permissions a library grant can contain. The built-in roles are fixed sets; custom profiles
+// are arbitrary subsets defined per library. PermAdmin implies every other permission.
+const (
+	PermRead  = "library.read"
+	PermWrite = "instance.write"
+	PermPlace = "place.write"
+	PermLoan  = "loan.write"
+	PermList  = "list.write"
+	PermShare = "library.share"
+	PermAdmin = "library.admin"
+)
+
+// AllPermissions lists the permissions a custom profile may hold.
+var AllPermissions = []string{PermRead, PermWrite, PermPlace, PermLoan, PermList, PermShare, PermAdmin}
+
+// RolePermissions returns the permissions of a built-in role.
+func RolePermissions(role string) []string {
+	switch role {
+	case "read":
+		return []string{PermRead}
+	case "edit":
+		return []string{PermRead, PermWrite, PermPlace, PermLoan, PermList}
+	case "admin":
+		return []string{PermAdmin}
+	}
+	return nil
+}
+
+// HasPermission reports whether a set of permissions grants need.
+func HasPermission(have []string, need string) bool {
+	for _, p := range have {
+		if p == need || p == PermAdmin {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidPermission reports whether p is a known permission.
+func ValidPermission(p string) bool {
+	for _, k := range AllPermissions {
+		if k == p {
+			return true
+		}
+	}
+	return false
+}

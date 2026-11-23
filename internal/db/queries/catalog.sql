@@ -52,3 +52,9 @@ WHERE to_tsvector('simple', e.search_text) @@ websearch_to_tsquery('simple', low
    OR word_similarity(lower(immutable_unaccent($1::text)), e.search_text) >= 0.4
 ORDER BY similarity(e.search_text, lower(immutable_unaccent($1::text))) DESC, e.title
 LIMIT $2;
+
+-- name: FindIsbnlessEdition :one
+SELECT * FROM editions
+WHERE work_id = $1 AND isbn13 IS NULL AND publisher = $2 AND language = $3
+  AND published_year IS NOT DISTINCT FROM sqlc.narg('year')::int
+ORDER BY created_at LIMIT 1;

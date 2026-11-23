@@ -52,3 +52,25 @@ func TestLocalRejectsBadKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestCopyBetweenStores(t *testing.T) {
+	ctx := context.Background()
+	a, _ := NewLocal(t.TempDir())
+	b, _ := NewLocal(t.TempDir())
+	k1, k2 := strings.Repeat("a1", 32), strings.Repeat("b2", 32)+".thumb"
+	_ = a.Put(ctx, k1, []byte("one"))
+	_ = a.Put(ctx, k2, []byte("two"))
+	n, err := Copy(ctx, a, b)
+	if err != nil || n != 2 {
+		t.Fatalf("copy: %d %v", n, err)
+	}
+	r, err := b.Open(ctx, k2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(r)
+	_ = r.Close()
+	if string(got) != "two" {
+		t.Errorf("content %q", got)
+	}
+}

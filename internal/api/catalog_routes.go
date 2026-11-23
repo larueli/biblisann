@@ -16,6 +16,7 @@ import (
 	"github.com/larueli/biblisann/internal/catalog"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
 	"github.com/larueli/biblisann/internal/library"
+	"github.com/larueli/biblisann/internal/scan"
 	"github.com/larueli/biblisann/internal/storage"
 )
 
@@ -98,14 +99,7 @@ type lookupBody struct {
 	Owned   []ownedBody       `json:"owned" doc:"Copies I already own: same edition or another edition of the same work."`
 }
 
-// settingsFrom parses stored lookup settings (library or user level).
-func settingsFrom(raw []byte) *catalog.LookupSettings {
-	var ls catalog.LookupSettings
-	if json.Unmarshal(raw, &ls) != nil {
-		return nil
-	}
-	return &ls
-}
+func settingsFrom(raw []byte) *catalog.LookupSettings { return scan.SettingsFrom(raw) }
 
 func splitList(s string) []string {
 	if strings.TrimSpace(s) == "" {
@@ -247,55 +241,20 @@ func (s *Server) registerCatalog(a huma.API) {
 				PlaceID        *uuid.UUID `json:"place_id,omitempty"`
 			}
 		}) (*struct{ Body scanResult }, error) {
-			out := scanResult{}
-			// A replay returns the first answer, even though the first call changed what I own.
-			if prev, err := s.Library.ReplayedInstance(ctx, in.IdempotencyKey); err != nil {
-				return nil, mapError(s.Log, err)
-			} else if prev != nil {
-				b := toInstanceBody(*prev)
-				out.Status, out.Instance = "added", &b
-				return &struct{ Body scanResult }{out}, nil
-			}
-			req := &catalog.LookupSettings{}
-			lib, err := s.Library.GetLibrary(ctx, in.ID)
+			res, err := s.Scan.Scan(ctx, scan.Input{LibraryID: in.ID, ISBN: in.Body.ISBN, AllowDuplicate: in.Body.AllowDuplicate,
+				PlaceID: in.Body.PlaceID, IdempotencyKey: in.IdempotencyKey})
 			if err != nil {
 				return nil, mapError(s.Log, err)
 			}
-			res, err := s.Catalog.Lookup(ctx, in.Body.ISBN, req, settingsFrom(lib.Settings))
-			if err != nil {
-				return nil, mapError(s.Log, err)
+			out := scanResult{Status: res.Status, Owned: toOwned(res.Owned)}
+			if res.Instance != nil {
+				ib := toInstanceBody(*res.Instance)
+				out.Instance = &ib
 			}
-			owned, err := s.Library.Owned(ctx, res.ISBN13)
-			if err != nil {
-				return nil, mapError(s.Log, err)
+			if res.Edition != nil {
+				eb := toEditionBody(*res.Edition)
+				out.Edition = &eb
 			}
-			if len(owned) > 0 && !in.Body.AllowDuplicate {
-				out.Status, out.Owned = "already_owned", toOwned(owned)
-				return &struct{ Body scanResult }{out}, nil
-			}
-			var ed dbsqlc.Edition
-			switch {
-			case res.Existing != nil:
-				ed = *res.Existing
-			case res.Draft != nil:
-				p, _ := authz.From(ctx)
-				d := res.Draft
-				ed, _, err = s.Catalog.Create(ctx, p.UserID, catalog.EditionInput{ISBN: d.ISBN13, Title: d.Title, Subtitle: d.Subtitle,
-					Authors: d.Authors, Publisher: d.Publisher, Year: d.Year, Language: d.Language, Pages: d.Pages,
-					Description: d.Description, Series: d.Series, SeriesPos: d.SeriesPos}, d.CoverURL, d.Provenance)
-				if err != nil {
-					return nil, mapError(s.Log, err)
-				}
-			default:
-				out.Status = "not_found"
-				return &struct{ Body scanResult }{out}, nil
-			}
-			inst, err := s.Library.AddInstance(ctx, in.ID, library.InstanceInput{EditionID: ed.ID, PlaceID: in.Body.PlaceID}, in.IdempotencyKey)
-			if err != nil {
-				return nil, mapError(s.Log, err)
-			}
-			ib, eb := toInstanceBody(inst), toEditionBody(ed)
-			out.Status, out.Instance, out.Edition = "added", &ib, &eb
 			return &struct{ Body scanResult }{out}, nil
 		})
 }

@@ -10,6 +10,11 @@ import (
 	"github.com/larueli/biblisann/internal/authz"
 	"github.com/larueli/biblisann/internal/catalog"
 	"github.com/larueli/biblisann/internal/library"
+	"github.com/larueli/biblisann/internal/lists"
+	"github.com/larueli/biblisann/internal/loans"
+	"github.com/larueli/biblisann/internal/notify"
+	"github.com/larueli/biblisann/internal/reading"
+	"github.com/larueli/biblisann/internal/tokens"
 )
 
 // mapError turns service errors into RFC 9457 problems. Unknown errors are logged and answered
@@ -25,9 +30,17 @@ func mapError(log *slog.Logger, err error) error {
 		return huma.Error404NotFound("not found")
 	case errors.Is(err, authz.ErrForbidden):
 		return huma.Error403Forbidden("forbidden")
+	case errors.Is(err, library.ErrConflict), errors.Is(err, library.ErrLastAdmin), errors.Is(err, loans.ErrAlreadyLent),
+		errors.Is(err, loans.ErrAlreadyReturn):
+		return huma.Error409Conflict(err.Error())
+	case errors.Is(err, notify.ErrTooMany):
+		return huma.Error422UnprocessableEntity(err.Error())
+	case errors.Is(err, tokens.ErrNotFound):
+		return huma.Error404NotFound("not found")
 	case errors.Is(err, library.ErrIdempotencyConflict):
 		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, library.ErrInvalid), errors.Is(err, catalog.ErrInvalidISBN), errors.Is(err, catalog.ErrInvalidEdition),
+	case errors.Is(err, library.ErrInvalid), errors.Is(err, reading.ErrInvalid), errors.Is(err, lists.ErrInvalid),
+		errors.Is(err, loans.ErrInvalid), errors.Is(err, tokens.ErrInvalid), errors.Is(err, catalog.ErrInvalidISBN), errors.Is(err, catalog.ErrInvalidEdition),
 		errors.Is(err, auth.ErrInvalidEmail):
 		return huma.Error422UnprocessableEntity(err.Error())
 	case errors.As(err, &weak):

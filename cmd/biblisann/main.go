@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,10 +14,15 @@ import (
 	"syscall"
 	"time"
 
+	webpush "github.com/SherClockHolmes/webpush-go"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/larueli/biblisann/internal/api"
 	"github.com/larueli/biblisann/internal/app"
+	"github.com/larueli/biblisann/internal/backup"
 	"github.com/larueli/biblisann/internal/config"
 	"github.com/larueli/biblisann/internal/db"
+	"github.com/larueli/biblisann/internal/storage"
 	"github.com/larueli/biblisann/internal/version"
 )
 
@@ -31,6 +37,10 @@ commands:
   migrate      apply database migrations and exit
   healthcheck  probe the local /healthz endpoint (for container health checks)
   openapi      print the OpenAPI 3.1 document as JSON
+  backup       write a logical backup (tar) to stdout
+  restore      load a backup from stdin into an empty instance
+  migrate-covers <from> <to>  copy cover files between local and s3
+  vapid        generate Web Push (VAPID) keys
   version      print the version
 `
 
@@ -58,6 +68,17 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		var spec []byte
 		if spec, err = api.OpenAPIJSON(specVersion); err == nil {
 			_, err = fmt.Fprintln(stdout, string(spec))
+		}
+	case "backup":
+		err = backupCmd(ctx, stdout)
+	case "restore":
+		err = restoreCmd(ctx, os.Stdin)
+	case "migrate-covers":
+		err = migrateCovers(ctx, args[1:])
+	case "vapid":
+		var priv, pub string
+		if priv, pub, err = webpush.GenerateVAPIDKeys(); err == nil {
+			_, err = fmt.Fprintf(stdout, "BIBLISANN_VAPID_PUBLIC_KEY=%s\nBIBLISANN_VAPID_PRIVATE_KEY=%s\n", pub, priv)
 		}
 	case "version":
 		_, err = fmt.Fprintln(stdout, version.Version())
@@ -134,5 +155,69 @@ func healthcheck(ctx context.Context) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unhealthy: status %d", resp.StatusCode)
 	}
+	return nil
+}
+
+func openPool(ctx context.Context) (config.Config, *pgxpool.Pool, error) {
+	cfg, err := config.Load(config.Sources{}, config.Options{RequireDatabase: true})
+	if err != nil {
+		return cfg, nil, err
+	}
+	pool, err := db.Open(ctx, cfg.DatabaseURL.Reveal())
+	return cfg, pool, err
+}
+
+func backupCmd(ctx context.Context, out io.Writer) error {
+	cfg, pool, err := openPool(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	covers, err := app.OpenStorage(ctx, cfg, cfg.StorageBackend)
+	if err != nil {
+		return err
+	}
+	return backup.Export(ctx, pool, covers, out, version.Version())
+}
+
+func restoreCmd(ctx context.Context, in io.Reader) error {
+	cfg, pool, err := openPool(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := db.Migrate(ctx, pool); err != nil {
+		return err
+	}
+	covers, err := app.OpenStorage(ctx, cfg, cfg.StorageBackend)
+	if err != nil {
+		return err
+	}
+	return backup.Restore(ctx, pool, covers, in)
+}
+
+// migrateCovers copies every cover file from one backend to the other. Switch
+// BIBLISANN_STORAGE_BACKEND afterwards. It can be repeated safely.
+func migrateCovers(ctx context.Context, args []string) error {
+	if len(args) != 2 {
+		return errors.New("usage: biblisann migrate-covers <local|s3> <local|s3>")
+	}
+	cfg, err := config.Load(config.Sources{}, config.Options{})
+	if err != nil {
+		return err
+	}
+	src, err := app.OpenStorage(ctx, cfg, args[0])
+	if err != nil {
+		return err
+	}
+	dst, err := app.OpenStorage(ctx, cfg, args[1])
+	if err != nil {
+		return err
+	}
+	n, err := storage.Copy(ctx, src, dst)
+	if err != nil {
+		return fmt.Errorf("copied %d files before failing: %w", n, err)
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "copied %d files from %s to %s\n", n, args[0], args[1])
 	return nil
 }

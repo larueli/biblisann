@@ -165,3 +165,5 @@ func (s *Server) open(ctx context.Context, userID uuid.UUID) (*sessionOutput, er
 	return s.sessionOut(sess.Token, sess.CSRFToken, sess.ExpiresAt, userBody{ID: sess.UserID, Email: sess.Email,
 		Name: sess.Name, IsAdmin: sess.IsAdmin, Locale: sess.Locale}), nil
 }
+
+func clientKey(r *http.Request) string { return httpmw.ClientIP(r.Context()).String() }

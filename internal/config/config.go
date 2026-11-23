@@ -30,6 +30,29 @@ type Config struct {
 	// StaticProviderFile is an optional JSON file of ISBN -> metadata served by the "static"
 	// provider (air-gapped instances, curated data, tests).
 	StaticProviderFile string
+
+	// Cover storage: "local" (CoversDir) or "s3".
+	StorageBackend string
+	S3Endpoint     string
+	S3Bucket       string
+	S3Region       string
+	S3AccessKey    string
+	S3SecretKey    Secret
+	S3UseSSL       bool
+	S3Prefix       string
+
+	// Email notifications (optional): enabled when SMTPHost is set.
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword Secret
+	SMTPFrom     string
+	SMTPMode     string // starttls, tls or none
+
+	// Web Push (optional): generate keys with `biblisann vapid`.
+	VAPIDPublicKey  string
+	VAPIDPrivateKey Secret
+	VAPIDSubject    string
 }
 
 // Options select which values are mandatory for the command being run.
@@ -55,9 +78,41 @@ func Load(src Sources, opts Options) (Config, error) {
 		Providers:          r.list("PROVIDERS", []string{"bnf", "openlibrary"}),
 		DisabledProviders:  r.list("DISABLED_PROVIDERS", nil),
 		StaticProviderFile: r.str("STATIC_PROVIDER_FILE", ""),
+		StorageBackend:     r.oneOf("STORAGE_BACKEND", "local", "local", "s3"),
+		S3Endpoint:         r.str("S3_ENDPOINT", ""),
+		S3Bucket:           r.str("S3_BUCKET", ""),
+		S3Region:           r.str("S3_REGION", ""),
+		S3AccessKey:        r.str("S3_ACCESS_KEY", ""),
+		S3UseSSL:           r.boolean("S3_USE_SSL", true),
+		S3Prefix:           r.str("S3_PREFIX", ""),
+		SMTPHost:           r.str("SMTP_HOST", ""),
+		SMTPPort:           r.integer("SMTP_PORT", 587),
+		SMTPUsername:       r.str("SMTP_USERNAME", ""),
+		SMTPFrom:           r.str("SMTP_FROM", ""),
+		SMTPMode:           r.oneOf("SMTP_MODE", "starttls", "starttls", "tls", "none"),
+		VAPIDPublicKey:     r.str("VAPID_PUBLIC_KEY", ""),
+		VAPIDSubject:       r.str("VAPID_SUBJECT", ""),
 	}
 	if v, ok := r.lookup("DATABASE_URL", true); ok {
 		c.DatabaseURL = Secret(v)
+	}
+	if v, ok := r.lookup("SMTP_PASSWORD", true); ok {
+		c.SMTPPassword = Secret(v)
+	}
+	if v, ok := r.lookup("S3_SECRET_KEY", true); ok {
+		c.S3SecretKey = Secret(v)
+	}
+	if c.StorageBackend == "s3" && (c.S3Endpoint == "" || c.S3Bucket == "" || c.S3AccessKey == "" || c.S3SecretKey == "") {
+		r.fail("%sSTORAGE_BACKEND=s3 needs S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY (or S3_SECRET_KEY_FILE)", prefix)
+	}
+	if v, ok := r.lookup("VAPID_PRIVATE_KEY", true); ok {
+		c.VAPIDPrivateKey = Secret(v)
+	}
+	if c.SMTPHost != "" && c.SMTPFrom == "" {
+		r.fail("%sSMTP_FROM is required when %sSMTP_HOST is set", prefix, prefix)
+	}
+	if (c.VAPIDPublicKey == "") != (c.VAPIDPrivateKey == "") {
+		r.fail("%sVAPID_PUBLIC_KEY and %sVAPID_PRIVATE_KEY must be set together", prefix, prefix)
 	}
 	if opts.RequireDatabase && c.DatabaseURL == "" {
 		r.fail("%sDATABASE_URL (or %sDATABASE_URL_FILE) is required", prefix, prefix)
@@ -204,4 +259,17 @@ func (r *reader) list(name string, def []string) []string {
 		}
 	}
 	return out
+}
+
+func (r *reader) integer(name string, def int) int {
+	v, ok := r.lookup(name, false)
+	if !ok {
+		return def
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n <= 0 || n > 65535 {
+		r.fail("%s%s: must be a number between 1 and 65535", prefix, name)
+		return def
+	}
+	return n
 }

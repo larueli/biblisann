@@ -207,3 +207,56 @@ func (s *Service) SyncIndex(ctx context.Context, libraryID uuid.UUID, since int6
 	}
 	return idx, nil
 }
+
+// InventoryResult compares what a place should contain with what was scanned in it.
+type InventoryResult struct {
+	Found      []string // titles of expected copies that were scanned
+	Missing    []string // titles expected in the place but not scanned
+	Unexpected []string // scanned ISBNs that belong to no copy expected here
+	Unscanable []string // expected copies without an ISBN: they cannot be checked by scanning
+}
+
+// Inventory checks a physical place against a list of scanned ISBNs (inventory mode).
+func (s *Service) Inventory(ctx context.Context, placeID uuid.UUID, scanned []string) (InventoryResult, error) {
+	var res InventoryResult
+	pl, err := s.q.GetPlace(ctx, placeID)
+	if err != nil {
+		return res, ErrNotFound
+	}
+	if _, err := s.Require(ctx, nil, pl.LibraryID, authz.RoleRead); err != nil {
+		return res, err
+	}
+	if len(scanned) > 5000 {
+		return res, ErrInvalid
+	}
+	seen := map[string]bool{}
+	for _, raw := range scanned {
+		isbn, _, err := catalog.NormalizeISBN(raw)
+		if err != nil {
+			return res, ErrInvalid
+		}
+		seen[isbn] = true
+	}
+	rows, err := s.q.PlaceSubtreeInstances(ctx, placeID)
+	if err != nil {
+		return res, fmt.Errorf("library: inventory: %w", err)
+	}
+	expected := map[string]bool{}
+	for _, r := range rows {
+		switch {
+		case r.Isbn13 == nil:
+			res.Unscanable = append(res.Unscanable, r.Title)
+		case seen[*r.Isbn13]:
+			res.Found = append(res.Found, r.Title)
+			expected[*r.Isbn13] = true
+		default:
+			res.Missing = append(res.Missing, r.Title)
+		}
+	}
+	for isbn := range seen {
+		if !expected[isbn] {
+			res.Unexpected = append(res.Unexpected, isbn)
+		}
+	}
+	return res, nil
+}

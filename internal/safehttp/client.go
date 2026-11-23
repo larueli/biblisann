@@ -109,6 +109,11 @@ func checkURL(u *url.URL) error {
 	return nil
 }
 
+// Std returns an *http.Client with the same protections (address check at connect time, redirect
+// validation, timeout) for libraries that insist on a standard client, such as Web Push. Unlike
+// Do it does not bound the response body.
+func (c *Client) Std() *http.Client { return c.http }
+
 // Response is an HTTP response whose body is size-limited. Close it when done.
 type Response struct {
 	Status int

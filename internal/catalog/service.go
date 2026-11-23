@@ -217,6 +217,17 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in EditionInput,
 	if err != nil {
 		return dbsqlc.Edition{}, false, fmt.Errorf("catalog: work: %w", err)
 	}
+	if isbn13 == nil { // the same manual entry twice is the same edition
+		var y *int32
+		if in.Year > 0 {
+			v := int32(in.Year)
+			y = &v
+		}
+		if e, err := q.FindIsbnlessEdition(ctx, dbsqlc.FindIsbnlessEditionParams{WorkID: work.ID,
+			Publisher: strings.TrimSpace(in.Publisher), Language: strings.TrimSpace(in.Language), Year: y}); err == nil {
+			return e, false, nil
+		}
+	}
 	provJSON, _ := json.Marshal(prov)
 	if prov == nil {
 		provJSON = []byte("{}")

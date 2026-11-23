@@ -10,6 +10,19 @@ import (
 	"github.com/google/uuid"
 )
 
+type AccessToken struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Name       string
+	Kind       string
+	TokenHash  []byte
+	Scopes     []string
+	LibraryIds []uuid.UUID
+	ExpiresAt  *time.Time
+	LastUsed   *time.Time
+	CreatedAt  time.Time
+}
+
 type Change struct {
 	Seq       int64
 	LibraryID uuid.UUID
@@ -17,6 +30,14 @@ type Change struct {
 	EntityID  uuid.UUID
 	Op        string
 	CreatedAt time.Time
+}
+
+type Contact struct {
+	ID      uuid.UUID
+	OwnerID uuid.UUID
+	Name    string
+	Email   string
+	Notes   string
 }
 
 type Cover struct {
@@ -50,6 +71,36 @@ type Edition struct {
 	CreatedBy      *uuid.UUID
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+type ExternalGrade struct {
+	WorkID    uuid.UUID
+	Source    string
+	Grade     float32
+	Scale     float32
+	Votes     *int32
+	Url       string
+	FetchedAt time.Time
+}
+
+type Grade struct {
+	UserID    uuid.UUID
+	WorkID    uuid.UUID
+	Grade     *int16
+	Comment   string
+	UpdatedAt time.Time
+}
+
+type Group struct {
+	ID         uuid.UUID
+	Name       string
+	ExternalID *string
+	CreatedAt  time.Time
+}
+
+type GroupMember struct {
+	GroupID uuid.UUID
+	UserID  uuid.UUID
 }
 
 type IdempotencyKey struct {
@@ -89,10 +140,80 @@ type Library struct {
 	CreatedAt time.Time
 }
 
+type LibraryGroupShare struct {
+	LibraryID uuid.UUID
+	GroupID   uuid.UUID
+	Role      string
+	ProfileID *uuid.UUID
+}
+
 type LibraryMember struct {
 	LibraryID uuid.UUID
 	UserID    uuid.UUID
 	Role      string
+	ProfileID *uuid.UUID
+}
+
+type List struct {
+	ID        uuid.UUID
+	OwnerID   *uuid.UUID
+	LibraryID *uuid.UUID
+	Name      string
+	Kind      string
+	CreatedAt time.Time
+}
+
+type ListItem struct {
+	ID             uuid.UUID
+	ListID         uuid.UUID
+	EditionID      *uuid.UUID
+	Title          string
+	Authors        []string
+	Isbn13         *string
+	SeriesName     string
+	SeriesPosition *float64
+	Note           string
+	AddedAt        time.Time
+}
+
+type Loan struct {
+	ID           uuid.UUID
+	LibraryID    uuid.UUID
+	OwnerID      uuid.UUID
+	Direction    string
+	InstanceID   *uuid.UUID
+	ContactID    *uuid.UUID
+	Counterparty string
+	Title        string
+	LentOn       time.Time
+	DueOn        *time.Time
+	ReturnedOn   *time.Time
+	Notes        string
+	CreatedAt    time.Time
+}
+
+type LoanNotification struct {
+	LoanID uuid.UUID
+	Kind   string
+	Bucket int32
+	SentAt time.Time
+}
+
+type NotificationChannel struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Kind      string
+	Target    string
+	Config    []byte
+	Enabled   bool
+	CreatedAt time.Time
+}
+
+type PermissionProfile struct {
+	ID          uuid.UUID
+	LibraryID   uuid.UUID
+	Name        string
+	Permissions []string
 }
 
 type Place struct {
@@ -111,6 +232,15 @@ type ProviderCache struct {
 	Found     bool
 	Payload   []byte
 	FetchedAt time.Time
+}
+
+type ReadingState struct {
+	UserID     uuid.UUID
+	WorkID     uuid.UUID
+	Status     string
+	StartedOn  *time.Time
+	FinishedOn *time.Time
+	UpdatedAt  time.Time
 }
 
 type Session struct {
@@ -133,6 +263,11 @@ type User struct {
 	Settings     []byte
 	CreatedAt    time.Time
 	DisabledAt   *time.Time
+}
+
+type UserLibraryAccess struct {
+	UserID    uuid.UUID
+	LibraryID uuid.UUID
 }
 
 type Work struct {

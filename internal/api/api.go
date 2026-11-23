@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -13,8 +14,15 @@ import (
 
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/catalog"
+	"github.com/larueli/biblisann/internal/importer"
 	"github.com/larueli/biblisann/internal/library"
+	"github.com/larueli/biblisann/internal/lists"
+	"github.com/larueli/biblisann/internal/loans"
+	"github.com/larueli/biblisann/internal/notify"
 	"github.com/larueli/biblisann/internal/ratelimit"
+	"github.com/larueli/biblisann/internal/reading"
+	"github.com/larueli/biblisann/internal/scan"
+	"github.com/larueli/biblisann/internal/tokens"
 )
 
 // Pinger reports whether a dependency (the database) is reachable.
@@ -28,14 +36,24 @@ type Deps struct {
 	DB      Pinger       // nil in spec-export mode
 	Web     http.Handler // the SPA; nil answers 404
 
-	Log     *slog.Logger
-	BaseURL *url.URL
-	Auth    *auth.Service
-	Library *library.Service
-	Catalog *catalog.Service
-	Limiter ratelimit.Limiter // login and registration throttling
-	Tokens  TokenResolver
-	Extra   func(huma.API, *Server) // hook for later slices to register operations
+	Log      *slog.Logger
+	BaseURL  *url.URL
+	Auth     *auth.Service
+	Library  *library.Service
+	Catalog  *catalog.Service
+	Scan     *scan.Service
+	Reading  *reading.Service
+	Lists    *lists.Service
+	Loans    *loans.Service
+	TokenSvc *tokens.Service
+	Notify   *notify.Dispatcher
+	Channels *notify.Channels
+	Limiter  ratelimit.Limiter // login and registration throttling
+	Tokens   TokenResolver
+	Importer *importer.Importer
+	Backup   func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
+	MCP      http.Handler                                 // the MCP endpoint, mounted at /mcp (nil: disabled)
+	Extra    func(huma.API, *Server)                      // hook for later slices to register operations
 }
 
 // Server holds what route handlers share.
@@ -74,10 +92,21 @@ func New(d Deps) (http.Handler, huma.API) {
 	srv.registerLibraries(a)
 	srv.registerCatalog(a)
 	srv.registerSync(a)
+	srv.registerReading(a)
+	srv.registerLists(a)
+	srv.registerLoans(a)
+	srv.registerSharing(a)
+	srv.registerTokens(a)
+	srv.registerExtras(a)
+	mux.HandleFunc("/v1/admin/backup", srv.serveBackup)
+	mux.HandleFunc("GET /v1/feeds/loans.ics", srv.serveLoansFeed)
 	if d.Extra != nil {
 		d.Extra(a, srv)
 	}
 	mux.HandleFunc("GET /v1/covers/{id}", srv.serveCover)
+	if d.MCP != nil {
+		mux.Handle("/mcp", d.MCP)
+	}
 
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, _ *http.Request) {
 		writeProblem(w, http.StatusNotFound, "no such API operation")

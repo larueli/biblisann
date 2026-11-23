@@ -44,7 +44,7 @@ SELECT i.id AS instance_id, i.library_id, l.name AS library_name, e.id AS editio
 FROM instances i
 JOIN editions e ON e.id = i.edition_id
 JOIN libraries l ON l.id = i.library_id
-JOIN library_members m ON m.library_id = i.library_id AND m.user_id = $1
+JOIN user_library_access m ON m.library_id = i.library_id AND m.user_id = $1
 WHERE i.deleted_at IS NULL AND (e.isbn13 = $2::text OR e.work_id = $3::uuid)
 ORDER BY same_edition DESC, l.name;
 
@@ -73,3 +73,6 @@ VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING;
 
 -- name: DeleteOldIdempotency :execrows
 DELETE FROM idempotency_keys WHERE created_at < now() - interval '7 days';
+
+-- name: CountInstancesOfEdition :one
+SELECT count(*) FROM instances WHERE library_id = $1 AND edition_id = $2 AND deleted_at IS NULL;
