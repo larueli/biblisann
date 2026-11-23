@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -19,6 +20,7 @@ import (
 	"github.com/larueli/biblisann/internal/lists"
 	"github.com/larueli/biblisann/internal/loans"
 	"github.com/larueli/biblisann/internal/notify"
+	"github.com/larueli/biblisann/internal/oauth"
 	"github.com/larueli/biblisann/internal/oidc"
 	"github.com/larueli/biblisann/internal/ratelimit"
 	"github.com/larueli/biblisann/internal/reading"
@@ -54,6 +56,7 @@ type Deps struct {
 	Tokens   TokenResolver
 	Importer *importer.Importer
 	OIDC     *oidc.Service                                // nil: single sign-on is off
+	OAuth    *oauth.Service                               // nil: the MCP authorization server is off
 	SCIM     *scim.Handler                                // nil: SCIM provisioning is off
 	Backup   func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
 	MCP      http.Handler                                 // the MCP endpoint, mounted at /mcp (nil: disabled)
@@ -103,6 +106,14 @@ func New(d Deps) (http.Handler, huma.API) {
 	srv.registerTokens(a)
 	srv.registerExtras(a)
 	srv.registerOIDC(a, mux)
+	if d.OAuth != nil {
+		srv.registerOAuth(a)
+		limiter := d.Limiter
+		if limiter == nil {
+			limiter = ratelimit.NewMemory(1000, time.Second)
+		}
+		d.OAuth.Routes(mux, limiter, clientKey)
+	}
 	mux.HandleFunc("/v1/admin/backup", srv.serveBackup)
 	mux.HandleFunc("GET /v1/feeds/loans.ics", srv.serveLoansFeed)
 	if d.Extra != nil {

@@ -223,6 +223,46 @@ type NotificationChannel struct {
 	CreatedAt time.Time
 }
 
+type OauthAccessToken struct {
+	TokenHash  []byte
+	ClientID   string
+	UserID     uuid.UUID
+	Scopes     []string
+	LibraryIds []uuid.UUID
+	Resource   string
+	ExpiresAt  time.Time
+}
+
+type OauthClient struct {
+	ID           string
+	Name         string
+	RedirectUris []string
+	CreatedAt    time.Time
+}
+
+type OauthCode struct {
+	CodeHash      []byte
+	ClientID      string
+	UserID        uuid.UUID
+	RedirectUri   string
+	CodeChallenge string
+	Scopes        []string
+	LibraryIds    []uuid.UUID
+	Resource      string
+	ExpiresAt     time.Time
+}
+
+type OauthRefreshToken struct {
+	TokenHash  []byte
+	ClientID   string
+	UserID     uuid.UUID
+	Scopes     []string
+	LibraryIds []uuid.UUID
+	Resource   string
+	ExpiresAt  time.Time
+	CreatedAt  time.Time
+}
+
 type OidcFlow struct {
 	StateHash []byte
 	Nonce     string

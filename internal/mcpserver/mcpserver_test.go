@@ -2,6 +2,8 @@ package mcpserver_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,6 +23,7 @@ import (
 	"github.com/larueli/biblisann/internal/lists"
 	"github.com/larueli/biblisann/internal/loans"
 	"github.com/larueli/biblisann/internal/mcpserver"
+	"github.com/larueli/biblisann/internal/oauth"
 	"github.com/larueli/biblisann/internal/providers"
 	"github.com/larueli/biblisann/internal/reading"
 	"github.com/larueli/biblisann/internal/scan"
@@ -61,8 +64,9 @@ func TestMCPEndToEnd(t *testing.T) {
 	rw, _ := tk.Create(uctx, tokens.KindPAT, "agent", []string{"read", "write"}, nil, nil)
 	ro, _ := tk.Create(uctx, tokens.KindPAT, "reader", []string{"read"}, nil, nil)
 
+	oauthSvc := oauth.New(pool, "http://localhost")
 	h, _ := api.New(api.Deps{Version: "t", Log: slog.New(slog.NewTextHandler(io.Discard, nil)), BaseURL: &url.URL{Scheme: "http", Host: "localhost"},
-		Auth: a, Library: lib, Tokens: tk,
+		Auth: a, Library: lib, Tokens: api.MultiResolver{tk, oauthSvc}, OAuth: oauthSvc,
 		MCP: mcpserver.Handler(mcpserver.Deps{Version: "t", Library: lib, Scan: scan.New(cat, lib), Reading: reading.NewService(pool),
 			Lists: lists.NewService(pool, lib), Loans: loans.NewService(pool, lib)})})
 	srv := httptest.NewServer(h)
@@ -138,6 +142,37 @@ func TestMCPEndToEnd(t *testing.T) {
 	}
 	if page, _ := lib.ListInstances(uctx, l.ID, "", 10); len(page.Items) != 1 {
 		t.Errorf("replayed add created %d copies", len(page.Items))
+	}
+
+	// OAuth: a token obtained through the authorization code flow works on /mcp only
+	cid, err := oauthSvc.RegisterClient(ctx, "agent", []string{"https://client.example/cb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	sum := sha256.Sum256([]byte(verifier))
+	oreq := oauth.Request{ClientID: cid, RedirectURI: "https://client.example/cb", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]),
+		CodeChallengeMethod: "S256", Scope: "read"}
+	redir, err := oauthSvc.Approve(ctx, u.ID, oreq, []string{"read"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ru, _ := url.Parse(redir)
+	tok, err := oauthSvc.ExchangeCode(ctx, cid, ru.Query().Get("code"), oreq.RedirectURI, verifier, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os, err := connect(tok.AccessToken)
+	if err != nil {
+		t.Fatalf("oauth token on /mcp: %v", err)
+	}
+	_ = os.Close()
+	rq, _ := http.NewRequest("GET", srv.URL+"/v1/libraries", nil)
+	rq.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+	if rs, err := http.DefaultClient.Do(rq); err != nil || rs.StatusCode != 403 {
+		t.Errorf("oauth token on the REST API: %v %v", rs, err)
+	} else {
+		_ = rs.Body.Close()
 	}
 
 	// a cookie session cannot use /mcp

@@ -28,6 +28,7 @@ import (
 	"github.com/larueli/biblisann/internal/loans"
 	"github.com/larueli/biblisann/internal/mcpserver"
 	"github.com/larueli/biblisann/internal/notify"
+	"github.com/larueli/biblisann/internal/oauth"
 	"github.com/larueli/biblisann/internal/oidc"
 	"github.com/larueli/biblisann/internal/providers"
 	"github.com/larueli/biblisann/internal/ratelimit"
@@ -142,9 +143,11 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		senders = append(senders, notify.WebPush{HTTP: fetcher.Std(), PublicKey: cfg.VAPIDPublicKey,
 			PrivateKey: cfg.VAPIDPrivateKey.Reveal(), Subject: subject})
 	}
+	oauthSvc := oauth.New(pool, cfg.BaseURL.String())
 	dispatcher := notify.NewDispatcher(q, log, senders...)
 
 	jc, err := jobs.New(pool, dispatcher, log, func(ctx context.Context) error {
+		_ = oauthSvc.Purge(ctx)
 		_, err := authSvc.PurgeExpired(ctx)
 		return err
 	})
@@ -166,7 +169,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		Backup: func(ctx context.Context, w io.Writer) error {
 			return backup.Export(ctx, pool, covers, w, version.Version())
 		},
-		TokenSvc: tokenSvc, Tokens: tokenSvc, Notify: dispatcher, Channels: notify.NewChannels(q),
+		TokenSvc: tokenSvc, Tokens: api.MultiResolver{tokenSvc, oauthSvc}, OAuth: oauthSvc, Notify: dispatcher, Channels: notify.NewChannels(q),
 		Limiter: ratelimit.NewMemory(10, 6*time.Second),
 	})
 	return h, jc, nil

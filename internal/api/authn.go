@@ -82,6 +82,11 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				problemHTTP(w, http.StatusUnauthorized, "invalid token")
 				return
 			}
+			// OAuth tokens are bound to the MCP resource: the REST API refuses them.
+			if p.Audience == "mcp" && !strings.HasPrefix(r.URL.Path, "/mcp") {
+				problemHTTP(w, http.StatusForbidden, "this token is only valid for the MCP endpoint")
+				return
+			}
 			next.ServeHTTP(w, r.WithContext(authz.With(r.Context(), p)))
 			return
 		}
@@ -127,4 +132,17 @@ func (a *Authenticator) sameOrigin(r *http.Request) bool {
 		return true
 	}
 	return false
+}
+
+// MultiResolver tries several resolvers in turn; the first that recognizes the token wins.
+type MultiResolver []TokenResolver
+
+// Resolve implements TokenResolver.
+func (m MultiResolver) Resolve(ctx context.Context, token string) (*authz.Principal, error) {
+	for _, r := range m {
+		if p, err := r.Resolve(ctx, token); err != nil || p != nil {
+			return p, err
+		}
+	}
+	return nil, nil
 }

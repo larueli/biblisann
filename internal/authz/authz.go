@@ -57,6 +57,8 @@ type Principal struct {
 	Via string
 	// LibraryIDs restricts a token to some libraries. nil means every accessible library.
 	LibraryIDs []uuid.UUID
+	// Audience binds a token to one resource (for example "mcp"). Empty: valid everywhere.
+	Audience string
 }
 
 // AllowsLibrary reports whether the principal may touch the library at all (token restriction).
