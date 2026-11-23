@@ -22,6 +22,7 @@ import (
 	"github.com/larueli/biblisann/internal/notify"
 	"github.com/larueli/biblisann/internal/oauth"
 	"github.com/larueli/biblisann/internal/oidc"
+	"github.com/larueli/biblisann/internal/opds"
 	"github.com/larueli/biblisann/internal/ratelimit"
 	"github.com/larueli/biblisann/internal/reading"
 	"github.com/larueli/biblisann/internal/scan"
@@ -57,6 +58,7 @@ type Deps struct {
 	Importer *importer.Importer
 	OIDC     *oidc.Service                                // nil: single sign-on is off
 	OAuth    *oauth.Service                               // nil: the MCP authorization server is off
+	OPDS     *opds.Handler                                // nil: no OPDS catalog
 	SCIM     *scim.Handler                                // nil: SCIM provisioning is off
 	Backup   func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
 	MCP      http.Handler                                 // the MCP endpoint, mounted at /mcp (nil: disabled)
@@ -106,8 +108,8 @@ func New(d Deps) (http.Handler, huma.API) {
 	srv.registerTokens(a)
 	srv.registerExtras(a)
 	srv.registerOIDC(a, mux)
+	srv.registerOAuth(a) // operations are always described; handlers answer 404 when the feature is off
 	if d.OAuth != nil {
-		srv.registerOAuth(a)
 		limiter := d.Limiter
 		if limiter == nil {
 			limiter = ratelimit.NewMemory(1000, time.Second)
@@ -120,6 +122,9 @@ func New(d Deps) (http.Handler, huma.API) {
 		d.Extra(a, srv)
 	}
 	mux.HandleFunc("GET /v1/covers/{id}", srv.serveCover)
+	if d.OPDS != nil {
+		d.OPDS.Routes(mux)
+	}
 	if d.SCIM != nil {
 		d.SCIM.Routes(mux)
 	}

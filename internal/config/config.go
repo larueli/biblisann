@@ -31,6 +31,12 @@ type Config struct {
 	// StaticProviderFile is an optional JSON file of ISBN -> metadata served by the "static"
 	// provider (air-gapped instances, curated data, tests).
 	StaticProviderFile string
+	// AddonProvidersFile lists out-of-process providers: [{"name":"x","url":"https://...","token":"..."}].
+	// It holds secrets: keep it out of the repository (its path is plain configuration).
+	AddonProvidersFile string
+	GoogleBooksKey     Secret
+	// ValkeyURL (redis:// or rediss://, may hold a password) shares rate limits across replicas.
+	ValkeyURL Secret
 
 	// Single sign-on (optional): enabled when OIDCIssuer is set.
 	OIDCIssuer       string
@@ -93,6 +99,7 @@ func Load(src Sources, opts Options) (Config, error) {
 		Providers:          r.list("PROVIDERS", []string{"bnf", "openlibrary"}),
 		DisabledProviders:  r.list("DISABLED_PROVIDERS", nil),
 		StaticProviderFile: r.str("STATIC_PROVIDER_FILE", ""),
+		AddonProvidersFile: r.str("ADDON_PROVIDERS_FILE", ""),
 		OIDCIssuer:         r.str("OIDC_ISSUER", ""),
 		OIDCClientID:       r.str("OIDC_CLIENT_ID", ""),
 		OIDCScopes:         r.list("OIDC_SCOPES", nil),
@@ -126,6 +133,12 @@ func Load(src Sources, opts Options) (Config, error) {
 	}
 	if c.OIDCIssuer != "" && (c.OIDCClientID == "" || c.OIDCClientSecret == "") {
 		r.fail("%sOIDC_ISSUER needs OIDC_CLIENT_ID and OIDC_CLIENT_SECRET (or OIDC_CLIENT_SECRET_FILE)", prefix)
+	}
+	if v, ok := r.lookup("VALKEY_URL", true); ok {
+		c.ValkeyURL = Secret(v)
+	}
+	if v, ok := r.lookup("GOOGLE_BOOKS_KEY", true); ok {
+		c.GoogleBooksKey = Secret(v)
 	}
 	if v, ok := r.lookup("SECRET_KEY", true); ok {
 		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(v))

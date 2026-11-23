@@ -3,12 +3,16 @@ package app
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,6 +34,7 @@ import (
 	"github.com/larueli/biblisann/internal/notify"
 	"github.com/larueli/biblisann/internal/oauth"
 	"github.com/larueli/biblisann/internal/oidc"
+	"github.com/larueli/biblisann/internal/opds"
 	"github.com/larueli/biblisann/internal/providers"
 	"github.com/larueli/biblisann/internal/ratelimit"
 	"github.com/larueli/biblisann/internal/reading"
@@ -104,7 +109,16 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		return nil, nil, err
 	}
 	fetcher := safehttp.New(safehttp.Options{UserAgent: "Biblisann/" + version.Version() + " (+https://github.com/larueli/biblisann)"})
-	provs := []providers.Provider{providers.BnF{Fetcher: fetcher}, providers.OpenLibrary{Fetcher: fetcher}}
+	provs := []providers.Provider{providers.BnF{Fetcher: fetcher}, providers.OpenLibrary{Fetcher: fetcher},
+		providers.GoogleBooks{Fetcher: fetcher, APIKey: cfg.GoogleBooksKey.Reveal()},
+		providers.LibraryOfCongress(fetcher), providers.K10plus(fetcher)}
+	if cfg.AddonProvidersFile != "" {
+		addons, err := loadAddons(cfg.AddonProvidersFile, fetcher)
+		if err != nil {
+			return nil, nil, err
+		}
+		provs = append(provs, addons...)
+	}
 	if cfg.StaticProviderFile != "" {
 		sp, err := providers.LoadStatic(cfg.StaticProviderFile)
 		if err != nil {
@@ -154,13 +168,21 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	if err != nil {
 		return nil, nil, err
 	}
+	var limiter ratelimit.Limiter = ratelimit.NewMemory(10, 6*time.Second)
+	if cfg.ValkeyURL != "" {
+		v, err := ratelimit.NewValkey(cfg.ValkeyURL.Reveal(), 10, 6*time.Second, log)
+		if err != nil {
+			return nil, nil, err
+		}
+		limiter = v
+	}
 	var oidcSvc *oidc.Service
 	if cfg.OIDCIssuer != "" {
 		oidcSvc = oidc.New(oidc.Config{Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret.Reveal(),
 			RedirectURL: cfg.BaseURL.String() + "/v1/auth/oidc/callback", Scopes: cfg.OIDCScopes, GroupsClaim: cfg.OIDCGroupsClaim,
 			AdminGroup: cfg.OIDCAdminGroup, AutoCreate: cfg.OIDCAutoCreate, Label: cfg.OIDCLabel}, pool, authSvc, fetcher.Std())
 	}
-	h, _ := api.New(api.Deps{OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
+	h, _ := api.New(api.Deps{OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
 		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
 		Auth: authSvc, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
 		Lists: listsSvc, Loans: loansSvc,
@@ -170,7 +192,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			return backup.Export(ctx, pool, covers, w, version.Version())
 		},
 		TokenSvc: tokenSvc, Tokens: api.MultiResolver{tokenSvc, oauthSvc}, OAuth: oauthSvc, Notify: dispatcher, Channels: notify.NewChannels(q),
-		Limiter: ratelimit.NewMemory(10, 6*time.Second),
+		Limiter: limiter,
 	})
 	return h, jc, nil
 }
@@ -231,4 +253,31 @@ func OpenStorage(ctx context.Context, cfg config.Config, kind string) (storage.S
 			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey.Reveal(), UseSSL: cfg.S3UseSSL, Prefix: cfg.S3Prefix})
 	}
 	return nil, fmt.Errorf("unknown storage backend %q", kind)
+}
+
+var addonName = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,30}$`)
+
+// loadAddons reads the addon list. Names must be new and well formed; URLs must be https.
+func loadAddons(path string, f providers.Fetcher) ([]providers.Provider, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // operator-provided configuration path
+	if err != nil {
+		return nil, fmt.Errorf("addon providers: %w", err)
+	}
+	var list []struct {
+		Name  string `json:"name"`
+		URL   string `json:"url"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(data, &list); err != nil {
+		return nil, fmt.Errorf("addon providers: invalid JSON: %w", err)
+	}
+	reserved := map[string]bool{"bnf": true, "openlibrary": true, "google": true, "loc": true, "k10plus": true, "static": true}
+	var out []providers.Provider
+	for _, a := range list {
+		if !addonName.MatchString(a.Name) || reserved[a.Name] || !strings.HasPrefix(a.URL, "https://") {
+			return nil, fmt.Errorf("addon providers: invalid entry %q (name must be new, lowercase; url must be https)", a.Name)
+		}
+		out = append(out, providers.Addon{ProviderName: a.Name, Fetcher: f, URL: a.URL, Token: a.Token})
+	}
+	return out, nil
 }

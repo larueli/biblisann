@@ -47,7 +47,7 @@ func (s *Server) registerOAuth(a huma.API) {
 		Summary: "Validate an authorization request and describe the client (for the consent screen)",
 		Tags:    []string{"oauth"}, Errors: []int{422}}, PermAuthenticated,
 		func(ctx context.Context, in *struct{ Body oauthRequest }) (*struct{ Body infoBody }, error) {
-			if SessionFrom(ctx) == nil {
+			if SessionFrom(ctx) == nil || s.OAuth == nil {
 				return nil, huma.Error403Forbidden("a browser session is required")
 			}
 			c, scopes, err := s.OAuth.Validate(ctx, in.Body.toOAuth())
@@ -71,7 +71,7 @@ func (s *Server) registerOAuth(a huma.API) {
 				RedirectTo string `json:"redirect_to"`
 			}
 		}, error) {
-			if SessionFrom(ctx) == nil {
+			if SessionFrom(ctx) == nil || s.OAuth == nil {
 				return nil, huma.Error403Forbidden("a browser session is required")
 			}
 			p, _ := authz.From(ctx)

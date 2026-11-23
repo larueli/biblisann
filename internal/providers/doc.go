@@ -10,6 +10,8 @@ import (
 	"github.com/larueli/biblisann/internal/safehttp"
 )
 
+type safehttpResponse = safehttp.Response
+
 // Record is the metadata one provider knows about one ISBN. Empty fields are unknown.
 type Record struct {
 	Title       string   `json:"title"`

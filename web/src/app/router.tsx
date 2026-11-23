@@ -10,7 +10,9 @@ import {
 } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { api, setCsrfToken } from "../api/client";
+import { AuthorizePage } from "../features/auth/AuthorizePage";
 import { LoginPage } from "../features/auth/LoginPage";
+import { ResetPage } from "../features/auth/ResetPage";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { useLibraries } from "../features/library/useLibraries";
 import { ListsPage } from "../features/lists/ListsPage";
@@ -47,7 +49,11 @@ async function requireSession(queryClient: QueryClient) {
     },
     staleTime: 5 * 60 * 1000,
   });
-  if (!session) throw redirect({ to: "/login" });
+  if (!session)
+    throw redirect({
+      to: "/login",
+      search: { next: window.location.pathname + window.location.search },
+    });
 }
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({
@@ -57,7 +63,21 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
+  validateSearch: (s: Record<string, unknown>): { next?: string; sso?: string } => ({
+    ...(typeof s.next === "string" ? { next: s.next } : {}),
+    ...(typeof s.sso === "string" ? { sso: s.sso } : {}),
+  }),
   component: LoginPage,
+});
+const resetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset",
+  component: ResetPage,
+});
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset-password",
+  component: ResetPage,
 });
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -109,8 +129,13 @@ function PlaceRedirect() {
 }
 const placeRedirectRoute = guarded("/p/$placeId", PlaceRedirect);
 
+const authorizeRoute = guarded("/oauth/authorize", AuthorizePage);
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  resetRoute,
+  resetPasswordRoute,
+  authorizeRoute,
   indexRoute,
   scanRoute,
   listsRoute,

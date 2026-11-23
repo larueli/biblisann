@@ -5,6 +5,7 @@ import { api, problemMessage, type Schemas } from "../../api/client";
 import { field, muted, primary, secondary } from "../../app/ui";
 import { useSession } from "../auth/session";
 import { useLibraries } from "../library/useLibraries";
+import { Security } from "./Security";
 
 type ChannelKind = Schemas["ChannelBody"]["kind"];
 
@@ -242,6 +243,7 @@ export function SettingsPage() {
   const session = useSession();
   return (
     <main className="flex flex-col gap-8">
+      <Security />
       <Tokens />
       <Channels />
       <GoodreadsImport />

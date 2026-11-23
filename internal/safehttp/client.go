@@ -192,3 +192,17 @@ func (b *limitedBody) Read(p []byte) (int, error) {
 }
 
 func (b *limitedBody) Close() error { return b.rc.Close() }
+
+// GetWithAuth is Get with an "Authorization: Bearer" header.
+func (c *Client) GetWithAuth(ctx context.Context, rawURL, bearer string) (*Response, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("safehttp: invalid URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("safehttp: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	return c.Do(req)
+}

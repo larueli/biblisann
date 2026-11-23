@@ -13,7 +13,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sign in with email and password */
+        /**
+         * Sign in with email and password
+         * @description When the account has a second factor the answer is 200 with mfa_required=true and an mfa_token, and no cookie: finish with /v1/auth/mfa.
+         */
         post: operations["login"];
         delete?: never;
         options?: never;
@@ -38,6 +41,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finish a sign-in with an authenticator code or a recovery code */
+        post: operations["complete-mfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/oidc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether single sign-on is configured, and the button label */
+        get: operations["oidc-info"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/password": {
         parameters: {
             query?: never;
@@ -49,6 +86,40 @@ export interface paths {
         put?: never;
         /** Change the password (ends all sessions) */
         post: operations["change-password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email a password reset link (always answers 204, whether or not the address exists) */
+        post: operations["request-password-reset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set a new password with the token from the reset email */
+        post: operations["confirm-password-reset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -665,6 +736,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/mfa/totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start authenticator-app enrollment */
+        post: operations["enroll-totp"];
+        /** Turn the authenticator off (password required) */
+        delete: operations["disable-totp"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/mfa/totp/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm enrollment with a first code; returns one-time recovery codes */
+        post: operations["confirm-totp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/notification-channels": {
         parameters: {
             query?: never;
@@ -734,6 +840,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Which sign-in protections exist on this server and which I use */
+        get: operations["get-security"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/stats": {
         parameters: {
             query?: never;
@@ -784,6 +907,40 @@ export interface paths {
         post?: never;
         /** Revoke a token */
         delete: operations["revoke-token"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/oauth/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve or deny an authorization request; returns where to send the browser */
+        post: operations["oauth-consent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/oauth/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate an authorization request and describe the client (for the consent screen) */
+        post: operations["oauth-request-info"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -988,11 +1145,45 @@ export interface components {
             secret?: string;
             target: string;
         };
+        "Complete-mfaRequest": {
+            code: string;
+            mfa_token: string;
+        };
+        "Confirm-password-resetRequest": {
+            new_password: string;
+            token: string;
+        };
+        "Confirm-totpRequest": {
+            code: string;
+        };
+        "Confirm-totpResponse": {
+            /** @description Shown once. Each works once. */
+            recovery_codes: string[] | null;
+        };
         ContactBody: {
             email?: string;
             id: string;
             name: string;
             notes?: string;
+        };
+        Cookie: {
+            Domain: string;
+            /** Format: date-time */
+            Expires: string;
+            HttpOnly: boolean;
+            /** Format: int64 */
+            MaxAge: number;
+            Name: string;
+            Partitioned: boolean;
+            Path: string;
+            Quoted: boolean;
+            Raw: string;
+            RawExpires: string;
+            /** Format: int64 */
+            SameSite: number;
+            Secure: boolean;
+            Unparsed: string[] | null;
+            Value: string;
         };
         "Create-channelRequest": {
             /** @description webpush: {p256dh, auth}. ntfy: {token}. Never returned. */
@@ -1043,7 +1234,7 @@ export interface components {
              * @default pat
              * @enum {string}
              */
-            kind: "pat" | "feed";
+            kind: "pat" | "feed" | "scim";
             library_ids?: string[] | null;
             name: string;
             /** @description read and/or write (personal access tokens). */
@@ -1059,6 +1250,9 @@ export interface components {
             /** @description Display name (registration only). */
             name?: string;
             /** @description Password (10 characters minimum). */
+            password: string;
+        };
+        "Disable-totpRequest": {
             password: string;
         };
         DraftBody: {
@@ -1103,6 +1297,12 @@ export interface components {
             subtitle?: string;
             title: string;
             work_id: string;
+        };
+        "Enroll-totpResponse": {
+            /** @description Base32 secret for manual entry. */
+            secret: string;
+            /** @description otpauth:// URI to render as a QR code. */
+            uri: string;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -1186,6 +1386,10 @@ export interface components {
             place_id?: string;
             title?: string;
             work_id?: string;
+        };
+        InfoBody: {
+            client_name: string;
+            requested_scopes: string[];
         };
         InstanceBody: {
             /**
@@ -1340,6 +1544,15 @@ export interface components {
             returned_on?: string;
             title: string;
         };
+        LoginBody: {
+            csrf_token?: string;
+            /** Format: date-time */
+            expires_at?: string;
+            mfa_required: boolean;
+            /** @description Present when mfa_required: send it to /v1/auth/mfa with a code. */
+            mfa_token?: string;
+            user?: components["schemas"]["UserBody"];
+        };
         LookupBody: {
             draft?: components["schemas"]["DraftBody"];
             edition?: components["schemas"]["EditionBody"];
@@ -1361,6 +1574,30 @@ export interface components {
             profile_id?: string;
             role: string;
             user_id: string;
+        };
+        "Oauth-consentRequest": {
+            approve: boolean;
+            /** @description Restrict the grant to these libraries. */
+            library_ids?: string[] | null;
+            request: components["schemas"]["OauthRequest"];
+            /** @description What the user grants: read and/or write. */
+            scopes?: string[] | null;
+        };
+        "Oauth-consentResponse": {
+            redirect_to: string;
+        };
+        OauthRequest: {
+            client_id: string;
+            code_challenge: string;
+            code_challenge_method: string;
+            redirect_uri: string;
+            resource?: string;
+            scope?: string;
+            state?: string;
+        };
+        "Oidc-infoResponse": {
+            enabled: boolean;
+            label?: string;
         };
         OwnedBody: {
             edition_id: string;
@@ -1444,6 +1681,9 @@ export interface components {
             /** Format: int64 */
             wishlist_added: number;
         };
+        "Request-password-resetRequest": {
+            email: string;
+        };
         "Return-loanRequest": {
             /**
              * Format: date
@@ -1467,6 +1707,12 @@ export interface components {
              * @enum {string}
              */
             status: "added" | "already_owned" | "not_found";
+        };
+        SecurityBody: {
+            mfa_available: boolean;
+            mfa_enabled: boolean;
+            passkeys_available: boolean;
+            reset_available: boolean;
         };
         SeriesBody: {
             /** @description Whole-number volumes below the highest owned one that I do not have. */
@@ -1523,7 +1769,7 @@ export interface components {
             expires_at?: string;
             id: string;
             /** @enum {string} */
-            kind: "pat" | "feed";
+            kind: "pat" | "feed" | "scim";
             /** Format: date-time */
             last_used?: string;
             /** @description When set, the token only reaches these libraries. */
@@ -1589,11 +1835,11 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
-                    "Set-Cookie"?: string;
+                    "Set-Cookie"?: components["schemas"]["Cookie"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionBody"];
+                    "application/json": components["schemas"]["LoginBody"];
                 };
             };
             /** @description Unauthorized */
@@ -1671,6 +1917,96 @@ export interface operations {
             };
         };
     };
+    "complete-mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Complete-mfaRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: components["schemas"]["Cookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "oidc-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Oidc-infoResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "change-password": {
         parameters: {
             query?: never;
@@ -1702,6 +2038,122 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "request-password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Request-password-resetRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "confirm-password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Confirm-password-resetRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4174,6 +4626,153 @@ export interface operations {
             };
         };
     };
+    "enroll-totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Enroll-totpResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "disable-totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Disable-totpRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "confirm-totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Confirm-totpRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Confirm-totpResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-channels": {
         parameters: {
             query?: never;
@@ -4405,6 +5004,44 @@ export interface operations {
             };
         };
     };
+    "get-security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityBody"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "reading-stats": {
         parameters: {
             query?: never;
@@ -4558,6 +5195,108 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "oauth-consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Oauth-consentRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Oauth-consentResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "oauth-request-info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OauthRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InfoBody"];
+                };
             };
             /** @description Unauthorized */
             401: {

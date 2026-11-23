@@ -25,7 +25,19 @@ export function useAuthActions() {
     mutationFn: async (v: { email: string; password: string }) => {
       const { data, error } = await api.POST("/v1/auth/login", { body: v });
       if (!data) throw new Error(problemMessage(error));
-      setCsrfToken(data.csrf_token);
+      if (data.mfa_required) return { mfaToken: data.mfa_token ?? "" };
+      setCsrfToken(data.csrf_token ?? "");
+      return { mfaToken: null };
+    },
+    onSuccess: (r) => (r.mfaToken === null ? done() : undefined),
+  });
+  const completeMfa = useMutation({
+    mutationFn: async (v: { mfaToken: string; code: string }) => {
+      const { data, error } = await api.POST("/v1/auth/mfa", {
+        body: { mfa_token: v.mfaToken, code: v.code },
+      });
+      if (!data) throw new Error(problemMessage(error));
+      setCsrfToken(data.csrf_token ?? "");
     },
     onSuccess: done,
   });
@@ -47,5 +59,5 @@ export function useAuthActions() {
       await qc.invalidateQueries({ queryKey: ["libraries"] });
     },
   });
-  return { login, register, logout };
+  return { login, register, logout, completeMfa };
 }

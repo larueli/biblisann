@@ -147,6 +147,74 @@
         ],
         "type": "object"
       },
+      "Complete-mfaRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 32,
+            "type": "string"
+          },
+          "mfa_token": {
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token",
+          "code"
+        ],
+        "type": "object"
+      },
+      "Confirm-password-resetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "new_password": {
+            "maxLength": 256,
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "type": "object"
+      },
+      "Confirm-totpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 16,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "Confirm-totpResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "recovery_codes": {
+            "description": "Shown once. Each works once.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "recovery_codes"
+        ],
+        "type": "object"
+      },
       "ContactBody": {
         "additionalProperties": false,
         "properties": {
@@ -166,6 +234,79 @@
         "required": [
           "id",
           "name"
+        ],
+        "type": "object"
+      },
+      "Cookie": {
+        "additionalProperties": false,
+        "properties": {
+          "Domain": {
+            "type": "string"
+          },
+          "Expires": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "HttpOnly": {
+            "type": "boolean"
+          },
+          "MaxAge": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "Partitioned": {
+            "type": "boolean"
+          },
+          "Path": {
+            "type": "string"
+          },
+          "Quoted": {
+            "type": "boolean"
+          },
+          "Raw": {
+            "type": "string"
+          },
+          "RawExpires": {
+            "type": "string"
+          },
+          "SameSite": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "Secure": {
+            "type": "boolean"
+          },
+          "Unparsed": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "Value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "Name",
+          "Value",
+          "Quoted",
+          "Path",
+          "Domain",
+          "Expires",
+          "RawExpires",
+          "MaxAge",
+          "Secure",
+          "HttpOnly",
+          "SameSite",
+          "Partitioned",
+          "Raw",
+          "Unparsed"
         ],
         "type": "object"
       },
@@ -360,7 +501,8 @@
             "default": "pat",
             "enum": [
               "pat",
-              "feed"
+              "feed",
+              "scim"
             ],
             "type": "string"
           },
@@ -428,6 +570,19 @@
         },
         "required": [
           "email",
+          "password"
+        ],
+        "type": "object"
+      },
+      "Disable-totpRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "required": [
           "password"
         ],
         "type": "object"
@@ -557,6 +712,24 @@
           "title",
           "authors",
           "provenance"
+        ],
+        "type": "object"
+      },
+      "Enroll-totpResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "description": "Base32 secret for manual entry.",
+            "type": "string"
+          },
+          "uri": {
+            "description": "otpauth:// URI to render as a QR code.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "uri"
         ],
         "type": "object"
       },
@@ -776,6 +949,25 @@
         "required": [
           "id",
           "deleted"
+        ],
+        "type": "object"
+      },
+      "InfoBody": {
+        "additionalProperties": false,
+        "properties": {
+          "client_name": {
+            "type": "string"
+          },
+          "requested_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_name",
+          "requested_scopes"
         ],
         "type": "object"
       },
@@ -1266,6 +1458,32 @@
         ],
         "type": "object"
       },
+      "LoginBody": {
+        "additionalProperties": false,
+        "properties": {
+          "csrf_token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "mfa_required": {
+            "type": "boolean"
+          },
+          "mfa_token": {
+            "description": "Present when mfa_required: send it to /v1/auth/mfa with a code.",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserBody"
+          }
+        },
+        "required": [
+          "mfa_required"
+        ],
+        "type": "object"
+      },
       "LookupBody": {
         "additionalProperties": false,
         "properties": {
@@ -1335,6 +1553,109 @@
           "email",
           "name",
           "role"
+        ],
+        "type": "object"
+      },
+      "Oauth-consentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approve": {
+            "type": "boolean"
+          },
+          "library_ids": {
+            "description": "Restrict the grant to these libraries.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "request": {
+            "$ref": "#/components/schemas/OauthRequest"
+          },
+          "scopes": {
+            "description": "What the user grants: read and/or write.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "request",
+          "approve"
+        ],
+        "type": "object"
+      },
+      "Oauth-consentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "redirect_to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "redirect_to"
+        ],
+        "type": "object"
+      },
+      "OauthRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "code_challenge": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "code_challenge_method": {
+            "maxLength": 10,
+            "type": "string"
+          },
+          "redirect_uri": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "resource": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "scope": {
+            "maxLength": 100,
+            "type": "string"
+          },
+          "state": {
+            "maxLength": 500,
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "redirect_uri",
+          "code_challenge",
+          "code_challenge_method"
+        ],
+        "type": "object"
+      },
+      "Oidc-infoResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
         ],
         "type": "object"
       },
@@ -1590,6 +1911,19 @@
         ],
         "type": "object"
       },
+      "Request-password-resetRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "type": "object"
+      },
       "Return-loanRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1654,6 +1988,30 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "SecurityBody": {
+        "additionalProperties": false,
+        "properties": {
+          "mfa_available": {
+            "type": "boolean"
+          },
+          "mfa_enabled": {
+            "type": "boolean"
+          },
+          "passkeys_available": {
+            "type": "boolean"
+          },
+          "reset_available": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mfa_available",
+          "mfa_enabled",
+          "reset_available",
+          "passkeys_available"
         ],
         "type": "object"
       },
@@ -1842,7 +2200,8 @@
           "kind": {
             "enum": [
               "pat",
-              "feed"
+              "feed",
+              "scim"
             ],
             "type": "string"
           },
@@ -1993,6 +2352,7 @@
   "paths": {
     "/v1/auth/login": {
       "post": {
+        "description": "When the account has a second factor the answer is 200 with mfa_required=true and an mfa_token, and no cookie: finish with /v1/auth/mfa.",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -2009,7 +2369,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionBody"
+                  "$ref": "#/components/schemas/LoginBody"
                 }
               }
             },
@@ -2017,7 +2377,7 @@
             "headers": {
               "Set-Cookie": {
                 "schema": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/Cookie"
                 }
               }
             }
@@ -2112,6 +2472,117 @@
         "x-permission": "authenticated"
       }
     },
+    "/v1/auth/mfa": {
+      "post": {
+        "operationId": "complete-mfa",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Complete-mfaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginBody"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cookie"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Finish a sign-in with an authenticator code or a recovery code",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "public"
+      }
+    },
+    "/v1/auth/oidc": {
+      "get": {
+        "operationId": "oidc-info",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Oidc-infoResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Whether single sign-on is configured, and the button label",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "public"
+      }
+    },
     "/v1/auth/password": {
       "post": {
         "operationId": "change-password",
@@ -2165,6 +2636,136 @@
           "auth"
         ],
         "x-permission": "authenticated"
+      }
+    },
+    "/v1/auth/password-reset": {
+      "post": {
+        "operationId": "request-password-reset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Request-password-resetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Email a password reset link (always answers 204, whether or not the address exists)",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "public"
+      }
+    },
+    "/v1/auth/password-reset/confirm": {
+      "post": {
+        "operationId": "confirm-password-reset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Confirm-password-resetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Set a new password with the token from the reset email",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "public"
       }
     },
     "/v1/auth/register": {
@@ -5380,6 +5981,173 @@
         "x-permission": "authenticated"
       }
     },
+    "/v1/me/mfa/totp": {
+      "delete": {
+        "operationId": "disable-totp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Disable-totpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Turn the authenticator off (password required)",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "authenticated"
+      },
+      "post": {
+        "operationId": "enroll-totp",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enroll-totpResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Start authenticator-app enrollment",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "authenticated"
+      }
+    },
+    "/v1/me/mfa/totp/confirm": {
+      "post": {
+        "operationId": "confirm-totp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Confirm-totpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Confirm-totpResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Confirm enrollment with a first code; returns one-time recovery codes",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "authenticated"
+      }
+    },
     "/v1/me/notification-channels": {
       "get": {
         "operationId": "list-channels",
@@ -5669,6 +6437,48 @@
         "x-permission": "authenticated"
       }
     },
+    "/v1/me/security": {
+      "get": {
+        "operationId": "get-security",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Which sign-in protections exist on this server and which I use",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "authenticated"
+      }
+    },
     "/v1/me/stats": {
       "get": {
         "operationId": "reading-stats",
@@ -5881,6 +6691,130 @@
         "summary": "Revoke a token",
         "tags": [
           "tokens"
+        ],
+        "x-permission": "authenticated"
+      }
+    },
+    "/v1/oauth/consent": {
+      "post": {
+        "operationId": "oauth-consent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Oauth-consentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Oauth-consentResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Approve or deny an authorization request; returns where to send the browser",
+        "tags": [
+          "oauth"
+        ],
+        "x-permission": "authenticated"
+      }
+    },
+    "/v1/oauth/request": {
+      "post": {
+        "operationId": "oauth-request-info",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OauthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InfoBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Validate an authorization request and describe the client (for the consent screen)",
+        "tags": [
+          "oauth"
         ],
         "x-permission": "authenticated"
       }

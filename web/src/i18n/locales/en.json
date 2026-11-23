@@ -24,7 +24,25 @@
     "password": "Password",
     "passwordHint": "At least 10 characters. Pick a passphrase, not a word.",
     "switchToRegister": "No account yet? Create one",
-    "switchToLogin": "I already have an account"
+    "switchToLogin": "I already have an account",
+    "mfaTitle": "Second step",
+    "mfaHelp": "Enter the code from your authenticator app, or a recovery code.",
+    "code": "Code",
+    "verify": "Verify",
+    "forgot": "Forgot your password?",
+    "resetTitle": "Reset your password",
+    "newPassword": "New password",
+    "resetSend": "Send the link",
+    "resetSet": "Set the password",
+    "resetSent": "If this address has an account, a link was sent.",
+    "resetDone": "Password changed. You can sign in.",
+    "backToLogin": "Back to sign in",
+    "sso": {
+      "button": "Single sign-on",
+      "denied": "Sign-in was cancelled.",
+      "refused": "This identity is not allowed to sign in here (is its email verified?).",
+      "error": "Single sign-on failed."
+    }
   },
   "library": {
     "search": "Search title, author, ISBN…",
@@ -150,5 +168,27 @@
     "lendTo": "Lend to…",
     "lend": "Lend",
     "lent": "Lent. It is listed under Loans."
+  },
+  "security": {
+    "title": "Two-factor authentication",
+    "enabled": "Two-factor authentication is on.",
+    "passwordToDisable": "Password to turn it off",
+    "disable": "Turn off",
+    "scan": "Scan this code with an authenticator app, then enter a code.",
+    "qrAlt": "QR code for your authenticator app",
+    "confirm": "Confirm",
+    "enable": "Turn on two-factor authentication",
+    "recoveryOnce": "Recovery codes, shown once. Each works once if you lose your device:"
+  },
+  "oauth": {
+    "title": "Allow {{client}} to use your library?",
+    "explain": "This application will act on your behalf through MCP. It can never do more than you can.",
+    "allowWrite": "Allow changes (add books, lend…)",
+    "notRequested": "not requested",
+    "libraries": "Limit to libraries",
+    "librariesHelp": "None ticked means all your libraries.",
+    "allow": "Allow",
+    "deny": "Deny",
+    "invalid": "This authorization request is invalid. Close this page."
   }
 }

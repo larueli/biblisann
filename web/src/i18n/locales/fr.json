@@ -24,7 +24,25 @@
     "password": "Mot de passe",
     "passwordHint": "10 caractères minimum. Choisissez une phrase de passe, pas un mot.",
     "switchToRegister": "Pas encore de compte ? En créer un",
-    "switchToLogin": "J'ai déjà un compte"
+    "switchToLogin": "J'ai déjà un compte",
+    "mfaTitle": "Seconde étape",
+    "mfaHelp": "Saisissez le code de votre application d'authentification, ou un code de secours.",
+    "code": "Code",
+    "verify": "Valider",
+    "forgot": "Mot de passe oublié ?",
+    "resetTitle": "Réinitialiser le mot de passe",
+    "newPassword": "Nouveau mot de passe",
+    "resetSend": "Envoyer le lien",
+    "resetSet": "Définir le mot de passe",
+    "resetSent": "Si cette adresse a un compte, un lien a été envoyé.",
+    "resetDone": "Mot de passe modifié. Vous pouvez vous connecter.",
+    "backToLogin": "Retour à la connexion",
+    "sso": {
+      "button": "Connexion unique (SSO)",
+      "denied": "Connexion annulée.",
+      "refused": "Cette identité ne peut pas se connecter ici (son e-mail est-il vérifié ?).",
+      "error": "Échec de la connexion unique."
+    }
   },
   "library": {
     "search": "Rechercher titre, auteur, ISBN…",
@@ -150,5 +168,27 @@
     "lendTo": "Prêter à…",
     "lend": "Prêter",
     "lent": "Prêté. Voir l'onglet Prêts."
+  },
+  "security": {
+    "title": "Authentification à deux facteurs",
+    "enabled": "L'authentification à deux facteurs est activée.",
+    "passwordToDisable": "Mot de passe pour la désactiver",
+    "disable": "Désactiver",
+    "scan": "Scannez ce code avec une application d'authentification, puis saisissez un code.",
+    "qrAlt": "QR code pour votre application d'authentification",
+    "confirm": "Confirmer",
+    "enable": "Activer l'authentification à deux facteurs",
+    "recoveryOnce": "Codes de secours, affichés une seule fois. Chacun sert une fois si vous perdez votre appareil :"
+  },
+  "oauth": {
+    "title": "Autoriser {{client}} à utiliser votre bibliothèque ?",
+    "explain": "Cette application agira en votre nom via MCP. Elle ne peut jamais faire plus que vous.",
+    "allowWrite": "Autoriser les modifications (ajouter des livres, prêter…)",
+    "notRequested": "non demandé",
+    "libraries": "Limiter aux bibliothèques",
+    "librariesHelp": "Aucune cochée : toutes vos bibliothèques.",
+    "allow": "Autoriser",
+    "deny": "Refuser",
+    "invalid": "Cette demande d'autorisation est invalide. Fermez cette page."
   }
 }
