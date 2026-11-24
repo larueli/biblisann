@@ -26,6 +26,24 @@ redis.call('SET', KEYS[1], tat + interval, 'PX', burst * interval + 1000)
 return {1, 0}
 `)
 
+// gcraMeter is gcra with a cost and a report of what is left.
+var gcraMeter = redis.NewScript(`
+local t = redis.call('TIME')
+local now = t[1] * 1000 + math.floor(t[2] / 1000)
+local interval = tonumber(ARGV[1])
+local burst = tonumber(ARGV[2])
+local cost = tonumber(ARGV[3])
+local tat = tonumber(redis.call('GET', KEYS[1]))
+if not tat or tat < now then tat = now end
+local newTat = tat + cost * interval
+local allowAt = newTat - burst * interval
+if now < allowAt then
+  return {0, allowAt - now, math.max(0, math.floor((burst * interval - (tat - now)) / interval)), tat - now}
+end
+redis.call('SET', KEYS[1], newTat, 'PX', burst * interval + 1000)
+return {1, 0, math.max(0, math.floor((burst * interval - (newTat - now)) / interval)), newTat - now}
+`)
+
 // Valkey is a limiter shared by all replicas (works with Valkey and Redis). When the server is
 // unreachable it falls back to the per-process limiter, so a cache outage never opens the door
 // completely nor locks everybody out.
@@ -67,4 +85,18 @@ func (v *Valkey) Allow(key string) (bool, time.Duration) {
 		return true, 0
 	}
 	return false, time.Duration(res[1]) * time.Millisecond
+}
+
+// Take implements Meter.
+func (v *Valkey) Take(key string, cost int) Decision {
+	cost = min(max(cost, 1), v.burst)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	res, err := gcraMeter.Run(ctx, v.c, []string{v.prefix + "m:" + key}, v.interval.Milliseconds(), v.burst, cost).Int64Slice()
+	if err != nil || len(res) != 4 {
+		v.log.Warn("valkey rate limit unavailable, using the local limiter", "error", err)
+		return v.fallback.Take(key, cost)
+	}
+	return Decision{Allowed: res[0] == 1, Limit: v.burst, Remaining: int(res[2]),
+		RetryAfter: time.Duration(res[1]) * time.Millisecond, Reset: time.Duration(res[3]) * time.Millisecond}
 }

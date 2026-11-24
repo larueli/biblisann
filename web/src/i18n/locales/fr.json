@@ -345,5 +345,13 @@
     "save": "Enregistrer à la main",
     "refresh": "Actualiser depuis les fournisseurs",
     "exclude": "Exclure des actualisations des fournisseurs"
+  },
+  "bulk": {
+    "title": "Ajouter une liste d'ISBN",
+    "placeholder": "Collez des ISBN, un par ligne ou séparés par des virgules",
+    "add": "Tout ajouter",
+    "summary": "{{queued}} en file, {{owned}} déjà possédés, {{invalid}} invalides.",
+    "remaining": "Encore {{count}} à ajouter.",
+    "slowing": "Ralentissement pour respecter la limite du serveur : prochain dans {{seconds}} s."
   }
 }

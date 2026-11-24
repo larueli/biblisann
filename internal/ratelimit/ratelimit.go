@@ -74,3 +74,51 @@ func (m *Memory) gc(now time.Time) {
 		}
 	}
 }
+
+// Decision is the outcome of taking tokens from a quota, with what clients need to pace themselves.
+type Decision struct {
+	Allowed    bool
+	Limit      int           // size of the bucket (the policy quota)
+	Remaining  int           // whole tokens left after this call
+	Reset      time.Duration // time until the bucket is full again
+	RetryAfter time.Duration // when Allowed is false: time until the call would succeed
+}
+
+// Meter is a Limiter that also reports its state, to build RateLimit headers. Cost lets one call
+// consume several tokens (a lookup that hits external providers weighs more than a page view).
+type Meter interface {
+	Take(key string, cost int) Decision
+}
+
+// Take implements Meter.
+func (m *Memory) Take(key string, cost int) Decision {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	m.gc(now)
+	limit := int(m.burst)
+	b, ok := m.buckets[key]
+	if !ok {
+		if len(m.buckets) >= m.maxItems {
+			return Decision{Limit: limit, RetryAfter: time.Second, Reset: time.Second}
+		}
+		b = &bucket{tokens: m.burst, last: now}
+		m.buckets[key] = b
+	}
+	b.tokens = min(m.burst, b.tokens+now.Sub(b.last).Seconds()*m.rate)
+	b.last = now
+	need := float64(max(cost, 1))
+	if need > m.burst { // a call heavier than the whole quota can never succeed: cap it
+		need = m.burst
+	}
+	d := Decision{Limit: limit}
+	if b.tokens >= need {
+		b.tokens -= need
+		d.Allowed = true
+	} else {
+		d.RetryAfter = time.Duration((need - b.tokens) / m.rate * float64(time.Second))
+	}
+	d.Remaining = int(b.tokens)
+	d.Reset = time.Duration((m.burst - b.tokens) / m.rate * float64(time.Second))
+	return d
+}

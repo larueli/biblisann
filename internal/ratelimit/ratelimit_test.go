@@ -40,3 +40,24 @@ func TestMemoryFailsClosedWhenFull(t *testing.T) {
 		t.Error("existing exhausted key stays refused")
 	}
 }
+
+func TestMemoryTakeReportsTheQuota(t *testing.T) {
+	m := NewMemory(10, time.Second)
+	now := time.Now()
+	m.now = func() time.Time { return now }
+	d := m.Take("u", 1)
+	if !d.Allowed || d.Limit != 10 || d.Remaining != 9 || d.Reset != time.Second {
+		t.Fatalf("first take: %+v", d)
+	}
+	if d := m.Take("u", 8); !d.Allowed || d.Remaining != 1 {
+		t.Fatalf("heavy take: %+v", d)
+	}
+	d = m.Take("u", 5)
+	if d.Allowed || d.RetryAfter != 4*time.Second || d.Remaining != 1 {
+		t.Fatalf("over quota: %+v", d)
+	}
+	now = now.Add(4 * time.Second)
+	if d := m.Take("u", 5); !d.Allowed {
+		t.Fatalf("after waiting: %+v", d)
+	}
+}

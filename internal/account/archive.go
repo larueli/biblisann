@@ -15,6 +15,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -191,14 +194,39 @@ func putEntry(tw *tar.Writer, name string, data []byte) error {
 	return err
 }
 
-// archive is a parsed archive: NDJSON entries by name, and cover bytes by SHA.
+// archive is a parsed archive: NDJSON entries by name (held in memory, they are metadata) and
+// covers by SHA (spooled to a temporary directory on disk: they are the bulk of an archive, and
+// two imports may run at once). Close removes the directory.
 type archive struct {
 	entries map[string][]byte
-	covers  map[string][]byte
+	covers  map[string]string // SHA -> temporary file
+	dir     string
 }
 
-func readArchive(r io.Reader) (*archive, error) {
-	a := &archive{entries: map[string][]byte{}, covers: map[string][]byte{}}
+// Close deletes the spooled covers.
+func (a *archive) Close() {
+	if a != nil && a.dir != "" {
+		_ = os.RemoveAll(a.dir)
+	}
+}
+
+// cover returns the bytes of a spooled cover (at most maxCover).
+func (a *archive) cover(sha string) ([]byte, bool) {
+	path, ok := a.covers[sha]
+	if !ok {
+		return nil, false
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // path was built from a counter inside our own temporary directory
+	return data, err == nil
+}
+
+func readArchive(r io.Reader) (_ *archive, err error) {
+	a := &archive{entries: map[string][]byte{}, covers: map[string]string{}}
+	defer func() {
+		if err != nil {
+			a.Close()
+		}
+	}()
 	tr := tar.NewReader(io.LimitReader(r, maxArchiveBytes+1))
 	total := 0
 	for {
@@ -222,7 +250,18 @@ func readArchive(r io.Reader) (*archive, error) {
 		}
 		switch {
 		case strings.HasPrefix(h.Name, "covers/"):
-			a.covers[strings.TrimPrefix(h.Name, "covers/")] = data
+			sha := strings.TrimPrefix(h.Name, "covers/")
+			if a.dir == "" {
+				if a.dir, err = os.MkdirTemp("", "biblisann-import-"); err != nil {
+					return nil, fmt.Errorf("account: spool covers: %w", err)
+				}
+			}
+			// The name inside the archive is untrusted: the file name is a counter, never the entry name.
+			path := filepath.Join(a.dir, strconv.Itoa(len(a.covers)))
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				return nil, fmt.Errorf("account: spool covers: %w", err)
+			}
+			a.covers[sha] = path
 		case strings.HasSuffix(h.Name, ".ndjson"):
 			a.entries[h.Name] = data
 		}

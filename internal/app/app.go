@@ -238,6 +238,18 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		}
 		limiter = v
 	}
+	var quota ratelimit.Meter
+	if cfg.APIRateLimit > 0 {
+		every := time.Minute / time.Duration(cfg.APIRateLimit)
+		quota = ratelimit.NewMemory(cfg.APIRateLimit, every)
+		if cfg.ValkeyURL != "" {
+			v, err := ratelimit.NewValkey(cfg.ValkeyURL.Reveal(), cfg.APIRateLimit, every, log)
+			if err != nil {
+				return nil, nil, err
+			}
+			quota = v
+		}
+	}
 	var passkeySvc *passkeys.Service
 	if cfg.Passkeys {
 		if ps, err := passkeys.New(pool, cfg.BaseURL, "Biblisann"); err != nil {
@@ -262,7 +274,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			return backup.Export(ctx, pool, covers, w, version.Version())
 		},
 		TokenSvc: tokenSvc, Tokens: api.MultiResolver{tokenSvc, oauthSvc}, OAuth: oauthSvc, Notify: dispatcher, Channels: channels,
-		Limiter: limiter,
+		Limiter: limiter, Quota: quota,
 	})
 	return h, jc, nil
 }

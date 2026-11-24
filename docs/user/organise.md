@@ -40,6 +40,12 @@ Library administrators share a library with a user (by email) or a group, with t
 
 **Settings > Access tokens** creates personal access tokens (`Authorization: Bearer bb_pat_…`). A token is read-only unless you allow changes, never exceeds your rights, and can be restricted to some libraries through the API. The MCP endpoint `/mcp` accepts the same tokens, so an AI assistant can search your library, check whether you own a book, add a scanned ISBN or lend a book. It has no delete tool, and everything it reads from your library is flagged to the assistant as untrusted text.
 
+## Adding many books, and request limits
+
+In the scan page, **Add a list of ISBNs** takes pasted ISBNs (one per line, or separated by commas or semicolons; ISBN-10 and hyphens are fine), skips books you already own and queues the rest. They are sent one by one through the same offline outbox as scans, so they survive a closed tab, and the page slows down by itself when the server's request limit is near.
+
+Every authenticated API response carries the IETF rate-limit header fields (a draft standard, `draft-ietf-httpapi-ratelimit-headers`): `RateLimit-Policy: "default";q=600;w=60` (the quota and its window in seconds) and `RateLimit: "default";r=12;t=30` (tokens left and seconds until full). Over the limit the answer is `429` with `Retry-After`. Scripts should read these headers and pace themselves.
+
 ## Import and backup
 
 **Settings > Import from another service** loads a **Goodreads**, **StoryGraph** or **LibraryThing** export (CSV; LibraryThing's tab-separated export works too): books you read or own get a copy, "to-read" books go to the wishlist, star ratings become grades (five stars is 10), reviews become comments. No metadata provider is queried; re-importing does not duplicate copies.

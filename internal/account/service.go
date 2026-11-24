@@ -322,6 +322,7 @@ func (s *Service) ImportLibrary(ctx context.Context, r io.Reader) (ImportReport,
 	if err != nil {
 		return rep, err
 	}
+	defer a.Close()
 	data, ok := a.entries["library.ndjson"]
 	if !ok {
 		return rep, fmt.Errorf("%w: no library.ndjson", ErrArchive)
@@ -374,7 +375,7 @@ func (s *Service) importLibrary(ctx context.Context, a *archive, data []byte, re
 			}
 			editions[r.Key] = e
 			if r.CoverSHA != "" && created && e.CoverID == nil { // never fill covers of editions other users already share
-				if data, ok := a.covers[r.CoverSHA]; ok {
+				if data, ok := a.cover(r.CoverSHA); ok {
 					if _, done := stored[r.CoverSHA]; !done {
 						stored[r.CoverSHA] = s.catalog.StoreCover(ctx, data) // re-encoded: never trust archive images
 					}
@@ -510,6 +511,7 @@ func (s *Service) ImportAccount(ctx context.Context, r io.Reader) (ImportReport,
 	if err != nil {
 		return rep, err
 	}
+	defer a.Close()
 	acc, ok := a.entries["account.ndjson"]
 	if !ok {
 		return rep, fmt.Errorf("%w: no account.ndjson", ErrArchive)

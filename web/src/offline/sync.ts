@@ -1,5 +1,6 @@
 import { api, type Schemas } from "../api/client";
 import { type BiblisannDB, db as defaultDb, type OutboxItem } from "./db";
+import { waitBeforeNext } from "./pacing";
 
 /** Downloads index changes for a library until caught up. Returns how many entries were applied. */
 export async function syncIndex(libraryId: string, db: BiblisannDB = defaultDb): Promise<number> {
@@ -70,20 +71,45 @@ type ScanResult = Schemas["ScanResult"];
  * Sends pending scans in order. A network failure leaves the item pending (it is retried with
  * the same key); a refusal from the server marks it failed. Returns the number sent.
  */
-export async function flushOutbox(db: BiblisannDB = defaultDb): Promise<number> {
+export interface FlushOptions {
+  /** Replaces the real timer (tests). */
+  sleep?: (ms: number) => Promise<void>;
+  /** Told how long the flush pauses to respect the server quota (0 when it resumes). */
+  onWait?: (ms: number) => void;
+}
+
+const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+export async function flushOutbox(
+  db: BiblisannDB = defaultDb,
+  options: FlushOptions = {},
+): Promise<number> {
+  const sleep = options.sleep ?? realSleep;
+  const pause = async (ms: number) => {
+    if (ms <= 0) return;
+    options.onWait?.(ms);
+    await sleep(ms);
+    options.onWait?.(0);
+  };
   const items = await db.outbox.where("status").anyOf("pending", "sending").sortBy("createdAt");
   let sent = 0;
   for (const item of items) {
     await db.outbox.update(item.key, { status: "sending" });
     try {
-      const { data, error, response } = await api.POST("/v1/libraries/{id}/scan", {
-        params: { path: { id: item.libraryId }, header: { "Idempotency-Key": item.key } },
-        body: {
-          isbn: item.isbn13,
-          allow_duplicate: item.allowDuplicate,
-          ...(item.placeId ? { place_id: item.placeId } : {}),
-        },
-      });
+      let attempt = 0;
+      let result = await sendScan(item);
+      // A 429 is not a refusal: wait as told and send the same item again (same key).
+      while (result.response.status === 429 && attempt < 5) {
+        attempt++;
+        await pause(waitBeforeNext(result.response));
+        result = await sendScan(item);
+      }
+      const { data, error, response } = result;
+      await pause(waitBeforeNext(response)); // slow down before the next one when the quota is nearly spent
+      if (response.status === 429) {
+        await db.outbox.update(item.key, { status: "pending" });
+        return sent;
+      }
       if (data) {
         const r: ScanResult = data;
         await db.outbox.update(item.key, {
@@ -109,4 +135,15 @@ export async function flushOutbox(db: BiblisannDB = defaultDb): Promise<number> 
     }
   }
   return sent;
+}
+
+function sendScan(item: OutboxItem) {
+  return api.POST("/v1/libraries/{id}/scan", {
+    params: { path: { id: item.libraryId }, header: { "Idempotency-Key": item.key } },
+    body: {
+      isbn: item.isbn13,
+      allow_duplicate: item.allowDuplicate,
+      ...(item.placeId ? { place_id: item.placeId } : {}),
+    },
+  });
 }

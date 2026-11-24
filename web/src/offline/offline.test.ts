@@ -83,3 +83,31 @@ describe("outbox", () => {
     expect((await db.outbox.get(item.key))?.status).toBe("failed");
   });
 });
+
+describe("flushOutbox pacing", () => {
+  it("waits as told on a 429 and sends the same item again", async () => {
+    const item = await enqueueScan("lib1", "9780306406157", false, db);
+    let calls = 0;
+    const keys: string[] = [];
+    vi.stubGlobal("fetch", async (req: Request) => {
+      calls++;
+      keys.push(req.headers.get("Idempotency-Key") ?? "");
+      if (calls === 1) {
+        return new Response(JSON.stringify({ detail: "slow down" }), {
+          status: 429,
+          headers: { "Content-Type": "application/problem+json", "Retry-After": "3" },
+        });
+      }
+      return jsonResponse({ status: "added" });
+    });
+    const waits: number[] = [];
+    const sent = await flushOutbox(db, {
+      sleep: async () => undefined,
+      onWait: (ms) => waits.push(ms),
+    });
+    expect(sent).toBe(1);
+    expect(keys).toEqual([item.key, item.key]);
+    expect(waits[0]).toBe(3000);
+    expect((await db.outbox.get(item.key))?.status).toBe("added");
+  });
+});

@@ -34,6 +34,7 @@ A commented starting point is in `deploy/compose/.env.example`.
 | `BIBLISANN_PASSKEYS` | `true` | no | `false` turns passkey sign-in off. Passkeys need `BIBLISANN_BASE_URL` to be the real https address (or localhost). |
 | `BIBLISANN_OIDC_ISSUER`, `_CLIENT_ID`, `_SCOPES`, `_GROUPS_CLAIM` (`groups`), `_ADMIN_GROUP`, `_AUTO_CREATE` (`true`), `_LABEL` | none | no | Single sign-on. Redirect URI to register at the provider: `<BASE_URL>/v1/auth/oidc/callback`. |
 | `BIBLISANN_EMAIL_DAILY_CAP` | `20` | no | Most mails one user can trigger per day (notifications and email confirmation codes). Extra mails are skipped until tomorrow. |
+| `BIBLISANN_API_RATE_LIMIT` | `600` | no | Request quota per user and minute (`0` turns it off). Calls that reach external providers weigh 5, refreshes 10, imports 20; cover images and anonymous routes are not metered. Shared by all replicas when `BIBLISANN_VALKEY_URL` is set. |
 | `BIBLISANN_OIDC_CLIENT_SECRET` | none | yes (`_FILE`) | OIDC client secret. |
 | `BIBLISANN_GOOGLE_BOOKS_KEY` | none | yes (`_FILE`) | Optional Google Books API key (add `google` to `BIBLISANN_PROVIDERS` to use the provider). Other providers: `loc`, `k10plus`. |
 | `BIBLISANN_ADDON_PROVIDERS_FILE` | none | no (the file holds tokens) | JSON list `[{"name":"mine","url":"https://...","token":"..."}]` of addon providers. |

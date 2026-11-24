@@ -87,7 +87,9 @@ type Config struct {
 	SMTPFrom     string
 	// EmailDailyCap is the most mails one user can trigger per day (notifications and confirmation codes).
 	EmailDailyCap int
-	SMTPMode      string // starttls, tls or none
+	// APIRateLimit is the request quota per user and minute (weighted, see docs/user/configuration.md); 0 turns it off.
+	APIRateLimit int
+	SMTPMode     string // starttls, tls or none
 
 	// Web Push (optional): generate keys with `biblisann vapid`.
 	VAPIDPublicKey  string
@@ -144,6 +146,7 @@ func Load(src Sources, opts Options) (Config, error) {
 		SMTPUsername:         r.str("SMTP_USERNAME", ""),
 		SMTPFrom:             r.str("SMTP_FROM", ""),
 		EmailDailyCap:        r.integer("EMAIL_DAILY_CAP", 20),
+		APIRateLimit:         r.integer("API_RATE_LIMIT", 600),
 		SMTPMode:             r.oneOf("SMTP_MODE", "starttls", "starttls", "tls", "none"),
 		VAPIDPublicKey:       r.str("VAPID_PUBLIC_KEY", ""),
 		VAPIDSubject:         r.str("VAPID_SUBJECT", ""),

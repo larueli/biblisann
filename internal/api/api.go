@@ -60,6 +60,7 @@ type Deps struct {
 	Notify    *notify.Dispatcher
 	Channels  *notify.Channels
 	Limiter   ratelimit.Limiter // login and registration throttling
+	Quota     ratelimit.Meter   // per-user request quota (nil: unlimited)
 	Tokens    TokenResolver
 	Importer  *importer.Importer
 	OIDC      *oidc.Service  // nil: single sign-on is off
@@ -199,6 +200,9 @@ func New(d Deps) (http.Handler, huma.API) {
 	var h http.Handler = mux
 	if d.Metrics != nil {
 		h = d.Metrics.Wrap(mux) // innermost: the route pattern is known after the mux matched
+	}
+	if d.Quota != nil {
+		h = quotaMiddleware(d.Quota, h)
 	}
 	if d.Auth != nil {
 		h = (&Authenticator{Auth: d.Auth, BaseURL: d.BaseURL, Secure: srv.secure, Tokens: d.Tokens}).Middleware(h)

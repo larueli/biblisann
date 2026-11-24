@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { normalizeIsbn } from "../../lib/isbn";
 import { db } from "../../offline/db";
 import { enqueueScan, flushOutbox, ownedLocally, syncIndex } from "../../offline/sync";
+import { BulkIsbns } from "./BulkIsbns";
 import { createDetector } from "./scanner";
 
 export function ScanPage() {
@@ -151,6 +152,7 @@ export function ScanPage() {
           {message}
         </p>
       )}
+      <BulkIsbns libraryId={libraryId} {...(placeId ? { placeId } : {})} />
       <section>
         <h2 className="font-semibold">{t("scan.outbox")}</h2>
         <ul className="mt-2 flex flex-col gap-1 text-sm">

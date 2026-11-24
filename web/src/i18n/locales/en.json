@@ -345,5 +345,13 @@
     "save": "Save by hand",
     "refresh": "Refresh from providers",
     "exclude": "Exclude from provider refreshes"
+  },
+  "bulk": {
+    "title": "Add a list of ISBNs",
+    "placeholder": "Paste ISBNs, one per line or separated by commas",
+    "add": "Add all",
+    "summary": "{{queued}} queued, {{owned}} already owned, {{invalid}} not valid.",
+    "remaining": "{{count}} left to add.",
+    "slowing": "Slowing down to respect the server limit: next one in {{seconds}} s."
   }
 }
