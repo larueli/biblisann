@@ -47,13 +47,36 @@ FROM loans l LEFT JOIN contacts c ON c.id = l.contact_id
 WHERE l.owner_id = $1 AND l.returned_on IS NULL AND l.due_on IS NOT NULL ORDER BY l.due_on;
 
 -- name: CreateChannel :one
-INSERT INTO notification_channels (user_id, kind, target, config) VALUES ($1, $2, $3, $4) RETURNING *;
+-- Only email channels wait for a confirmation code; every other kind is usable at once.
+INSERT INTO notification_channels (user_id, kind, target, config, confirmed_at)
+VALUES ($1, $2, $3, $4, CASE WHEN $2 = 'email' THEN NULL ELSE now() END) RETURNING *;
+
+-- name: GetChannel :one
+SELECT * FROM notification_channels WHERE id = $1 AND user_id = $2;
+
+-- name: SetChannelCode :exec
+UPDATE notification_channels SET confirm_hash = $3, confirm_expires = $4, confirm_attempts = 0
+WHERE id = $1 AND user_id = $2 AND confirmed_at IS NULL;
+
+-- name: BumpChannelAttempts :one
+UPDATE notification_channels SET confirm_attempts = confirm_attempts + 1
+WHERE id = $1 AND user_id = $2 AND confirmed_at IS NULL RETURNING confirm_attempts;
+
+-- name: ConfirmChannel :execrows
+UPDATE notification_channels SET confirmed_at = now(), confirm_hash = NULL, confirm_expires = NULL
+WHERE id = $1 AND user_id = $2 AND confirmed_at IS NULL AND confirm_hash = $3 AND confirm_expires > now();
+
+-- name: TakeEmailQuota :one
+-- Counts one mail for the user today unless the cap is reached; false means "do not send".
+INSERT INTO email_quota (user_id, day, sent) VALUES ($1, current_date, 1)
+ON CONFLICT (user_id, day) DO UPDATE SET sent = email_quota.sent + 1 WHERE email_quota.sent < $2
+RETURNING true;
 
 -- name: ListChannels :many
 SELECT * FROM notification_channels WHERE user_id = $1 ORDER BY created_at;
 
 -- name: ListEnabledChannels :many
-SELECT * FROM notification_channels WHERE user_id = $1 AND enabled;
+SELECT * FROM notification_channels WHERE user_id = $1 AND enabled AND confirmed_at IS NOT NULL;
 
 -- name: DeleteChannel :execrows
 DELETE FROM notification_channels WHERE id = $1 AND user_id = $2;

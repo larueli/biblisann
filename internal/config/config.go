@@ -85,7 +85,9 @@ type Config struct {
 	SMTPUsername string
 	SMTPPassword Secret
 	SMTPFrom     string
-	SMTPMode     string // starttls, tls or none
+	// EmailDailyCap is the most mails one user can trigger per day (notifications and confirmation codes).
+	EmailDailyCap int
+	SMTPMode      string // starttls, tls or none
 
 	// Web Push (optional): generate keys with `biblisann vapid`.
 	VAPIDPublicKey  string
@@ -141,6 +143,7 @@ func Load(src Sources, opts Options) (Config, error) {
 		SMTPPort:             r.integer("SMTP_PORT", 587),
 		SMTPUsername:         r.str("SMTP_USERNAME", ""),
 		SMTPFrom:             r.str("SMTP_FROM", ""),
+		EmailDailyCap:        r.integer("EMAIL_DAILY_CAP", 20),
 		SMTPMode:             r.oneOf("SMTP_MODE", "starttls", "starttls", "tls", "none"),
 		VAPIDPublicKey:       r.str("VAPID_PUBLIC_KEY", ""),
 		VAPIDSubject:         r.str("VAPID_SUBJECT", ""),

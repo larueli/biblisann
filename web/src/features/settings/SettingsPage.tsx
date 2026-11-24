@@ -8,6 +8,7 @@ import { useLibraries } from "../library/useLibraries";
 import { AccountSection } from "./Account";
 import { AdminGroups } from "./AdminGroups";
 import { AdminUsers } from "./AdminUsers";
+import { ChannelConfirm } from "./ChannelConfirm";
 import { Hardcover } from "./Hardcover";
 import { LibrarySharing } from "./LibrarySharing";
 import { pushSupported, subscribePush } from "./push";
@@ -173,13 +174,16 @@ function Channels() {
       <h2 className="text-lg font-semibold">{t("settings.notifications")}</h2>
       <ul className="flex flex-col gap-1">
         {channels.data?.channels.map((c) => (
-          <li key={c.id} className="flex items-center justify-between gap-2">
-            <span className="break-all">
-              {c.kind}: {c.target}
-            </span>
-            <button type="button" className={secondary} onClick={() => remove.mutate(c.id)}>
-              {t("settings.revoke")}
-            </button>
+          <li key={c.id} className="flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="break-all">
+                {c.kind}: {c.target}
+              </span>
+              <button type="button" className={secondary} onClick={() => remove.mutate(c.id)}>
+                {t("settings.revoke")}
+              </button>
+            </div>
+            {!c.confirmed && <ChannelConfirm id={c.id} />}
           </li>
         ))}
       </ul>

@@ -74,6 +74,12 @@ type Edition struct {
 	SyncExcluded   bool
 }
 
+type EmailQuotum struct {
+	UserID uuid.UUID
+	Day    time.Time
+	Sent   int32
+}
+
 type ExternalGrade struct {
 	WorkID    uuid.UUID
 	Source    string
@@ -257,13 +263,17 @@ type MfaChallenge struct {
 }
 
 type NotificationChannel struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	Kind      string
-	Target    string
-	Config    []byte
-	Enabled   bool
-	CreatedAt time.Time
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Kind            string
+	Target          string
+	Config          []byte
+	Enabled         bool
+	CreatedAt       time.Time
+	ConfirmedAt     *time.Time
+	ConfirmHash     []byte
+	ConfirmExpires  *time.Time
+	ConfirmAttempts int32
 }
 
 type OauthAccessToken struct {

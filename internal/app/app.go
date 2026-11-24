@@ -167,6 +167,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	q := dbsqlc.New(pool)
 
 	var mail auth.Mailer
+	mailEnabled := false
 	senders := []notify.Sender{notify.Webhook{HTTP: fetcher}, notify.Ntfy{HTTP: fetcher}}
 	if cfg.SMTPHost != "" {
 		mailer := notify.Email{Config: notify.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort,
@@ -174,6 +175,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		senders = append(senders, mailer)
 		authSvc.SetMailer(mailer)
 		mail = mailer
+		mailEnabled = true
 	}
 	if cfg.VAPIDPublicKey != "" {
 		subject := cfg.VAPIDSubject
@@ -185,6 +187,11 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	}
 	oauthSvc := oauth.New(pool, cfg.BaseURL.String())
 	dispatcher := notify.NewDispatcher(q, log, senders...)
+	dispatcher.EmailDailyCap = cfg.EmailDailyCap
+	channels := notify.NewChannels(q)
+	if mailEnabled {
+		channels.SetMailer(mail, cfg.EmailDailyCap)
+	}
 
 	var hc interface {
 		Refresh(ctx context.Context, workID uuid.UUID) error
@@ -254,7 +261,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		Backup: func(ctx context.Context, w io.Writer) error {
 			return backup.Export(ctx, pool, covers, w, version.Version())
 		},
-		TokenSvc: tokenSvc, Tokens: api.MultiResolver{tokenSvc, oauthSvc}, OAuth: oauthSvc, Notify: dispatcher, Channels: notify.NewChannels(q),
+		TokenSvc: tokenSvc, Tokens: api.MultiResolver{tokenSvc, oauthSvc}, OAuth: oauthSvc, Notify: dispatcher, Channels: channels,
 		Limiter: limiter,
 	})
 	return h, jc, nil

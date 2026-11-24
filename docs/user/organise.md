@@ -24,6 +24,8 @@ Lend one of your copies from its book menu, or record a book you **borrowed** (f
 
 ### Notifications
 
+An **email** channel only starts receiving messages after you enter the 6-digit code mailed to the address (valid 30 minutes, five attempts; ask for a new one if needed). Nobody can make the server send reminders to an address they do not control. Every user is limited per day (`BIBLISANN_EMAIL_DAILY_CAP`, default 20 mails, confirmation codes included).
+
 In **Settings > Notifications** add where you want to be told: email (needs SMTP on the server), a webhook (the request body is signed with the secret shown once, header `X-Biblisann-Signature: sha256=<hmac>`), or an ntfy topic URL. **Send a test** checks them. Targets on private networks are refused for webhooks and ntfy.
 
 On a phone or computer, **Settings > Notifications > Enable notifications on this device** subscribes this browser to push messages (needs the server's VAPID keys; on iPhone, install the app to the home screen first).

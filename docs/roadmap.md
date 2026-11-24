@@ -91,7 +91,7 @@ Done since: OpenAPI docs UI (self-hosted), `oasdiff` gate, metrics and tracing, 
 Decisions taken (to be written into an ADR with the first implementing PR):
 
 - [x] Administrator edit, delete, provider refresh and "exclude from refreshes" for catalog editions (manual edits are locked against refreshes).
-- [ ] Email notification channels: recipient confirmation unless the address is the account's own verified one; daily cap per user.
+- [x] Email notification channels: confirmed by a code mailed to the address; daily cap per user (`BIBLISANN_EMAIL_DAILY_CAP`).
 - [x] Loans visible and returnable by every member with `loan.write`; permission re-checked on return and listing after a member loses access.
 - [x] Step-up authentication (valid 5 minutes, also for OIDC users; single-use when the provider sends no `auth_time`) before: password change, TOTP enrollment, passkey add/change, token creation, account deletion, admin password set. SSO-only accounts cannot self-set a password; an administrator can.
 - [ ] Quotas with standard rate-limit headers (`RateLimit` / `RateLimit-Policy`, `Retry-After`) for API and bulk imports; the web UI slows down and shows progress to respect them. New feature: bulk add from a list of ISBNs. Account imports are streamed to disk.

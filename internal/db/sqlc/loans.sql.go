@@ -12,8 +12,45 @@ import (
 	"github.com/google/uuid"
 )
 
+const bumpChannelAttempts = `-- name: BumpChannelAttempts :one
+UPDATE notification_channels SET confirm_attempts = confirm_attempts + 1
+WHERE id = $1 AND user_id = $2 AND confirmed_at IS NULL RETURNING confirm_attempts
+`
+
+type BumpChannelAttemptsParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) BumpChannelAttempts(ctx context.Context, arg BumpChannelAttemptsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, bumpChannelAttempts, arg.ID, arg.UserID)
+	var confirm_attempts int32
+	err := row.Scan(&confirm_attempts)
+	return confirm_attempts, err
+}
+
+const confirmChannel = `-- name: ConfirmChannel :execrows
+UPDATE notification_channels SET confirmed_at = now(), confirm_hash = NULL, confirm_expires = NULL
+WHERE id = $1 AND user_id = $2 AND confirmed_at IS NULL AND confirm_hash = $3 AND confirm_expires > now()
+`
+
+type ConfirmChannelParams struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	ConfirmHash []byte
+}
+
+func (q *Queries) ConfirmChannel(ctx context.Context, arg ConfirmChannelParams) (int64, error) {
+	result, err := q.db.Exec(ctx, confirmChannel, arg.ID, arg.UserID, arg.ConfirmHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createChannel = `-- name: CreateChannel :one
-INSERT INTO notification_channels (user_id, kind, target, config) VALUES ($1, $2, $3, $4) RETURNING id, user_id, kind, target, config, enabled, created_at
+INSERT INTO notification_channels (user_id, kind, target, config, confirmed_at)
+VALUES ($1, $2, $3, $4, CASE WHEN $2 = 'email' THEN NULL ELSE now() END) RETURNING id, user_id, kind, target, config, enabled, created_at, confirmed_at, confirm_hash, confirm_expires, confirm_attempts
 `
 
 type CreateChannelParams struct {
@@ -23,6 +60,7 @@ type CreateChannelParams struct {
 	Config []byte
 }
 
+// Only email channels wait for a confirmation code; every other kind is usable at once.
 func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (NotificationChannel, error) {
 	row := q.db.QueryRow(ctx, createChannel,
 		arg.UserID,
@@ -39,6 +77,10 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (N
 		&i.Config,
 		&i.Enabled,
 		&i.CreatedAt,
+		&i.ConfirmedAt,
+		&i.ConfirmHash,
+		&i.ConfirmExpires,
+		&i.ConfirmAttempts,
 	)
 	return i, err
 }
@@ -156,6 +198,34 @@ func (q *Queries) DeleteContact(ctx context.Context, arg DeleteContactParams) (i
 	return result.RowsAffected(), nil
 }
 
+const getChannel = `-- name: GetChannel :one
+SELECT id, user_id, kind, target, config, enabled, created_at, confirmed_at, confirm_hash, confirm_expires, confirm_attempts FROM notification_channels WHERE id = $1 AND user_id = $2
+`
+
+type GetChannelParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetChannel(ctx context.Context, arg GetChannelParams) (NotificationChannel, error) {
+	row := q.db.QueryRow(ctx, getChannel, arg.ID, arg.UserID)
+	var i NotificationChannel
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Kind,
+		&i.Target,
+		&i.Config,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.ConfirmedAt,
+		&i.ConfirmHash,
+		&i.ConfirmExpires,
+		&i.ConfirmAttempts,
+	)
+	return i, err
+}
+
 const getContact = `-- name: GetContact :one
 SELECT id, owner_id, name, email, notes FROM contacts WHERE id = $1
 `
@@ -237,7 +307,7 @@ func (q *Queries) ListAllLoansOfOwner(ctx context.Context, ownerID uuid.UUID) ([
 }
 
 const listChannels = `-- name: ListChannels :many
-SELECT id, user_id, kind, target, config, enabled, created_at FROM notification_channels WHERE user_id = $1 ORDER BY created_at
+SELECT id, user_id, kind, target, config, enabled, created_at, confirmed_at, confirm_hash, confirm_expires, confirm_attempts FROM notification_channels WHERE user_id = $1 ORDER BY created_at
 `
 
 func (q *Queries) ListChannels(ctx context.Context, userID uuid.UUID) ([]NotificationChannel, error) {
@@ -257,6 +327,10 @@ func (q *Queries) ListChannels(ctx context.Context, userID uuid.UUID) ([]Notific
 			&i.Config,
 			&i.Enabled,
 			&i.CreatedAt,
+			&i.ConfirmedAt,
+			&i.ConfirmHash,
+			&i.ConfirmExpires,
+			&i.ConfirmAttempts,
 		); err != nil {
 			return nil, err
 		}
@@ -299,7 +373,7 @@ func (q *Queries) ListContacts(ctx context.Context, ownerID uuid.UUID) ([]Contac
 }
 
 const listEnabledChannels = `-- name: ListEnabledChannels :many
-SELECT id, user_id, kind, target, config, enabled, created_at FROM notification_channels WHERE user_id = $1 AND enabled
+SELECT id, user_id, kind, target, config, enabled, created_at, confirmed_at, confirm_hash, confirm_expires, confirm_attempts FROM notification_channels WHERE user_id = $1 AND enabled AND confirmed_at IS NOT NULL
 `
 
 func (q *Queries) ListEnabledChannels(ctx context.Context, userID uuid.UUID) ([]NotificationChannel, error) {
@@ -319,6 +393,10 @@ func (q *Queries) ListEnabledChannels(ctx context.Context, userID uuid.UUID) ([]
 			&i.Config,
 			&i.Enabled,
 			&i.CreatedAt,
+			&i.ConfirmedAt,
+			&i.ConfirmHash,
+			&i.ConfirmExpires,
+			&i.ConfirmAttempts,
 		); err != nil {
 			return nil, err
 		}
@@ -625,6 +703,28 @@ func (q *Queries) ReturnLoan(ctx context.Context, arg ReturnLoanParams) (Loan, e
 	return i, err
 }
 
+const setChannelCode = `-- name: SetChannelCode :exec
+UPDATE notification_channels SET confirm_hash = $3, confirm_expires = $4, confirm_attempts = 0
+WHERE id = $1 AND user_id = $2 AND confirmed_at IS NULL
+`
+
+type SetChannelCodeParams struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	ConfirmHash    []byte
+	ConfirmExpires *time.Time
+}
+
+func (q *Queries) SetChannelCode(ctx context.Context, arg SetChannelCodeParams) error {
+	_, err := q.db.Exec(ctx, setChannelCode,
+		arg.ID,
+		arg.UserID,
+		arg.ConfirmHash,
+		arg.ConfirmExpires,
+	)
+	return err
+}
+
 const setChannelEnabled = `-- name: SetChannelEnabled :exec
 UPDATE notification_channels SET enabled = $3 WHERE id = $1 AND user_id = $2
 `
@@ -638,6 +738,25 @@ type SetChannelEnabledParams struct {
 func (q *Queries) SetChannelEnabled(ctx context.Context, arg SetChannelEnabledParams) error {
 	_, err := q.db.Exec(ctx, setChannelEnabled, arg.ID, arg.UserID, arg.Enabled)
 	return err
+}
+
+const takeEmailQuota = `-- name: TakeEmailQuota :one
+INSERT INTO email_quota (user_id, day, sent) VALUES ($1, current_date, 1)
+ON CONFLICT (user_id, day) DO UPDATE SET sent = email_quota.sent + 1 WHERE email_quota.sent < $2
+RETURNING true
+`
+
+type TakeEmailQuotaParams struct {
+	UserID uuid.UUID
+	Sent   int32
+}
+
+// Counts one mail for the user today unless the cap is reached; false means "do not send".
+func (q *Queries) TakeEmailQuota(ctx context.Context, arg TakeEmailQuotaParams) (bool, error) {
+	row := q.db.QueryRow(ctx, takeEmailQuota, arg.UserID, arg.Sent)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const updateLoanDue = `-- name: UpdateLoanDue :one

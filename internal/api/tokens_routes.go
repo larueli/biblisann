@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -29,11 +30,12 @@ type tokenBody struct {
 }
 
 type channelBody struct {
-	ID      uuid.UUID `json:"id"`
-	Kind    string    `json:"kind" enum:"email,webpush,webhook,ntfy"`
-	Target  string    `json:"target"`
-	Enabled bool      `json:"enabled"`
-	Secret  string    `json:"secret,omitempty" doc:"Webhook signing secret, returned once at creation."`
+	ID        uuid.UUID `json:"id"`
+	Kind      string    `json:"kind" enum:"email,webpush,webhook,ntfy"`
+	Target    string    `json:"target"`
+	Enabled   bool      `json:"enabled"`
+	Confirmed bool      `json:"confirmed" doc:"Email channels receive nothing until the code sent to the address is confirmed."`
+	Secret    string    `json:"secret,omitempty" doc:"Webhook signing secret, returned once at creation."`
 }
 
 func (s *Server) registerTokens(a huma.API) {
@@ -130,7 +132,7 @@ func (s *Server) registerTokens(a huma.API) {
 			}
 			out.Body.Channels = []channelBody{}
 			for _, r := range rows {
-				out.Body.Channels = append(out.Body.Channels, channelBody{ID: r.ID, Kind: r.Kind, Target: r.Target, Enabled: r.Enabled})
+				out.Body.Channels = append(out.Body.Channels, channelBody{ID: r.ID, Kind: r.Kind, Target: r.Target, Enabled: r.Enabled, Confirmed: r.ConfirmedAt != nil})
 			}
 			return out, nil
 		})
@@ -168,7 +170,43 @@ func (s *Server) registerTokens(a huma.API) {
 			if err != nil {
 				return nil, mapError(s.Log, err)
 			}
-			return &struct{ Body channelBody }{channelBody{ch.ID, ch.Kind, ch.Target, ch.Enabled, secret}}, nil
+			if in.Body.Kind == "email" {
+				// The channel stays silent until the recipient confirms the code we mail now.
+				if err := s.Channels.SendCode(ctx, p, ch.ID); err != nil {
+					s.Log.Warn("confirmation code not sent", "error", err)
+				}
+			}
+			return &struct{ Body channelBody }{channelBody{ch.ID, ch.Kind, ch.Target, ch.Enabled, ch.ConfirmedAt != nil, secret}}, nil
+		})
+	Register(a, huma.Operation{OperationID: "confirm-channel", Method: http.MethodPost, Path: "/v1/me/notification-channels/{id}/confirm",
+		Summary: "Confirm an email channel with the code sent to the address", Tags: []string{"notifications"}, DefaultStatus: http.StatusNoContent,
+		Errors: []int{404, 422, 429}}, PermAuthenticated,
+		func(ctx context.Context, in *struct {
+			ID   uuid.UUID `path:"id"`
+			Body struct {
+				Code string `json:"code" maxLength:"16"`
+			}
+		}) (*struct{}, error) {
+			p, err := sessionUserID(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return nil, channelErr(s.Channels.Confirm(ctx, p, in.ID, in.Body.Code))
+		})
+	Register(a, huma.Operation{OperationID: "resend-channel-code", Method: http.MethodPost, Path: "/v1/me/notification-channels/{id}/code",
+		Summary: "Send a new confirmation code to an unconfirmed email channel", Tags: []string{"notifications"}, DefaultStatus: http.StatusNoContent,
+		Errors: []int{404, 429, 503}}, PermAuthenticated,
+		func(ctx context.Context, in *struct {
+			ID uuid.UUID `path:"id"`
+		}) (*struct{}, error) {
+			p, err := sessionUserID(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.throttle(ctx, "channel-code", p.String()); err != nil {
+				return nil, err
+			}
+			return nil, channelErr(s.Channels.SendCode(ctx, p, in.ID))
 		})
 	Register(a, huma.Operation{OperationID: "delete-channel", Method: http.MethodDelete, Path: "/v1/me/notification-channels/{id}",
 		Summary: "Remove a notification channel", Tags: []string{"notifications"}, DefaultStatus: http.StatusNoContent}, PermAuthenticated,
@@ -236,4 +274,20 @@ func userID(ctx context.Context) (uuid.UUID, error) {
 		return uuid.Nil, huma.Error401Unauthorized("authentication required")
 	}
 	return p.UserID, nil
+}
+
+func channelErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, notify.ErrNotFound), errors.Is(err, notify.ErrAlreadyActive):
+		return huma.Error404NotFound("not found")
+	case errors.Is(err, notify.ErrBadCode):
+		return huma.Error422UnprocessableEntity(err.Error())
+	case errors.Is(err, notify.ErrTooManyTries), errors.Is(err, notify.ErrDailyCap):
+		return huma.NewError(http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, notify.ErrNoMailer):
+		return huma.Error503ServiceUnavailable(err.Error())
+	}
+	return huma.NewError(http.StatusBadGateway, "the email could not be sent")
 }

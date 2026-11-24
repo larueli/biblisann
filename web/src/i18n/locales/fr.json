@@ -159,7 +159,12 @@
     "importSource": "Source",
     "createScim": "Créer un jeton de provisionnement (SCIM)",
     "enablePush": "Activer les notifications sur cet appareil",
-    "pushFailed": "Cet appareil n'a pas pu être abonné (l'autorisation a-t-elle été refusée ?)."
+    "pushFailed": "Cet appareil n'a pas pu être abonné (l'autorisation a-t-elle été refusée ?).",
+    "confirmEmail": "Saisissez le code envoyé à cette adresse :",
+    "confirmCode": "Code de confirmation",
+    "confirm": "Confirmer",
+    "resendCode": "Envoyer un nouveau code",
+    "codeSent": "Code envoyé."
   },
   "book": {
     "actions": "Lecture, note, prêt",

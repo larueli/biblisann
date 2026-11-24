@@ -159,7 +159,12 @@
     "importSource": "Source",
     "createScim": "Create provisioning token (SCIM)",
     "enablePush": "Enable notifications on this device",
-    "pushFailed": "This device could not be subscribed (was the permission refused?)."
+    "pushFailed": "This device could not be subscribed (was the permission refused?).",
+    "confirmEmail": "Enter the code we emailed to this address:",
+    "confirmCode": "Confirmation code",
+    "confirm": "Confirm",
+    "resendCode": "Send a new code",
+    "codeSent": "Code sent."
   },
   "book": {
     "actions": "Reading, grade, lending",
