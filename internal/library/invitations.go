@@ -47,6 +47,10 @@ func (s *Service) Invite(ctx context.Context, libraryID uuid.UUID, email string,
 	if err := s.checkGrant(ctx, libraryID, g); err != nil {
 		return "", err
 	}
+	// The link is a bearer credential any account can redeem: it never carries administration or sharing.
+	if err := s.checkSharerGrant(ctx, g); err != nil {
+		return "", err
+	}
 	email = strings.TrimSpace(email)
 	if email == "" || len(email) > 320 || !strings.Contains(email, "@") {
 		return "", ErrInvalid

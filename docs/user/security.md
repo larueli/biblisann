@@ -14,6 +14,12 @@ Changing the password, turning two-factor on or off, adding or removing a passke
 
 API clients see `403` with the detail `step_up_required`; the answer to `GET /v1/auth/session` carries `step_up_until` while the window is open. Personal access tokens cannot perform these actions at all.
 
+### Known limits
+
+- Single sign-on providers that send no `auth_time` and ignore `prompt=login` give a weaker confirmation: it proves a sign-in flow just happened, not that the provider asked you again. Test your provider.
+- Library administrators who are not instance administrators get the same answer for known and unknown email addresses when sharing, but a few answers (the person already has elevated access, the last administrator) and the member list still reveal that an account exists.
+- Everyone who may record loans in a library sees the borrower's name, the contact name and the notes of its loans.
+
 ## Provisioning with SCIM
 
 An administrator creates a provisioning token in Settings (*Create provisioning token (SCIM)*, shown once) and gives it, with `<BASE_URL>/scim/v2`, to the identity provider. Users are created without a password (they sign in through OIDC); "delete" in the provider deactivates the account.

@@ -86,7 +86,12 @@ spec:
             {{- end }}
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
       volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ .Values.tmpSizeLimit }}
         - name: data
           {{- if or .Values.persistence.enabled .Values.persistence.existingClaim }}
           persistentVolumeClaim:

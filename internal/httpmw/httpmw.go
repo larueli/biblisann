@@ -196,9 +196,12 @@ func AccessLog(log *slog.Logger, skip func(*http.Request) bool) Middleware {
 	}
 }
 
-// RedactPath hides credentials that travel in the URL path (the OPDS feed token) so they never
-// reach logs or traces.
+// RedactPath hides credentials that travel in the URL path (the OPDS feed token, invitation
+// tokens) so they never reach logs or traces.
 func RedactPath(p string) string {
+	if _, ok := strings.CutPrefix(p, "/v1/invitations/"); ok && p != "/v1/invitations/accept" {
+		return "/v1/invitations/{token}"
+	}
 	if rest, ok := strings.CutPrefix(p, "/opds/"); ok {
 		if _, tail, found := strings.Cut(rest, "/"); found {
 			return "/opds/{token}/" + tail

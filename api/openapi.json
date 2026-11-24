@@ -2867,10 +2867,14 @@
           },
           "pages": {
             "format": "int64",
+            "maximum": 100000,
+            "minimum": 0,
             "type": "integer"
           },
           "published_year": {
             "format": "int64",
+            "maximum": 9999,
+            "minimum": 0,
             "type": "integer"
           },
           "publisher": {

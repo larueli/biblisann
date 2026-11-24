@@ -33,12 +33,14 @@ func (s *Service) MarkStepUpOnce(ctx context.Context, token string) error {
 	return s.markStepUp(ctx, token, 2*time.Minute, true)
 }
 
-// ConsumeStepUp closes a single-use window. It does nothing for a regular window.
-func (s *Service) ConsumeStepUp(ctx context.Context, token string) error {
-	if err := s.q.ConsumeSessionStepUp(ctx, hashToken(token)); err != nil {
-		return fmt.Errorf("auth: consume step-up: %w", err)
+// ConsumeStepUp closes a single-use window and reports whether this call was the one that used
+// it (two parallel requests cannot both win).
+func (s *Service) ConsumeStepUp(ctx context.Context, token string) (bool, error) {
+	n, err := s.q.ConsumeSessionStepUp(ctx, hashToken(token))
+	if err != nil {
+		return false, fmt.Errorf("auth: consume step-up: %w", err)
 	}
-	return nil
+	return n == 1, nil
 }
 
 func (s *Service) markStepUp(ctx context.Context, token string, window time.Duration, once bool) error {

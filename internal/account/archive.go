@@ -251,6 +251,9 @@ func readArchive(r io.Reader) (_ *archive, err error) {
 		switch {
 		case strings.HasPrefix(h.Name, "covers/"):
 			sha := strings.TrimPrefix(h.Name, "covers/")
+			if _, dup := a.covers[sha]; dup {
+				continue // a repeated name must not replace the first cover
+			}
 			if a.dir == "" {
 				if a.dir, err = os.MkdirTemp("", "biblisann-import-"); err != nil {
 					return nil, fmt.Errorf("account: spool covers: %w", err)

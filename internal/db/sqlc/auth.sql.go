@@ -12,13 +12,18 @@ import (
 	"github.com/google/uuid"
 )
 
-const consumeSessionStepUp = `-- name: ConsumeSessionStepUp :exec
-UPDATE sessions SET stepup_until = NULL, stepup_single_use = false WHERE token_hash = $1 AND stepup_single_use
+const consumeSessionStepUp = `-- name: ConsumeSessionStepUp :execrows
+UPDATE sessions SET stepup_until = NULL, stepup_single_use = false
+WHERE token_hash = $1 AND stepup_single_use AND stepup_until > now()
 `
 
-func (q *Queries) ConsumeSessionStepUp(ctx context.Context, tokenHash []byte) error {
-	_, err := q.db.Exec(ctx, consumeSessionStepUp, tokenHash)
-	return err
+// Atomic: of two parallel requests only one gets a row.
+func (q *Queries) ConsumeSessionStepUp(ctx context.Context, tokenHash []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeSessionStepUp, tokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const countAdminUsers = `-- name: CountAdminUsers :one

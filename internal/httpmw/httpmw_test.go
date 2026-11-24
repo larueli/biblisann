@@ -91,3 +91,12 @@ func TestRedactPath(t *testing.T) {
 		}
 	}
 }
+
+func TestRedactPathHidesInvitationTokens(t *testing.T) {
+	if got := RedactPath("/v1/invitations/abc123secret"); got != "/v1/invitations/{token}" {
+		t.Errorf("invitation token not redacted: %q", got)
+	}
+	if got := RedactPath("/v1/invitations/accept"); got != "/v1/invitations/accept" {
+		t.Errorf("accept route redacted: %q", got)
+	}
+}

@@ -52,8 +52,8 @@ func Middleware(next http.Handler) http.Handler {
 			case "/healthz", "/livez", "/readyz", "/startupz", "/health", "/metrics":
 				return false
 			}
-			if strings.HasPrefix(r.URL.Path, "/opds/") {
-				return false // the feed token is part of the path: never put it in a trace
+			if strings.HasPrefix(r.URL.Path, "/opds/") || strings.HasPrefix(r.URL.Path, "/v1/invitations/") {
+				return false // a feed or invitation token is part of the path: never put it in a trace
 			}
 			return true
 		}),

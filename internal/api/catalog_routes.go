@@ -225,9 +225,9 @@ func (s *Server) registerCatalog(a huma.API) {
 				Subtitle    *string   `json:"subtitle,omitempty" maxLength:"1000"`
 				Authors     *[]string `json:"authors,omitempty" maxItems:"50"`
 				Publisher   *string   `json:"publisher,omitempty" maxLength:"300"`
-				Year        *int      `json:"published_year,omitempty"`
+				Year        *int      `json:"published_year,omitempty" minimum:"0" maximum:"9999"`
 				Language    *string   `json:"language,omitempty" maxLength:"35"`
-				Pages       *int      `json:"pages,omitempty"`
+				Pages       *int      `json:"pages,omitempty" minimum:"0" maximum:"100000"`
 				Description *string   `json:"description,omitempty" maxLength:"20000"`
 				Series      *string   `json:"series_name,omitempty" maxLength:"300"`
 				SeriesPos   *float64  `json:"series_position,omitempty"`

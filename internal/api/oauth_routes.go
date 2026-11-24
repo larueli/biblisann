@@ -88,6 +88,10 @@ func (s *Server) registerOAuth(a huma.API) {
 				out.Body.RedirectTo = s.OAuth.Deny(req)
 				return out, nil
 			}
+			// Approving mints long-lived tokens: as sensitive as creating a token by hand (ADR 0026).
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
+			}
 			// The user may only restrict, never widen: a granted library must be accessible to them.
 			for _, l := range in.Body.LibraryIDs {
 				if _, err := s.Library.GetLibrary(ctx, l); err != nil {

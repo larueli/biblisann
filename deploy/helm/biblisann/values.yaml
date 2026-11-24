@@ -57,6 +57,10 @@ extraEnvFrom: []
 # NetworkPolicy or the ingress). OpenTelemetry traces: set OTEL_EXPORTER_OTLP_ENDPOINT through extraEnv.
 # tokenSecret references an existing Secret (sops, sealed secrets, external-secrets...): the key is
 # mounted as a file (BIBLISANN_METRICS_TOKEN_FILE), never put in the environment.
+# Scratch space for imports (covers are spooled to a temporary directory; the root filesystem is read-only).
+# Size it for the largest archive you accept (64 MiB) times concurrent imports (2).
+tmpSizeLimit: 256Mi
+
 metrics:
   tokenSecret: {name: "", key: token}
   public: false

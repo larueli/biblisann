@@ -27,8 +27,12 @@ func (s *Server) requireStepUp(ctx context.Context) error {
 		return huma.Error403Forbidden(stepUpRequired)
 	}
 	if sess.StepUpSingleUse {
-		if err := s.Auth.ConsumeStepUp(ctx, sessionTokenFrom(ctx)); err != nil {
+		won, err := s.Auth.ConsumeStepUp(ctx, sessionTokenFrom(ctx))
+		if err != nil {
 			return mapError(s.Log, err)
+		}
+		if !won {
+			return huma.Error403Forbidden(stepUpRequired)
 		}
 	}
 	return nil

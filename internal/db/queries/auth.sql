@@ -28,8 +28,10 @@ WHERE s.token_hash = $1 AND s.expires_at > now();
 -- name: MarkSessionStepUp :exec
 UPDATE sessions SET stepup_until = $2, stepup_single_use = $3 WHERE token_hash = $1;
 
--- name: ConsumeSessionStepUp :exec
-UPDATE sessions SET stepup_until = NULL, stepup_single_use = false WHERE token_hash = $1 AND stepup_single_use;
+-- name: ConsumeSessionStepUp :execrows
+-- Atomic: of two parallel requests only one gets a row.
+UPDATE sessions SET stepup_until = NULL, stepup_single_use = false
+WHERE token_hash = $1 AND stepup_single_use AND stepup_until > now();
 
 -- name: TouchSession :exec
 UPDATE sessions SET last_seen = now() WHERE token_hash = $1;
