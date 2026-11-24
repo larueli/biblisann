@@ -104,6 +104,17 @@ func (s *Service) Lookup(ctx context.Context, rawISBN string, layers ...*LookupS
 		return nil, fmt.Errorf("catalog: lookup edition: %w", err)
 	}
 
+	res.Draft, res.Errors = s.providerDraft(ctx, isbn13, layers...)
+	if res.Draft != nil {
+		res.Draft.ISBN13, res.Draft.ISBN10 = isbn13, isbn10
+	}
+	return res, nil
+}
+
+// providerDraft asks the configured providers about an ISBN and merges their answers. The error
+// map lists providers that failed.
+func (s *Service) providerDraft(ctx context.Context, isbn13 string, layers ...*LookupSettings) (*Draft, map[string]string) {
+	var errs map[string]string
 	set := ResolveSettings(s.known, s.disabled, layers...)
 	names := set.Providers
 	if names == nil {
@@ -113,20 +124,16 @@ func (s *Service) Lookup(ctx context.Context, rawISBN string, layers ...*LookupS
 	for _, name := range names {
 		r, ferr := s.fromProvider(ctx, s.byName[name], isbn13)
 		if ferr != nil {
-			if res.Errors == nil {
-				res.Errors = map[string]string{}
+			if errs == nil {
+				errs = map[string]string{}
 			}
-			res.Errors[name] = "unavailable"
+			errs[name] = "unavailable"
 			s.log.WarnContext(ctx, "provider lookup failed", "provider", name, "error", ferr)
 			continue
 		}
 		results = append(results, r)
 	}
-	if d := Merge(results, set.Languages); d != nil {
-		d.ISBN13, d.ISBN10 = isbn13, isbn10
-		res.Draft = d
-	}
-	return res, nil
+	return Merge(results, set.Languages), errs
 }
 
 type cachedRecord struct {

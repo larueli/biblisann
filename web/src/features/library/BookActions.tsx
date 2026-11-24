@@ -3,6 +3,8 @@ import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, problemMessage, type Schemas } from "../../api/client";
 import { field, muted, primary, secondary } from "../../app/ui";
+import { useSession } from "../auth/session";
+import { CatalogAdmin } from "./CatalogAdmin";
 
 type Item = Schemas["InstanceListItem"];
 const statuses = ["to_read", "reading", "read", "abandoned"] as const;
@@ -58,6 +60,7 @@ export function BookActions({ item }: { item: Item }) {
     },
   });
 
+  const isAdmin = useSession().data?.user.is_admin === true;
   const current = state.data?.reading?.status ?? "";
   return (
     <details className="mt-1 text-sm">
@@ -138,6 +141,7 @@ export function BookActions({ item }: { item: Item }) {
             {t("book.lend")}
           </button>
         </form>
+        {isAdmin && <CatalogAdmin editionId={item.edition_id} />}
         {lend.isError && <p role="alert">{lend.error.message}</p>}
         {lend.isSuccess && <p role="status">{t("book.lent")}</p>}
       </div>

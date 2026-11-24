@@ -10,6 +10,10 @@ Every account has a **wishlist**; **Lists** can hold books you do not own. Items
 
 The **Shelves** page draws a shelf: a place is the shelf, the places inside it are its layers. Books stand as spines (thicker when they have more pages). Drag a book to another layer, or select it and choose where to move it. Books without a place wait at the bottom.
 
+## Fixing the shared catalog (administrators)
+
+Book data is shared by every library on the server. Under a book's actions, instance administrators see a **Shared catalog** panel: edit the title or authors by hand (API: `PATCH /v1/editions/{id}`; edited fields are locked and never overwritten), **refresh from providers** (replaces only fields that were not edited by hand), and **exclude from provider refreshes** when a provider returns nonsense for a book. `DELETE /v1/editions/{id}` removes an edition no library holds any more.
+
 ## Places, labels and inventory
 
 Create places (house, room, shelf…) in a tree. Select one to print its **QR label**. Scan the label in the scanner: the books you scan next go to that place. **Inventory** compares a list of scanned ISBNs with what the place (and everything below it) should contain.

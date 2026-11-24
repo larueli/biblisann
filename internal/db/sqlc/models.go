@@ -71,6 +71,7 @@ type Edition struct {
 	CreatedBy      *uuid.UUID
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	SyncExcluded   bool
 }
 
 type ExternalGrade struct {

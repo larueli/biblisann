@@ -332,5 +332,13 @@
     "name": "Votre nom",
     "invalid": "Cette invitation est invalide ou a expiré.",
     "done": "C'est fait : la bibliothèque est maintenant dans votre liste."
+  },
+  "catalogAdmin": {
+    "title": "Catalogue partagé (administrateur)",
+    "editTitle": "Titre",
+    "editAuthors": "Auteurs, séparés par des virgules",
+    "save": "Enregistrer à la main",
+    "refresh": "Actualiser depuis les fournisseurs",
+    "exclude": "Exclure des actualisations des fournisseurs"
   }
 }

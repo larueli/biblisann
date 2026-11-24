@@ -823,6 +823,13 @@
           "language": {
             "type": "string"
           },
+          "locked_fields": {
+            "description": "Fields edited by hand: provider refreshes never overwrite them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "pages": {
             "format": "int32",
             "type": "integer"
@@ -850,6 +857,10 @@
           "subtitle": {
             "type": "string"
           },
+          "sync_excluded": {
+            "description": "True: provider refreshes skip this edition.",
+            "type": "boolean"
+          },
           "title": {
             "type": "string"
           },
@@ -862,7 +873,9 @@
           "work_id",
           "title",
           "authors",
-          "provenance"
+          "provenance",
+          "locked_fields",
+          "sync_excluded"
         ],
         "type": "object"
       },
@@ -2532,6 +2545,18 @@
         ],
         "type": "object"
       },
+      "Set-edition-syncRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "excluded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "excluded"
+        ],
+        "type": "object"
+      },
       "Set-group-memberRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2802,6 +2827,55 @@
           "scopes",
           "created_at"
         ],
+        "type": "object"
+      },
+      "Update-editionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "description": {
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "language": {
+            "maxLength": 35,
+            "type": "string"
+          },
+          "pages": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "published_year": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "publisher": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "series_name": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "series_position": {
+            "format": "double",
+            "type": "number"
+          },
+          "subtitle": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 1000,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "Update-libraryRequest": {
@@ -4515,6 +4589,79 @@
       }
     },
     "/v1/editions/{id}": {
+      "delete": {
+        "operationId": "delete-edition",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Delete an edition no library holds any more (administrators)",
+        "tags": [
+          "catalog"
+        ],
+        "x-permission": "instance:admin"
+      },
       "get": {
         "operationId": "get-edition",
         "parameters": [
@@ -4574,6 +4721,262 @@
           "catalog"
         ],
         "x-permission": "authenticated"
+      },
+      "patch": {
+        "description": "Edited fields are locked: provider refreshes never overwrite them. Affects every library that holds this edition.",
+        "operationId": "update-edition",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Update-editionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditionBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Edit an edition by hand (administrators)",
+        "tags": [
+          "catalog"
+        ],
+        "x-permission": "instance:admin"
+      }
+    },
+    "/v1/editions/{id}/refresh": {
+      "post": {
+        "description": "Replaces the fields that were not edited by hand. 409 when the edition is excluded from refreshes, 422 without ISBN or when no provider knows it.",
+        "operationId": "refresh-edition",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditionBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Ask the providers again (administrators)",
+        "tags": [
+          "catalog"
+        ],
+        "x-permission": "instance:admin"
+      }
+    },
+    "/v1/editions/{id}/sync-excluded": {
+      "put": {
+        "operationId": "set-edition-sync",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Set-edition-syncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditionBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Exclude an edition from provider refreshes, or include it again (administrators)",
+        "tags": [
+          "catalog"
+        ],
+        "x-permission": "instance:admin"
       }
     },
     "/v1/groups": {

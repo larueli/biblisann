@@ -72,7 +72,7 @@ func (q *Queries) DeleteReadingState(ctx context.Context, arg DeleteReadingState
 
 const exportGrades = `-- name: ExportGrades :many
 SELECT g.grade, g.comment, e.isbn13, e.title, e.authors
-FROM grades g JOIN LATERAL (SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at FROM editions WHERE work_id = g.work_id ORDER BY created_at LIMIT 1) e ON true
+FROM grades g JOIN LATERAL (SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded FROM editions WHERE work_id = g.work_id ORDER BY created_at LIMIT 1) e ON true
 WHERE g.user_id = $1 ORDER BY g.updated_at, g.work_id
 `
 
@@ -112,7 +112,7 @@ func (q *Queries) ExportGrades(ctx context.Context, userID uuid.UUID) ([]ExportG
 
 const exportReading = `-- name: ExportReading :many
 SELECT r.status, r.started_on, r.finished_on, e.isbn13, e.title, e.authors
-FROM reading_states r JOIN LATERAL (SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at FROM editions WHERE work_id = r.work_id ORDER BY created_at LIMIT 1) e ON true
+FROM reading_states r JOIN LATERAL (SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded FROM editions WHERE work_id = r.work_id ORDER BY created_at LIMIT 1) e ON true
 WHERE r.user_id = $1 ORDER BY r.updated_at, r.work_id
 `
 

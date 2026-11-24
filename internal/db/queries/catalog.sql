@@ -64,3 +64,15 @@ UPDATE editions SET cover_id = $2 WHERE id = $1 AND cover_id IS NULL;
 
 -- name: GetCoverSHA :one
 SELECT sha256 FROM covers WHERE id = $1;
+
+-- name: SetEditionSyncExcluded :one
+UPDATE editions SET sync_excluded = $2, updated_at = now() WHERE id = $1 RETURNING *;
+
+-- name: CountEditionInstances :one
+SELECT count(*) FROM instances WHERE edition_id = $1;
+
+-- name: DeleteEdition :execrows
+DELETE FROM editions WHERE id = $1;
+
+-- name: DeleteProviderCacheForKey :exec
+DELETE FROM provider_cache WHERE key = $1;

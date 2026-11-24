@@ -332,5 +332,13 @@
     "name": "Your name",
     "invalid": "This invitation is invalid or has expired.",
     "done": "Done: the library is now in your list."
+  },
+  "catalogAdmin": {
+    "title": "Shared catalog (administrator)",
+    "editTitle": "Title",
+    "editAuthors": "Authors, separated by commas",
+    "save": "Save by hand",
+    "refresh": "Refresh from providers",
+    "exclude": "Exclude from provider refreshes"
   }
 }

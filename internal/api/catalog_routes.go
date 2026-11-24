@@ -37,12 +37,15 @@ type editionBody struct {
 	SeriesPos     *float64                      `json:"series_position,omitempty"`
 	CoverURL      string                        `json:"cover_url,omitempty"`
 	Provenance    map[string]catalog.Provenance `json:"provenance"`
+	LockedFields  []string                      `json:"locked_fields" nullable:"false" doc:"Fields edited by hand: provider refreshes never overwrite them."`
+	SyncExcluded  bool                          `json:"sync_excluded" doc:"True: provider refreshes skip this edition."`
 }
 
 func toEditionBody(e dbsqlc.Edition) editionBody {
 	b := editionBody{ID: e.ID, WorkID: e.WorkID, ISBN13: e.Isbn13, ISBN10: e.Isbn10, Title: e.Title, Subtitle: e.Subtitle,
 		Authors: nonNil(e.Authors), Publisher: e.Publisher, PublishedYear: e.PublishedYear, Language: e.Language, Pages: e.Pages,
-		Description: e.Description, SeriesName: e.SeriesName, SeriesPos: e.SeriesPosition, Provenance: map[string]catalog.Provenance{}}
+		Description: e.Description, SeriesName: e.SeriesName, SeriesPos: e.SeriesPosition, Provenance: map[string]catalog.Provenance{},
+		LockedFields: nonNil(e.LockedFields), SyncExcluded: e.SyncExcluded}
 	if e.CoverID != nil {
 		b.CoverURL = "/v1/covers/" + e.CoverID.String()
 	}
@@ -208,6 +211,85 @@ func (s *Server) registerCatalog(a huma.API) {
 				return nil, mapError(s.Log, err)
 			}
 			return &struct{ Body editionBody }{toEditionBody(e)}, nil
+		})
+
+	// ---- administration of the shared catalog (instance administrators only)
+	Register(a, huma.Operation{OperationID: "update-edition", Method: http.MethodPatch, Path: "/v1/editions/{id}",
+		Summary:     "Edit an edition by hand (administrators)",
+		Description: "Edited fields are locked: provider refreshes never overwrite them. Affects every library that holds this edition.",
+		Tags:        []string{"catalog"}, Errors: []int{404, 422}}, PermInstanceAdmin,
+		func(ctx context.Context, in *struct {
+			ID   uuid.UUID `path:"id"`
+			Body struct {
+				Title       *string   `json:"title,omitempty" maxLength:"1000"`
+				Subtitle    *string   `json:"subtitle,omitempty" maxLength:"1000"`
+				Authors     *[]string `json:"authors,omitempty" maxItems:"50"`
+				Publisher   *string   `json:"publisher,omitempty" maxLength:"300"`
+				Year        *int      `json:"published_year,omitempty"`
+				Language    *string   `json:"language,omitempty" maxLength:"35"`
+				Pages       *int      `json:"pages,omitempty"`
+				Description *string   `json:"description,omitempty" maxLength:"20000"`
+				Series      *string   `json:"series_name,omitempty" maxLength:"300"`
+				SeriesPos   *float64  `json:"series_position,omitempty"`
+			}
+		}) (*struct{ Body editionBody }, error) {
+			if _, err := requireAdmin(ctx); err != nil {
+				return nil, err
+			}
+			b := in.Body
+			e, err := s.Catalog.Update(ctx, in.ID, catalog.EditionPatch{Title: b.Title, Subtitle: b.Subtitle, Authors: b.Authors,
+				Publisher: b.Publisher, Year: b.Year, Language: b.Language, Pages: b.Pages, Description: b.Description,
+				Series: b.Series, SeriesPos: b.SeriesPos})
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			return &struct{ Body editionBody }{toEditionBody(e)}, nil
+		})
+	Register(a, huma.Operation{OperationID: "set-edition-sync", Method: http.MethodPut, Path: "/v1/editions/{id}/sync-excluded",
+		Summary: "Exclude an edition from provider refreshes, or include it again (administrators)", Tags: []string{"catalog"}, Errors: []int{404}}, PermInstanceAdmin,
+		func(ctx context.Context, in *struct {
+			ID   uuid.UUID `path:"id"`
+			Body struct {
+				Excluded bool `json:"excluded"`
+			}
+		}) (*struct{ Body editionBody }, error) {
+			if _, err := requireAdmin(ctx); err != nil {
+				return nil, err
+			}
+			e, err := s.Catalog.SetSyncExcluded(ctx, in.ID, in.Body.Excluded)
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			return &struct{ Body editionBody }{toEditionBody(e)}, nil
+		})
+	Register(a, huma.Operation{OperationID: "refresh-edition", Method: http.MethodPost, Path: "/v1/editions/{id}/refresh",
+		Summary:     "Ask the providers again (administrators)",
+		Description: "Replaces the fields that were not edited by hand. 409 when the edition is excluded from refreshes, 422 without ISBN or when no provider knows it.",
+		Tags:        []string{"catalog"}, Errors: []int{404, 409, 422, 429}}, PermInstanceAdmin,
+		func(ctx context.Context, in *struct {
+			ID uuid.UUID `path:"id"`
+		}) (*struct{ Body editionBody }, error) {
+			if _, err := requireAdmin(ctx); err != nil {
+				return nil, err
+			}
+			if err := s.throttle(ctx, "refresh-edition", ""); err != nil {
+				return nil, err
+			}
+			e, err := s.Catalog.Refresh(ctx, in.ID)
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			return &struct{ Body editionBody }{toEditionBody(e)}, nil
+		})
+	Register(a, huma.Operation{OperationID: "delete-edition", Method: http.MethodDelete, Path: "/v1/editions/{id}",
+		Summary: "Delete an edition no library holds any more (administrators)", Tags: []string{"catalog"}, DefaultStatus: http.StatusNoContent, Errors: []int{404, 409}}, PermInstanceAdmin,
+		func(ctx context.Context, in *struct {
+			ID uuid.UUID `path:"id"`
+		}) (*struct{}, error) {
+			if _, err := requireAdmin(ctx); err != nil {
+				return nil, err
+			}
+			return nil, mapError(s.Log, s.Catalog.Delete(ctx, in.ID))
 		})
 
 	Register(a, huma.Operation{OperationID: "owned", Method: http.MethodGet, Path: "/v1/owned/{isbn}",
