@@ -23,9 +23,10 @@ UPDATE loans SET returned_on = $2 WHERE id = $1 AND returned_on IS NULL RETURNIN
 -- name: UpdateLoanDue :one
 UPDATE loans SET due_on = $2, notes = $3 WHERE id = $1 RETURNING *;
 
--- name: ListLoans :many
+-- name: ListLoansInLibraries :many
+-- Loans of the given libraries (the caller already checked loan.write on each one).
 SELECT l.*, c.name AS contact_name FROM loans l LEFT JOIN contacts c ON c.id = l.contact_id
-WHERE l.owner_id = $1 AND ($2::boolean OR l.returned_on IS NULL)
+WHERE l.library_id = ANY($1::uuid[]) AND ($2::boolean OR l.returned_on IS NULL)
 ORDER BY l.returned_on IS NOT NULL, l.due_on NULLS LAST, l.created_at DESC LIMIT $3;
 
 -- name: OpenLoansDueBy :many

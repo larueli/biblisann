@@ -249,3 +249,53 @@ func TestTokens(t *testing.T) {
 		t.Error("revoked token still works")
 	}
 }
+
+func TestSharedLoansAreManagedByEveryEditor(t *testing.T) {
+	e := newEnv(t)
+	ctx, uid := e.user(t, "a@example.org")
+	editor, editorID := e.user(t, "b@example.org")
+	reader, _ := e.user(t, "c@example.org")
+	lib, _ := e.lib.CreateLibrary(ctx, "Home")
+	for email, role := range map[string]string{"b@example.org": "edit", "c@example.org": "read"} {
+		if err := e.lib.ShareWithUser(ctx, lib.ID, email, library.Grant{Role: role}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ed := e.book(t, uid, "", "Dune", "", nil)
+	inst, _ := e.lib.AddInstance(ctx, lib.ID, library.InstanceInput{EditionID: ed.ID}, "")
+	l, err := e.loans.Lend(ctx, loans.LendInput{InstanceID: inst.ID, Counterparty: "Marie"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if rows, _ := e.loans.List(editor, false); len(rows) != 1 {
+		t.Errorf("editor sees %d loans, want 1", len(rows))
+	}
+	if rows, _ := e.loans.List(reader, false); len(rows) != 0 {
+		t.Errorf("reader sees %d loans, want 0", len(rows))
+	}
+	if _, err := e.loans.Return(reader, l.ID, nil); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("reader returns a loan: %v", err)
+	}
+	if _, err := e.loans.Return(editor, l.ID, nil); err != nil {
+		t.Errorf("editor returns a loan of a shared library: %v", err)
+	}
+
+	// A member who lost access cannot touch the loans they recorded.
+	l2, err := e.loans.Lend(editor, loans.LendInput{InstanceID: inst.ID, Counterparty: "Paul"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.lib.UnshareUser(ctx, lib.ID, editorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.loans.Return(editor, l2.ID, nil); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("former member returns a loan: %v", err)
+	}
+	if rows, _ := e.loans.List(editor, false); len(rows) != 0 {
+		t.Errorf("former member still lists %d loans", len(rows))
+	}
+	if _, err := e.loans.Return(ctx, l2.ID, nil); err != nil {
+		t.Errorf("administrator returns it: %v", err)
+	}
+}

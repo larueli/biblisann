@@ -178,21 +178,29 @@ func dayOr(t *time.Time) time.Time {
 	return today()
 }
 
-func (s *Service) mine(ctx context.Context, id uuid.UUID) (dbsqlc.Loan, error) {
-	p, err := principal(ctx, true)
+// manage loads a loan the caller may act on: any member holding loan.write on its library, not
+// only the person who recorded it. The permission is checked now, so someone who lost access
+// to the library can no longer return or change the loans they created.
+func (s *Service) manage(ctx context.Context, id uuid.UUID) (dbsqlc.Loan, error) {
+	l, err := s.q.GetLoan(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return l, ErrNotFound
+	}
 	if err != nil {
+		return l, err
+	}
+	if _, err := s.access.RequirePerm(ctx, nil, l.LibraryID, authz.PermLoan); err != nil {
+		if errors.Is(err, authz.ErrForbidden) {
+			return dbsqlc.Loan{}, ErrNotFound // do not reveal loans of libraries the caller only reads
+		}
 		return dbsqlc.Loan{}, err
 	}
-	l, err := s.q.GetLoan(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (l.OwnerID != p.UserID || !p.AllowsLibrary(l.LibraryID))) {
-		return l, ErrNotFound // also for a token restricted to other libraries
-	}
-	return l, err
+	return l, nil
 }
 
 // Return marks a loan as returned (today when on is nil).
 func (s *Service) Return(ctx context.Context, id uuid.UUID, on *time.Time) (dbsqlc.Loan, error) {
-	if _, err := s.mine(ctx, id); err != nil {
+	if _, err := s.manage(ctx, id); err != nil {
 		return dbsqlc.Loan{}, err
 	}
 	d := today()
@@ -208,7 +216,7 @@ func (s *Service) Return(ctx context.Context, id uuid.UUID, on *time.Time) (dbsq
 
 // Reschedule changes the due date and notes of a loan.
 func (s *Service) Reschedule(ctx context.Context, id uuid.UUID, due *time.Time, notes string) (dbsqlc.Loan, error) {
-	if _, err := s.mine(ctx, id); err != nil {
+	if _, err := s.manage(ctx, id); err != nil {
 		return dbsqlc.Loan{}, err
 	}
 	if len(notes) > 5000 {
@@ -217,23 +225,30 @@ func (s *Service) Reschedule(ctx context.Context, id uuid.UUID, due *time.Time, 
 	return s.q.UpdateLoanDue(ctx, dbsqlc.UpdateLoanDueParams{ID: id, DueOn: due, Notes: notes})
 }
 
-// List returns the caller's loans, open ones first.
-func (s *Service) List(ctx context.Context, includeReturned bool) ([]dbsqlc.ListLoansRow, error) {
+// List returns the loans of every library where the caller holds loan.write, open ones first.
+func (s *Service) List(ctx context.Context, includeReturned bool) ([]dbsqlc.ListLoansInLibrariesRow, error) {
 	p, err := principal(ctx, false)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.q.ListLoans(ctx, dbsqlc.ListLoansParams{OwnerID: p.UserID, Column2: includeReturned, Limit: 500})
+	libs, err := s.q.ListLibrariesForUser(ctx, p.UserID)
 	if err != nil {
 		return nil, err
 	}
-	out := rows[:0]
-	for _, r := range rows {
-		if p.AllowsLibrary(r.LibraryID) { // a token restricted to some libraries sees only their loans
-			out = append(out, r)
+	ids := make([]uuid.UUID, 0, len(libs))
+	for _, l := range libs {
+		if !p.AllowsLibrary(l.ID) { // a token restricted to some libraries sees only their loans
+			continue
 		}
+		if _, err := s.access.RequirePerm(ctx, nil, l.ID, authz.PermLoan); err != nil {
+			continue
+		}
+		ids = append(ids, l.ID)
 	}
-	return out, nil
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	return s.q.ListLoansInLibraries(ctx, dbsqlc.ListLoansInLibrariesParams{Column1: ids, Column2: includeReturned, Limit: 500})
 }
 
 // FeedEvents returns calendar events for the open loans of a user. It is used by the calendar

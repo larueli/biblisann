@@ -16,7 +16,7 @@ Create places (house, room, shelf…) in a tree. Select one to print its **QR la
 
 ## Loans
 
-Lend one of your copies from its book menu, or record a book you **borrowed** (from a person or a library) in the Loans page. Reminders go out the day before, on the due day, and weekly while overdue.
+Lend one of your copies from its book menu, or record a book you **borrowed** (from a person or a library) in the Loans page. Every member who may record loans in a library (editors and administrators in the standard profiles, or any profile with `loan.write`) sees all of its loans and can return or reschedule them, not only the person who recorded them. Someone who loses access to a library can no longer see or return its loans. Reminders go out the day before, on the due day, and weekly while overdue.
 
 ### Notifications
 

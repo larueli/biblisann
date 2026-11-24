@@ -330,19 +330,19 @@ func (q *Queries) ListEnabledChannels(ctx context.Context, userID uuid.UUID) ([]
 	return items, nil
 }
 
-const listLoans = `-- name: ListLoans :many
+const listLoansInLibraries = `-- name: ListLoansInLibraries :many
 SELECT l.id, l.library_id, l.owner_id, l.direction, l.instance_id, l.contact_id, l.counterparty, l.title, l.lent_on, l.due_on, l.returned_on, l.notes, l.created_at, c.name AS contact_name FROM loans l LEFT JOIN contacts c ON c.id = l.contact_id
-WHERE l.owner_id = $1 AND ($2::boolean OR l.returned_on IS NULL)
+WHERE l.library_id = ANY($1::uuid[]) AND ($2::boolean OR l.returned_on IS NULL)
 ORDER BY l.returned_on IS NOT NULL, l.due_on NULLS LAST, l.created_at DESC LIMIT $3
 `
 
-type ListLoansParams struct {
-	OwnerID uuid.UUID
+type ListLoansInLibrariesParams struct {
+	Column1 []uuid.UUID
 	Column2 bool
 	Limit   int32
 }
 
-type ListLoansRow struct {
+type ListLoansInLibrariesRow struct {
 	ID           uuid.UUID
 	LibraryID    uuid.UUID
 	OwnerID      uuid.UUID
@@ -359,15 +359,16 @@ type ListLoansRow struct {
 	ContactName  *string
 }
 
-func (q *Queries) ListLoans(ctx context.Context, arg ListLoansParams) ([]ListLoansRow, error) {
-	rows, err := q.db.Query(ctx, listLoans, arg.OwnerID, arg.Column2, arg.Limit)
+// Loans of the given libraries (the caller already checked loan.write on each one).
+func (q *Queries) ListLoansInLibraries(ctx context.Context, arg ListLoansInLibrariesParams) ([]ListLoansInLibrariesRow, error) {
+	rows, err := q.db.Query(ctx, listLoansInLibraries, arg.Column1, arg.Column2, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListLoansRow{}
+	items := []ListLoansInLibrariesRow{}
 	for rows.Next() {
-		var i ListLoansRow
+		var i ListLoansInLibrariesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.LibraryID,
