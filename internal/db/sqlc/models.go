@@ -184,6 +184,18 @@ type LibraryGroupShare struct {
 	ProfileID *uuid.UUID
 }
 
+type LibraryInvitation struct {
+	ID        uuid.UUID
+	LibraryID uuid.UUID
+	Email     string
+	Role      string
+	ProfileID *uuid.UUID
+	InvitedBy uuid.UUID
+	TokenHash []byte
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
 type LibraryMember struct {
 	LibraryID uuid.UUID
 	UserID    uuid.UUID

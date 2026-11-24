@@ -342,8 +342,8 @@ func TestOrganiseFlow(t *testing.T) {
 		t.Errorf("token minting token: %d", st)
 	}
 
-	// sharing: unknown user is a validation error; admin-only group creation
-	if st, _ := c.w("PUT", "/v1/libraries/"+libID+"/sharing/users", map[string]any{"email": "ghost@example.org", "grant": map[string]any{"role": "read"}}); st != 422 {
+	// sharing: an instance administrator is told about an unknown address; admin-only group creation
+	if st, _ := c.w("PUT", "/v1/libraries/"+libID+"/sharing/users", map[string]any{"email": "ghost@example.org", "grant": map[string]any{"role": "read"}}); st != 409 {
 		t.Errorf("share with unknown user: %d", st)
 	}
 	if st, _ := c.w("POST", "/v1/groups", map[string]any{"name": "Family"}); st != 201 {

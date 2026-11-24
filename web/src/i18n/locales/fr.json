@@ -287,7 +287,9 @@
       "list": "Gérer les listes",
       "share": "Partager la bibliothèque",
       "admin": "Tout (administrateur)"
-    }
+    },
+    "confirmInvite": "Aucun compte n'utilise {{email}}. Envoyer une invitation à cette adresse ?",
+    "invitationCreated": "Invitation créée (valable 7 jours, envoyée par courriel si le serveur sait en envoyer). Lien :"
   },
   "groups": {
     "title": "Groupes d'utilisateurs",
@@ -320,5 +322,15 @@
     "sso": "Se reconnecter par authentification unique",
     "cancel": "Annuler",
     "failed": "La confirmation a échoué."
+  },
+  "invite": {
+    "title": "Vous êtes invité(e) à {{library}}",
+    "signIn": "Se connecter pour accepter",
+    "accept": "Accepter l'invitation",
+    "create": "Créer mon compte",
+    "password": "Choisissez un mot de passe",
+    "name": "Votre nom",
+    "invalid": "Cette invitation est invalide ou a expiré.",
+    "done": "C'est fait : la bibliothèque est maintenant dans votre liste."
   }
 }

@@ -28,7 +28,7 @@ A **calendar feed** (Settings > Access tokens > *Create calendar feed*) gives a 
 
 ## Sharing
 
-Library administrators share a library with a user (by email) or a group, with the role `read`, `edit`, `admin`, or a **custom profile** (a chosen set of permissions). In **Settings > Sharing my libraries** (open a library you administer) you share with a user by email or with a group, and define custom profiles from checkboxes of permissions. Instance administrators create the groups and their members in **Settings > User groups**. The same actions exist in the API (`/v1/libraries/{id}/sharing`, `/profiles`, `/v1/groups`).
+Library administrators share a library with a user (by email) or a group, with the role `read`, `edit`, `admin`, or a **custom profile** (a chosen set of permissions). In **Settings > Sharing my libraries** (open a library you administer) you share with a user by email or with a group, and define custom profiles from checkboxes of permissions. Instance administrators create the groups and their members in **Settings > User groups**. Sharing with an address that has no account does nothing visible, so addresses cannot be probed. Instance administrators are asked whether to send an **invitation** instead: a link valid 7 days (emailed when the server has SMTP, shown on screen otherwise) that lets the person create an account, even when registration is closed, and receive the library; they can change their email afterwards. Creating an invitation needs a recent re-authentication. The same actions exist in the API (`/v1/libraries/{id}/sharing`, `/profiles`, `/v1/groups`).
 
 ## Tokens, scripts and AI assistants
 

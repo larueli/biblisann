@@ -49,6 +49,7 @@ type Deps struct {
 	Log       *slog.Logger
 	BaseURL   *url.URL
 	Auth      *auth.Service
+	Mailer    auth.Mailer // nil: no SMTP configured (invitations then return the link to the administrator)
 	Library   *library.Service
 	Catalog   *catalog.Service
 	Scan      *scan.Service

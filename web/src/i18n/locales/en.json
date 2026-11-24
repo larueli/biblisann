@@ -287,7 +287,9 @@
       "list": "Manage lists",
       "share": "Share the library",
       "admin": "Everything (administrator)"
-    }
+    },
+    "confirmInvite": "No account uses {{email}}. Send an invitation to this address?",
+    "invitationCreated": "Invitation created (valid 7 days, emailed when the server can send mail). Link:"
   },
   "groups": {
     "title": "User groups",
@@ -320,5 +322,15 @@
     "sso": "Sign in again with single sign-on",
     "cancel": "Cancel",
     "failed": "Confirmation failed."
+  },
+  "invite": {
+    "title": "You are invited to {{library}}",
+    "signIn": "Sign in to accept",
+    "accept": "Accept the invitation",
+    "create": "Create my account",
+    "password": "Choose a password",
+    "name": "Your name",
+    "invalid": "This invitation is invalid or has expired.",
+    "done": "Done: the library is now in your list."
   }
 }

@@ -528,6 +528,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Use an invitation link with my account */
+        post: operations["accept-invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What an invitation link is for (before signing up) */
+        get: operations["peek-invitation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/isbn/{isbn}": {
         parameters: {
             query?: never;
@@ -786,7 +820,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Give a registered user (by email) access, or change their role */
+        /**
+         * Give a registered user (by email) access, or change their role
+         * @description Sharing needs library administration. For an address without an account, only instance administrators get an answer (409 no_account) and may repeat the request with invite=true to create an invitation (a link valid 7 days, emailed when SMTP is configured). For everyone else the call succeeds without doing anything, exactly as for a known address.
+         */
         put: operations["share-with-user"];
         post?: never;
         delete?: never;
@@ -1579,6 +1616,12 @@ export interface components {
             /** @example 0.4.0 */
             version: string;
         };
+        "Accept-invitationRequest": {
+            token: string;
+        };
+        "Accept-invitationResponse": {
+            library_id: string;
+        };
         "Add-list-itemRequest": {
             authors?: string[] | null;
             /** @description When set, title, authors and ISBN come from the edition. */
@@ -2168,6 +2211,10 @@ export interface components {
             last_used?: string;
             name: string;
         };
+        "Peek-invitationResponse": {
+            email: string;
+            library_name: string;
+        };
         PlaceBody: {
             id: string;
             kind: string;
@@ -2229,6 +2276,16 @@ export interface components {
             status: string;
             title: string;
             work_id: string;
+        };
+        RegisterRequest: {
+            /** @description Account email address (ignored with an invitation: the invited address is used). */
+            email: string;
+            /** @description From an invitation link: the account gets the invited address (even when registration is closed) and the shared library. */
+            invitation_token?: string;
+            /** @description Display name. */
+            name?: string;
+            /** @description Password (10 characters minimum). */
+            password: string;
         };
         ReportBody: {
             /** Format: int64 */
@@ -2324,6 +2381,17 @@ export interface components {
         "Share-with-userRequest": {
             email: string;
             grant: components["schemas"]["GrantBody"];
+            /** @description Confirm that an invitation must be created when the address has no account. */
+            invite?: boolean;
+        };
+        ShareResult: {
+            /** @description Only for instance administrators: the link to send when no mail server is configured. */
+            invitation_url?: string;
+            /**
+             * @description ok: nothing more to do (or nothing happened, for an address that cannot be shared with). invited: an invitation was created.
+             * @enum {string}
+             */
+            status: "ok" | "invited";
         };
         SharingBody: {
             groups: components["schemas"]["GroupShareBody"][];
@@ -3236,7 +3304,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Credentials"];
+                "application/json": components["schemas"]["RegisterRequest"];
             };
         };
         responses: {
@@ -4268,6 +4336,133 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "accept-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Accept-invitationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accept-invitationResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "peek-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Peek-invitationResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5384,12 +5579,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description No Content */
-            204: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ShareResult"];
+                };
             };
             /** @description Unauthorized */
             401: {

@@ -59,3 +59,18 @@ WHERE s.library_id = $1 ORDER BY g.name;
 
 -- name: CountLibraryAdmins :one
 SELECT count(*) FROM library_members WHERE library_id = $1 AND role = 'admin';
+
+-- name: CreateInvitation :one
+INSERT INTO library_invitations (library_id, email, role, profile_id, invited_by, token_hash, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
+
+-- name: ConsumeInvitation :one
+DELETE FROM library_invitations WHERE token_hash = $1 AND expires_at > now() RETURNING *;
+
+-- name: PeekInvitation :one
+SELECT i.email, l.name AS library_name FROM library_invitations i JOIN libraries l ON l.id = i.library_id
+WHERE i.token_hash = $1 AND i.expires_at > now();
+
+-- name: GrantIfNoAccess :exec
+INSERT INTO library_members (library_id, user_id, role, profile_id) VALUES ($1, $2, $3, $4)
+ON CONFLICT (library_id, user_id) DO NOTHING;

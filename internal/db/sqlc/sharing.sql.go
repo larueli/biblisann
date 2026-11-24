@@ -7,6 +7,7 @@ package dbsqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -23,6 +24,27 @@ type AddGroupMemberParams struct {
 func (q *Queries) AddGroupMember(ctx context.Context, arg AddGroupMemberParams) error {
 	_, err := q.db.Exec(ctx, addGroupMember, arg.GroupID, arg.UserID)
 	return err
+}
+
+const consumeInvitation = `-- name: ConsumeInvitation :one
+DELETE FROM library_invitations WHERE token_hash = $1 AND expires_at > now() RETURNING id, library_id, email, role, profile_id, invited_by, token_hash, expires_at, created_at
+`
+
+func (q *Queries) ConsumeInvitation(ctx context.Context, tokenHash []byte) (LibraryInvitation, error) {
+	row := q.db.QueryRow(ctx, consumeInvitation, tokenHash)
+	var i LibraryInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.LibraryID,
+		&i.Email,
+		&i.Role,
+		&i.ProfileID,
+		&i.InvitedBy,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const countLibraryAdmins = `-- name: CountLibraryAdmins :one
@@ -52,6 +74,46 @@ func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group
 		&i.ID,
 		&i.Name,
 		&i.ExternalID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createInvitation = `-- name: CreateInvitation :one
+INSERT INTO library_invitations (library_id, email, role, profile_id, invited_by, token_hash, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, library_id, email, role, profile_id, invited_by, token_hash, expires_at, created_at
+`
+
+type CreateInvitationParams struct {
+	LibraryID uuid.UUID
+	Email     string
+	Role      string
+	ProfileID *uuid.UUID
+	InvitedBy uuid.UUID
+	TokenHash []byte
+	ExpiresAt time.Time
+}
+
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (LibraryInvitation, error) {
+	row := q.db.QueryRow(ctx, createInvitation,
+		arg.LibraryID,
+		arg.Email,
+		arg.Role,
+		arg.ProfileID,
+		arg.InvitedBy,
+		arg.TokenHash,
+		arg.ExpiresAt,
+	)
+	var i LibraryInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.LibraryID,
+		&i.Email,
+		&i.Role,
+		&i.ProfileID,
+		&i.InvitedBy,
+		&i.TokenHash,
+		&i.ExpiresAt,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -127,6 +189,28 @@ func (q *Queries) GetProfile(ctx context.Context, id uuid.UUID) (PermissionProfi
 		&i.Permissions,
 	)
 	return i, err
+}
+
+const grantIfNoAccess = `-- name: GrantIfNoAccess :exec
+INSERT INTO library_members (library_id, user_id, role, profile_id) VALUES ($1, $2, $3, $4)
+ON CONFLICT (library_id, user_id) DO NOTHING
+`
+
+type GrantIfNoAccessParams struct {
+	LibraryID uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+	ProfileID *uuid.UUID
+}
+
+func (q *Queries) GrantIfNoAccess(ctx context.Context, arg GrantIfNoAccessParams) error {
+	_, err := q.db.Exec(ctx, grantIfNoAccess,
+		arg.LibraryID,
+		arg.UserID,
+		arg.Role,
+		arg.ProfileID,
+	)
+	return err
 }
 
 const listGroupMembers = `-- name: ListGroupMembers :many
@@ -292,6 +376,23 @@ func (q *Queries) ListProfiles(ctx context.Context, libraryID uuid.UUID) ([]Perm
 		return nil, err
 	}
 	return items, nil
+}
+
+const peekInvitation = `-- name: PeekInvitation :one
+SELECT i.email, l.name AS library_name FROM library_invitations i JOIN libraries l ON l.id = i.library_id
+WHERE i.token_hash = $1 AND i.expires_at > now()
+`
+
+type PeekInvitationRow struct {
+	Email       string
+	LibraryName string
+}
+
+func (q *Queries) PeekInvitation(ctx context.Context, tokenHash []byte) (PeekInvitationRow, error) {
+	row := q.db.QueryRow(ctx, peekInvitation, tokenHash)
+	var i PeekInvitationRow
+	err := row.Scan(&i.Email, &i.LibraryName)
+	return i, err
 }
 
 const removeGroupMember = `-- name: RemoveGroupMember :exec

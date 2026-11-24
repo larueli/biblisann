@@ -166,12 +166,14 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	tokenSvc := tokens.NewService(pool)
 	q := dbsqlc.New(pool)
 
+	var mail auth.Mailer
 	senders := []notify.Sender{notify.Webhook{HTTP: fetcher}, notify.Ntfy{HTTP: fetcher}}
 	if cfg.SMTPHost != "" {
 		mailer := notify.Email{Config: notify.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort,
 			Username: cfg.SMTPUsername, Password: cfg.SMTPPassword.Reveal(), From: cfg.SMTPFrom, Mode: cfg.SMTPMode}}
 		senders = append(senders, mailer)
 		authSvc.SetMailer(mailer)
+		mail = mailer
 	}
 	if cfg.VAPIDPublicKey != "" {
 		subject := cfg.VAPIDSubject
@@ -245,7 +247,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	}
 	h, _ := api.New(api.Deps{WebPushKey: cfg.VAPIDPublicKey, HCSync: hcs, SourceURL: cfg.SourceURL, Metrics: telemetry.New(version.Version(), pool), MetricsToken: cfg.MetricsToken.Reveal(), MetricsPublic: cfg.MetricsPublic, Account: account.NewService(pool, libSvc, catSvc, listsSvc, loansSvc, readingSvc), Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),
 		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
-		Auth: authSvc, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
+		Auth: authSvc, Mailer: mail, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
 		Lists: listsSvc, Loans: loansSvc,
 		MCP:      mcpserver.Handler(mcpserver.Deps{Version: version.Version(), Library: libSvc, Scan: scanSvc, Reading: readingSvc, Lists: listsSvc, Loans: loansSvc}),
 		Importer: importer.New(pool, catSvc, libSvc, readingSvc, listsSvc),

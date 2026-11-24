@@ -97,6 +97,16 @@ func NormalizeEmail(raw string) (string, error) {
 // Register creates the first or an additional account according to the registration mode and
 // returns the user. Admin-created accounts use CreateUser directly.
 func (s *Service) Register(ctx context.Context, email, password, name string) (*dbsqlc.User, error) {
+	return s.register(ctx, email, password, name, false)
+}
+
+// RegisterInvited creates an account for an address the caller already proved to own through an
+// invitation link. It works even when registration is closed.
+func (s *Service) RegisterInvited(ctx context.Context, email, password, name string) (*dbsqlc.User, error) {
+	return s.register(ctx, email, password, name, true)
+}
+
+func (s *Service) register(ctx context.Context, email, password, name string, invited bool) (*dbsqlc.User, error) {
 	email, err := NormalizeEmail(email)
 	if err != nil {
 		return nil, err
@@ -123,6 +133,7 @@ func (s *Service) Register(ctx context.Context, email, password, name string) (*
 		return nil, fmt.Errorf("auth: count users: %w", err)
 	}
 	switch {
+	case invited && n > 0:
 	case s.mode == RegistrationClosed, s.mode == RegistrationFirstUser && n > 0:
 		return nil, ErrRegistrationClosed
 	}

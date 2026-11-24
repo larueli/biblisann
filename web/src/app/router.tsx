@@ -11,6 +11,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { api, setCsrfToken } from "../api/client";
 import { AuthorizePage } from "../features/auth/AuthorizePage";
+import { InvitePage } from "../features/auth/InvitePage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { ResetPage } from "../features/auth/ResetPage";
 import { LibraryPage } from "../features/library/LibraryPage";
@@ -80,6 +81,13 @@ const resetPasswordRoute = createRoute({
   path: "/reset-password",
   component: ResetPage,
 });
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invite",
+  validateSearch: (s: Record<string, unknown>): { token?: string } =>
+    typeof s.token === "string" ? { token: s.token } : {},
+  component: InvitePage,
+});
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
@@ -137,6 +145,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   resetRoute,
   resetPasswordRoute,
+  inviteRoute,
   authorizeRoute,
   indexRoute,
   scanRoute,

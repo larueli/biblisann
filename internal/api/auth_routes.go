@@ -86,9 +86,30 @@ func (s *Server) registerAuth(a huma.API) {
 	Register(a, huma.Operation{OperationID: "register", Method: http.MethodPost, Path: "/v1/auth/register",
 		Summary: "Create an account (first account becomes the administrator)", Tags: []string{"auth"},
 		DefaultStatus: http.StatusCreated, Errors: []int{403, 409, 422, 429}}, PermPublic,
-		func(ctx context.Context, in *struct{ Body credentials }) (*sessionOutput, error) {
+		func(ctx context.Context, in *struct {
+			Body struct {
+				Email           string `json:"email" maxLength:"320" doc:"Account email address (ignored with an invitation: the invited address is used)."`
+				Password        string `json:"password" maxLength:"256" doc:"Password (10 characters minimum)."`
+				Name            string `json:"name,omitempty" maxLength:"200" doc:"Display name."`
+				InvitationToken string `json:"invitation_token,omitempty" maxLength:"128" doc:"From an invitation link: the account gets the invited address (even when registration is closed) and the shared library."`
+			}
+		}) (*sessionOutput, error) {
 			if err := s.throttle(ctx, "register", ""); err != nil {
 				return nil, err
+			}
+			if in.Body.InvitationToken != "" {
+				info, err := s.Library.PeekInvitation(ctx, in.Body.InvitationToken)
+				if err != nil {
+					return nil, huma.Error404NotFound("invalid or expired invitation")
+				}
+				u, err := s.Auth.RegisterInvited(ctx, info.Email, in.Body.Password, in.Body.Name)
+				if err != nil {
+					return nil, mapError(s.Log, err)
+				}
+				if _, err := s.Library.AcceptInvitation(ctx, in.Body.InvitationToken, u.ID); err != nil {
+					s.Log.Warn("invitation could not be applied", "error", err)
+				}
+				return s.open(ctx, u.ID)
 			}
 			if _, err := mail.ParseAddress(in.Body.Email); err != nil {
 				return nil, huma.Error422UnprocessableEntity("invalid email address")

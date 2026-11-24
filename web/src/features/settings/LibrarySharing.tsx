@@ -48,6 +48,7 @@ export function LibrarySharing({ libraryId }: { libraryId: string }) {
   };
 
   const [email, setEmail] = useState("");
+  const [invitationUrl, setInvitationUrl] = useState("");
   const [role, setRole] = useState<Role>("read");
   const [profileId, setProfileId] = useState("");
   const [groupId, setGroupId] = useState("");
@@ -60,14 +61,24 @@ export function LibrarySharing({ libraryId }: { libraryId: string }) {
   });
   const shareUser = useMutation({
     mutationFn: async () => {
-      const { response, error } = await api.PUT("/v1/libraries/{id}/sharing/users", {
+      let r = await api.PUT("/v1/libraries/{id}/sharing/users", {
         ...path,
         body: { email, grant: grant() },
       });
-      if (!response.ok) throw new Error(problemMessage(error));
+      // Only instance administrators hear that the address has no account: ask before inviting.
+      if (r.response.status === 409 && problemMessage(r.error) === "no_account") {
+        if (!window.confirm(t("sharing.confirmInvite", { email }))) return null;
+        r = await api.PUT("/v1/libraries/{id}/sharing/users", {
+          ...path,
+          body: { email, grant: grant(), invite: true },
+        });
+      }
+      if (!r.response.ok) throw new Error(problemMessage(r.error));
+      return r.data ?? null;
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       setEmail("");
+      setInvitationUrl(data?.status === "invited" ? (data.invitation_url ?? "") : "");
       await refresh();
     },
   });
@@ -206,6 +217,11 @@ export function LibrarySharing({ libraryId }: { libraryId: string }) {
           {t("sharing.shareUser")}
         </button>
       </form>
+      {invitationUrl && (
+        <p className={muted}>
+          {t("sharing.invitationCreated")} <code className="break-all">{invitationUrl}</code>
+        </p>
+      )}
       {groups.data && groups.data.length > 0 && (
         <form className="flex flex-wrap gap-2" onSubmit={onSubmit(shareGroup)}>
           <select

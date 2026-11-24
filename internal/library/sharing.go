@@ -112,7 +112,10 @@ func (s *Service) ShareWithUser(ctx context.Context, libraryID uuid.UUID, email 
 	}
 	u, err := s.q.GetUserByEmail(ctx, strings.TrimSpace(email))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrInvalid
+		if p.IsAdmin {
+			return ErrNoAccount // the caller decides whether to invite
+		}
+		return nil // same answer as for a known address: nothing is revealed
 	}
 	if err != nil {
 		return err

@@ -54,6 +54,7 @@ WITH a AS (DELETE FROM provider_cache WHERE fetched_at < now() - make_interval(d
      g AS (DELETE FROM oauth_refresh_tokens WHERE expires_at < now() RETURNING 1),
      h AS (DELETE FROM oauth_access_tokens WHERE expires_at < now() RETURNING 1),
      i AS (DELETE FROM access_tokens WHERE expires_at IS NOT NULL AND expires_at < now() - interval '30 days' RETURNING 1),
-     j AS (DELETE FROM loan_notifications n USING loans l WHERE n.loan_id = l.id AND l.returned_on IS NOT NULL AND l.returned_on < current_date - 90 RETURNING 1)
+     j AS (DELETE FROM loan_notifications n USING loans l WHERE n.loan_id = l.id AND l.returned_on IS NOT NULL AND l.returned_on < current_date - 90 RETURNING 1),
+     k AS (DELETE FROM library_invitations WHERE expires_at < now() RETURNING 1)
 SELECT ((SELECT count(*) FROM a) + (SELECT count(*) FROM b) + (SELECT count(*) FROM c) + (SELECT count(*) FROM d) + (SELECT count(*) FROM e)
-      + (SELECT count(*) FROM f) + (SELECT count(*) FROM g) + (SELECT count(*) FROM h) + (SELECT count(*) FROM i) + (SELECT count(*) FROM j))::bigint;
+      + (SELECT count(*) FROM f) + (SELECT count(*) FROM g) + (SELECT count(*) FROM h) + (SELECT count(*) FROM i) + (SELECT count(*) FROM j) + (SELECT count(*) FROM k))::bigint;

@@ -96,7 +96,7 @@ Decisions taken (to be written into an ADR with the first implementing PR):
 - [x] Step-up authentication (valid 5 minutes, also for OIDC users; single-use when the provider sends no `auth_time`) before: password change, TOTP enrollment, passkey add/change, token creation, account deletion, admin password set. SSO-only accounts cannot self-set a password; an administrator can.
 - [ ] Quotas with standard rate-limit headers (`RateLimit` / `RateLimit-Policy`, `Retry-After`) for API and bulk imports; the web UI slows down and shows progress to respect them. New feature: bulk add from a list of ISBNs. Account imports are streamed to disk.
 - [x] Helm: mount the metrics token as a file, or reference an existing Secret and key (sops, sealed secrets); the binary accepts the env var and the `_FILE` variant.
-- [ ] Sharing: library sharing requires library admin. Sharing with an unknown email does nothing for non-admins (same answer as a known one); for admins, an explicit confirmation is asked before an invitation is created.
+- [x] Sharing: library sharing requires library admin. Sharing with an unknown email does nothing for non-instance-administrators (same answer as a known one); instance administrators are asked to confirm before an invitation (7-day link, emailed when SMTP is set) is created; the link also lets the invitee register when registration is closed.
 - [x] CI: kube-linter and kubeconform on the Helm chart through prek.
 - [ ] Add shadcn/ui and Tailwind-based components to the web UI.
 - [ ] Generator on TypeScript 5.9 in an isolated tool directory, application on TypeScript 7.
