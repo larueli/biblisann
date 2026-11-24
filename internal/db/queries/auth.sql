@@ -20,13 +20,16 @@ INSERT INTO sessions (token_hash, user_id, csrf_token, expires_at, user_agent)
 VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetSession :one
-SELECT s.token_hash, s.user_id, s.csrf_token, s.expires_at, s.stepup_until,
+SELECT s.token_hash, s.user_id, s.csrf_token, s.expires_at, s.stepup_until, s.stepup_single_use,
        u.email, u.display_name, u.is_admin, u.locale, u.disabled_at
 FROM sessions s JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > now();
 
 -- name: MarkSessionStepUp :exec
-UPDATE sessions SET stepup_until = $2 WHERE token_hash = $1;
+UPDATE sessions SET stepup_until = $2, stepup_single_use = $3 WHERE token_hash = $1;
+
+-- name: ConsumeSessionStepUp :exec
+UPDATE sessions SET stepup_until = NULL, stepup_single_use = false WHERE token_hash = $1 AND stepup_single_use;
 
 -- name: TouchSession :exec
 UPDATE sessions SET last_seen = now() WHERE token_hash = $1;

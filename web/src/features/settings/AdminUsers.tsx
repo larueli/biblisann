@@ -35,6 +35,15 @@ export function AdminUsers() {
     },
     onSuccess: refresh,
   });
+  const setPassword = useMutation({
+    mutationFn: async (v: { id: string; password: string }) => {
+      const { response, error } = await api.PUT("/v1/admin/users/{id}/password", {
+        params: { path: { id: v.id } },
+        body: { password: v.password },
+      });
+      if (!response.ok) window.alert(problemMessage(error));
+    },
+  });
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-lg font-semibold">{t("admin.users")}</h2>
@@ -52,6 +61,16 @@ export function AdminUsers() {
                 onClick={() => disable.mutate({ id: u.id, disabled: !u.disabled })}
               >
                 {t(u.disabled ? "admin.enable" : "admin.disable")}
+              </button>
+              <button
+                type="button"
+                className={secondary}
+                onClick={() => {
+                  const password = window.prompt(t("admin.newPassword", { email: u.email }));
+                  if (password) setPassword.mutate({ id: u.id, password });
+                }}
+              >
+                {t("admin.setPassword")}
               </button>
               <button type="button" className={secondary} onClick={() => signOut.mutate(u.id)}>
                 {t("admin.signOut")}

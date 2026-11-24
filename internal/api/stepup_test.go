@@ -46,3 +46,34 @@ func TestStepUpGuardsSensitiveActions(t *testing.T) {
 		t.Errorf("other session: %d %v", st, out)
 	}
 }
+
+func TestAdminSetsPasswordAndSSOUsersCannot(t *testing.T) {
+	srv, authSvc := newServer(t)
+	admin := &client{t: t, srv: srv}
+	admin.do("POST", "/v1/auth/register", map[string]string{"email": "admin@example.org", "password": "tulips in the garden"}, nil)
+	admin.login("admin@example.org", "tulips in the garden")
+	bob, err := authSvc.CreateUser(t.Context(), "bob@example.org", "first password here", "Bob", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := "/v1/admin/users/" + bob.ID.String() + "/password"
+	if st, out := admin.w("PUT", path, map[string]string{"password": "a brand new passphrase"}); st != 403 || out["detail"] != "step_up_required" {
+		t.Fatalf("without step-up: %d %v", st, out)
+	}
+	admin.stepUp()
+	if st, out := admin.w("PUT", path, map[string]string{"password": "short"}); st != 422 {
+		t.Errorf("weak password: %d %v", st, out)
+	}
+	if st, out := admin.w("PUT", path, map[string]string{"password": "a brand new passphrase"}); st != 204 {
+		t.Fatalf("set password: %d %v", st, out)
+	}
+	b := &client{t: t, srv: srv}
+	b.login("bob@example.org", "a brand new passphrase")
+
+	// a non-admin gets a 404 on the admin route
+	b.stepUp()
+	if st, _ := b.w("PUT", "/v1/admin/users/"+bob.ID.String()+"/password", map[string]string{"password": "another new passphrase"}); st != 404 {
+		t.Errorf("non-admin: %d", st)
+	}
+}

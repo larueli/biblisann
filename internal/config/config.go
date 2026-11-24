@@ -60,9 +60,7 @@ type Config struct {
 	OIDCGroupsClaim  string
 	OIDCAdminGroup   string
 	OIDCAutoCreate   bool
-	// OIDCStepUpLenient accepts a re-authentication when the provider sends no auth_time claim.
-	OIDCStepUpLenient bool
-	OIDCLabel         string
+	OIDCLabel        string
 
 	// Passkeys enables WebAuthn sign-in (set false when sign-in is delegated to OIDC).
 	Passkeys bool
@@ -132,7 +130,6 @@ func Load(src Sources, opts Options) (Config, error) {
 		OIDCAdminGroup:       r.str("OIDC_ADMIN_GROUP", ""),
 		OIDCAutoCreate:       r.boolean("OIDC_AUTO_CREATE", true),
 		OIDCLabel:            r.str("OIDC_LABEL", ""),
-		OIDCStepUpLenient:    r.boolean("OIDC_STEP_UP_LENIENT", false),
 		StorageBackend:       r.oneOf("STORAGE_BACKEND", "local", "local", "s3"),
 		S3Endpoint:           r.str("S3_ENDPOINT", ""),
 		S3Bucket:             r.str("S3_BUCKET", ""),

@@ -258,6 +258,27 @@ func (s *Server) registerAccount(a huma.API) {
 			}
 			return &struct{ Body []userAdminBody }{out}, nil
 		})
+	Register(a, huma.Operation{OperationID: "admin-set-password", Method: http.MethodPut, Path: "/v1/admin/users/{id}/password",
+		Summary:     "Set a password on an account (also single sign-on accounts) and sign it out everywhere",
+		Description: "Users who sign in with single sign-on cannot set a password themselves; an administrator can, which also lets them sign in locally. Needs a recent re-authentication.",
+		Tags:        []string{"admin"}, DefaultStatus: http.StatusNoContent, Errors: []int{403, 404, 422}}, PermInstanceAdmin,
+		func(ctx context.Context, in *struct {
+			ID   uuid.UUID `path:"id"`
+			Body struct {
+				Password string `json:"password" maxLength:"256"`
+			}
+		}) (*struct{}, error) {
+			if _, err := requireAdmin(ctx); err != nil {
+				return nil, err
+			}
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
+			}
+			if err := s.throttle(ctx, "admin-password", in.ID.String()); err != nil {
+				return nil, err
+			}
+			return nil, mapError(s.Log, s.Auth.AdminSetPassword(ctx, in.ID, in.Body.Password))
+		})
 	Register(a, huma.Operation{OperationID: "admin-set-disabled", Method: http.MethodPut, Path: "/v1/admin/users/{id}/disabled",
 		Summary: "Disable or re-enable an account (disabling signs it out everywhere)", Tags: []string{"admin"}, DefaultStatus: http.StatusNoContent}, PermInstanceAdmin,
 		func(ctx context.Context, in *struct {

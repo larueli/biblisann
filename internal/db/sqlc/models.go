@@ -352,15 +352,16 @@ type RecoveryCode struct {
 }
 
 type Session struct {
-	TokenHash   []byte
-	UserID      uuid.UUID
-	CsrfToken   string
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
-	LastSeen    time.Time
-	UserAgent   string
-	ID          uuid.UUID
-	StepupUntil *time.Time
+	TokenHash       []byte
+	UserID          uuid.UUID
+	CsrfToken       string
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	LastSeen        time.Time
+	UserAgent       string
+	ID              uuid.UUID
+	StepupUntil     *time.Time
+	StepupSingleUse bool
 }
 
 type User struct {

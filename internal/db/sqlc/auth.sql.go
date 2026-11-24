@@ -12,6 +12,15 @@ import (
 	"github.com/google/uuid"
 )
 
+const consumeSessionStepUp = `-- name: ConsumeSessionStepUp :exec
+UPDATE sessions SET stepup_until = NULL, stepup_single_use = false WHERE token_hash = $1 AND stepup_single_use
+`
+
+func (q *Queries) ConsumeSessionStepUp(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.Exec(ctx, consumeSessionStepUp, tokenHash)
+	return err
+}
+
 const countAdminUsers = `-- name: CountAdminUsers :one
 SELECT count(*)::int FROM users WHERE is_admin AND disabled_at IS NULL
 `
@@ -169,23 +178,24 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID uuid.UUID) erro
 }
 
 const getSession = `-- name: GetSession :one
-SELECT s.token_hash, s.user_id, s.csrf_token, s.expires_at, s.stepup_until,
+SELECT s.token_hash, s.user_id, s.csrf_token, s.expires_at, s.stepup_until, s.stepup_single_use,
        u.email, u.display_name, u.is_admin, u.locale, u.disabled_at
 FROM sessions s JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > now()
 `
 
 type GetSessionRow struct {
-	TokenHash   []byte
-	UserID      uuid.UUID
-	CsrfToken   string
-	ExpiresAt   time.Time
-	StepupUntil *time.Time
-	Email       string
-	DisplayName string
-	IsAdmin     bool
-	Locale      string
-	DisabledAt  *time.Time
+	TokenHash       []byte
+	UserID          uuid.UUID
+	CsrfToken       string
+	ExpiresAt       time.Time
+	StepupUntil     *time.Time
+	StepupSingleUse bool
+	Email           string
+	DisplayName     string
+	IsAdmin         bool
+	Locale          string
+	DisabledAt      *time.Time
 }
 
 func (q *Queries) GetSession(ctx context.Context, tokenHash []byte) (GetSessionRow, error) {
@@ -197,6 +207,7 @@ func (q *Queries) GetSession(ctx context.Context, tokenHash []byte) (GetSessionR
 		&i.CsrfToken,
 		&i.ExpiresAt,
 		&i.StepupUntil,
+		&i.StepupSingleUse,
 		&i.Email,
 		&i.DisplayName,
 		&i.IsAdmin,
@@ -335,16 +346,17 @@ func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) 
 }
 
 const markSessionStepUp = `-- name: MarkSessionStepUp :exec
-UPDATE sessions SET stepup_until = $2 WHERE token_hash = $1
+UPDATE sessions SET stepup_until = $2, stepup_single_use = $3 WHERE token_hash = $1
 `
 
 type MarkSessionStepUpParams struct {
-	TokenHash   []byte
-	StepupUntil *time.Time
+	TokenHash       []byte
+	StepupUntil     *time.Time
+	StepupSingleUse bool
 }
 
 func (q *Queries) MarkSessionStepUp(ctx context.Context, arg MarkSessionStepUpParams) error {
-	_, err := q.db.Exec(ctx, markSessionStepUp, arg.TokenHash, arg.StepupUntil)
+	_, err := q.db.Exec(ctx, markSessionStepUp, arg.TokenHash, arg.StepupUntil, arg.StepupSingleUse)
 	return err
 }
 

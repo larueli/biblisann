@@ -39,10 +39,7 @@ type Config struct {
 	GroupsClaim  string
 	AdminGroup   string
 	AutoCreate   bool
-	// StepUpLenient accepts a re-authentication without an auth_time claim when the ID token was
-	// issued just now (the provider was still asked for prompt=login).
-	StepUpLenient bool
-	Label         string
+	Label        string
 }
 
 // Errors.
@@ -171,58 +168,63 @@ type claims struct {
 
 // Complete finishes a sign-in flow and returns the local user ID.
 func (s *Service) Complete(ctx context.Context, code, state string) (uuid.UUID, error) {
-	return s.complete(ctx, code, state, purposeLogin)
+	uid, _, err := s.complete(ctx, code, state, purposeLogin)
+	return uid, err
 }
 
-// CompleteStepUp finishes a re-authentication flow and returns the local user ID. The identity
-// provider must report an authentication time inside the step-up window.
-func (s *Service) CompleteStepUp(ctx context.Context, code, state string) (uuid.UUID, error) {
-	return s.complete(ctx, code, state, purposeStepUp)
+// CompleteStepUp finishes a re-authentication flow and returns the local user ID. strong is true
+// when the provider reported an authentication time inside the step-up window. Providers that do
+// not send auth_time give a weaker proof (the ID token was just issued after prompt=login): the
+// caller then unlocks a single action instead of a window.
+func (s *Service) CompleteStepUp(ctx context.Context, code, state string) (uid uuid.UUID, strong bool, err error) {
+	uid, strong, err = s.complete(ctx, code, state, purposeStepUp)
+	return uid, strong, err
 }
 
-func (s *Service) complete(ctx context.Context, code, state, purpose string) (uuid.UUID, error) {
+func (s *Service) complete(ctx context.Context, code, state, purpose string) (_ uuid.UUID, strong bool, _ error) {
 	flow, err := s.q.ConsumeOIDCFlow(ctx, hash(state))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, ErrBadFlow
+		return uuid.Nil, false, ErrBadFlow
 	}
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, false, err
 	}
 	if flow.Purpose != purpose {
-		return uuid.Nil, ErrBadFlow
+		return uuid.Nil, false, ErrBadFlow
 	}
 	p, err := s.discover(ctx)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, false, err
 	}
 	tok, err := s.oauth(p).Exchange(s.ctx(ctx), code, oauth2.VerifierOption(flow.Verifier))
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("oidc: token exchange failed: %w", err)
+		return uuid.Nil, false, fmt.Errorf("oidc: token exchange failed: %w", err)
 	}
 	raw, _ := tok.Extra("id_token").(string)
 	if raw == "" {
-		return uuid.Nil, errors.New("oidc: no id_token in the response")
+		return uuid.Nil, false, errors.New("oidc: no id_token in the response")
 	}
 	idt, err := p.Verifier(&gooidc.Config{ClientID: s.cfg.ClientID}).Verify(s.ctx(ctx), raw)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("oidc: invalid id_token: %w", err)
+		return uuid.Nil, false, fmt.Errorf("oidc: invalid id_token: %w", err)
 	}
 	if idt.Nonce != flow.Nonce {
-		return uuid.Nil, ErrBadFlow
+		return uuid.Nil, false, ErrBadFlow
 	}
 	var c claims
 	if err := idt.Claims(&c); err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, false, err
 	}
 	if purpose == purposeStepUp {
 		// With max_age=0 the provider must report when the user authenticated. No claim, or an old
 		// one, means it did not really ask again.
 		at := time.Unix(c.AuthTime, 0)
-		if c.AuthTime == 0 && s.cfg.StepUpLenient {
+		strong = c.AuthTime != 0
+		if !strong {
 			at = idt.IssuedAt
 		}
-		if at.IsZero() || c.AuthTime == 0 && !s.cfg.StepUpLenient || time.Since(at) > auth.StepUpWindow || time.Until(at) > time.Minute {
-			return uuid.Nil, ErrStaleAuth
+		if at.IsZero() || time.Since(at) > auth.StepUpWindow || time.Until(at) > time.Minute {
+			return uuid.Nil, false, ErrStaleAuth
 		}
 	}
 	var all map[string]any
@@ -231,14 +233,14 @@ func (s *Service) complete(ctx context.Context, code, state, purpose string) (uu
 
 	uid, err := s.resolveUser(ctx, idt.Issuer, c)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, false, err
 	}
 	if purpose == purposeLogin {
 		if err := s.syncGroups(ctx, uid, groups); err != nil {
-			return uuid.Nil, err
+			return uuid.Nil, false, err
 		}
 	}
-	return uid, nil
+	return uid, strong, nil
 }
 
 func (s *Service) resolveUser(ctx context.Context, issuer string, c claims) (uuid.UUID, error) {

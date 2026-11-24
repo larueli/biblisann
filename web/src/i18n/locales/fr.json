@@ -231,7 +231,9 @@
     "disable": "Désactiver",
     "signOut": "Déconnecter partout",
     "delete": "Supprimer",
-    "confirmDelete": "Supprimer le compte {{email}} et les bibliothèques que lui seul utilise ?"
+    "confirmDelete": "Supprimer le compte {{email}} et les bibliothèques que lui seul utilise ?",
+    "setPassword": "Définir le mot de passe",
+    "newPassword": "Nouveau mot de passe pour {{email}} (permet aussi aux comptes en authentification unique de se connecter localement ; les déconnecte partout) :"
   },
   "footer": {
     "source": "Code source",

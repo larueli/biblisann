@@ -233,6 +233,10 @@ func (s *Service) RequestReset(ctx context.Context, email, baseURL string) error
 	if err != nil {
 		return err
 	}
+	if u.PasswordHash == nil {
+		// Single sign-on account: a reset link would let anyone with the mailbox bypass the provider.
+		return nil
+	}
 	tok, err := randomToken(32)
 	if err != nil {
 		return err

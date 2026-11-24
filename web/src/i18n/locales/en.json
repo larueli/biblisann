@@ -231,7 +231,9 @@
     "disable": "Disable",
     "signOut": "Sign out everywhere",
     "delete": "Delete",
-    "confirmDelete": "Delete the account {{email}} and the libraries only it uses?"
+    "confirmDelete": "Delete the account {{email}} and the libraries only it uses?",
+    "setPassword": "Set password",
+    "newPassword": "New password for {{email}} (also lets single sign-on users sign in locally; signs them out everywhere):"
   },
   "footer": {
     "source": "Source code",

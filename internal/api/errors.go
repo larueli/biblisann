@@ -47,6 +47,8 @@ func mapError(log *slog.Logger, err error) error {
 		return huma.Error422UnprocessableEntity(err.Error())
 	case errors.As(err, &weak):
 		return huma.Error422UnprocessableEntity(weak.Error())
+	case errors.Is(err, auth.ErrNoPassword):
+		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, auth.ErrInvalidCode), errors.Is(err, auth.ErrInvalidToken):
 		return huma.Error401Unauthorized("invalid or expired code")
 	case errors.Is(err, auth.ErrTooManyTries):

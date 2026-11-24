@@ -26,6 +26,8 @@ var (
 	ErrEmailTaken         = errors.New("email already registered")
 	ErrInvalidEmail       = errors.New("invalid email address")
 	ErrSessionNotFound    = errors.New("session not found")
+	// ErrNoPassword: the account signs in with single sign-on, a self-service password would bypass it.
+	ErrNoPassword = errors.New("this account signs in with single sign-on: ask an administrator to set a password")
 )
 
 // SessionLifetime is the absolute lifetime of a login.
@@ -70,11 +72,13 @@ type Session struct {
 	ExpiresAt time.Time
 	// StepUpUntil is when the last re-authentication stops counting (nil: never done).
 	StepUpUntil *time.Time
-	UserID      uuid.UUID
-	Email       string
-	Name        string
-	IsAdmin     bool
-	Locale      string
+	// StepUpSingleUse: the window unlocks one action (weak proof, see ConsumeStepUp).
+	StepUpSingleUse bool
+	UserID          uuid.UUID
+	Email           string
+	Name            string
+	IsAdmin         bool
+	Locale          string
 }
 
 // NormalizeEmail validates and canonicalizes an address (trimmed, bare address, max 320 bytes).
@@ -245,7 +249,7 @@ func (s *Service) Lookup(ctx context.Context, token string) (*Session, error) {
 		return nil, ErrSessionNotFound
 	}
 	_ = s.q.TouchSession(ctx, h) // best effort
-	return &Session{CSRFToken: row.CsrfToken, ExpiresAt: row.ExpiresAt, StepUpUntil: row.StepupUntil, UserID: row.UserID, Email: row.Email,
+	return &Session{CSRFToken: row.CsrfToken, ExpiresAt: row.ExpiresAt, StepUpUntil: row.StepupUntil, StepUpSingleUse: row.StepupSingleUse, UserID: row.UserID, Email: row.Email,
 		Name: row.DisplayName, IsAdmin: row.IsAdmin, Locale: row.Locale}, nil
 }
 
@@ -264,7 +268,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, current,
 		return fmt.Errorf("auth: load user: %w", err)
 	}
 	if u.PasswordHash == nil {
-		return ErrInvalidCredentials
+		return ErrNoPassword
 	}
 	if ok, _ := VerifyPassword(current, *u.PasswordHash); !ok {
 		return ErrInvalidCredentials

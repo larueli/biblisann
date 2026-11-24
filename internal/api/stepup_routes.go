@@ -26,6 +26,11 @@ func (s *Server) requireStepUp(ctx context.Context) error {
 	if !s.Auth.StepUpValid(sess) {
 		return huma.Error403Forbidden(stepUpRequired)
 	}
+	if sess.StepUpSingleUse {
+		if err := s.Auth.ConsumeStepUp(ctx, sessionTokenFrom(ctx)); err != nil {
+			return mapError(s.Log, err)
+		}
+	}
 	return nil
 }
 
@@ -159,7 +164,7 @@ func (s *Server) finishOIDCStepUp(w http.ResponseWriter, r *http.Request) bool {
 		http.Redirect(w, r, "/settings?stepup=denied", http.StatusFound)
 		return true
 	}
-	uid, err := s.OIDC.CompleteStepUp(r.Context(), r.URL.Query().Get("code"), state)
+	uid, strong, err := s.OIDC.CompleteStepUp(r.Context(), r.URL.Query().Get("code"), state)
 	if err != nil || uid != sess.UserID {
 		if err != nil && !errors.Is(err, oidc.ErrBadFlow) {
 			s.Log.Warn("oidc step-up failed", "error", err)
@@ -167,7 +172,11 @@ func (s *Server) finishOIDCStepUp(w http.ResponseWriter, r *http.Request) bool {
 		http.Redirect(w, r, "/settings?stepup=failed", http.StatusFound)
 		return true
 	}
-	if err := s.Auth.MarkStepUp(r.Context(), token); err != nil {
+	mark := s.Auth.MarkStepUp
+	if !strong {
+		mark = s.Auth.MarkStepUpOnce // no auth_time: one action per sign-in at the provider
+	}
+	if err := mark(r.Context(), token); err != nil {
 		http.Redirect(w, r, "/settings?stepup=failed", http.StatusFound)
 		return true
 	}

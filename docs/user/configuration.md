@@ -33,7 +33,6 @@ A commented starting point is in `deploy/compose/.env.example`.
 | `BIBLISANN_SECRET_KEY` | none | yes (`_FILE`) | Base64 of 32 random bytes (`openssl rand -base64 32`). Seals authenticator secrets; without it two-factor is off. Losing it disables enrolled authenticators. |
 | `BIBLISANN_PASSKEYS` | `true` | no | `false` turns passkey sign-in off. Passkeys need `BIBLISANN_BASE_URL` to be the real https address (or localhost). |
 | `BIBLISANN_OIDC_ISSUER`, `_CLIENT_ID`, `_SCOPES`, `_GROUPS_CLAIM` (`groups`), `_ADMIN_GROUP`, `_AUTO_CREATE` (`true`), `_LABEL` | none | no | Single sign-on. Redirect URI to register at the provider: `<BASE_URL>/v1/auth/oidc/callback`. |
-| `BIBLISANN_OIDC_STEP_UP_LENIENT` | `false` | no | Single sign-on re-authentication (step-up) asks the provider to sign the user in again and requires its `auth_time` claim (OpenID Connect requires providers to send it when `max_age` is requested). `true` accepts a provider that omits it, as long as the ID token was issued just now: weaker, because a provider that ignores `prompt=login` would be trusted. Test with your provider first. |
 | `BIBLISANN_OIDC_CLIENT_SECRET` | none | yes (`_FILE`) | OIDC client secret. |
 | `BIBLISANN_GOOGLE_BOOKS_KEY` | none | yes (`_FILE`) | Optional Google Books API key (add `google` to `BIBLISANN_PROVIDERS` to use the provider). Other providers: `loc`, `k10plus`. |
 | `BIBLISANN_ADDON_PROVIDERS_FILE` | none | no (the file holds tokens) | JSON list `[{"name":"mine","url":"https://...","token":"..."}]` of addon providers. |

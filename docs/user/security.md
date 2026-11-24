@@ -10,7 +10,7 @@
 
 ## Confirming sensitive actions (step-up)
 
-Changing the password, turning two-factor on or off, adding or removing a passkey, creating a token and deleting the account ask you to prove who you are again, even with a valid session. You can confirm with your password (plus an authenticator or recovery code when two-factor is on), with a passkey, or by signing in again at your single sign-on provider. With single sign-on the provider must report when you signed in (`auth_time`); if yours does not, see `BIBLISANN_OIDC_STEP_UP_LENIENT` in the configuration reference. The confirmation unlocks these actions for 5 minutes, for that browser session only.
+Changing the password, turning two-factor on or off, adding or removing a passkey, creating a token and deleting the account ask you to prove who you are again, even with a valid session. You can confirm with your password (plus an authenticator or recovery code when two-factor is on), with a passkey, or by signing in again at your single sign-on provider. With single sign-on the provider is asked to sign you in again. When it reports when you signed in (`auth_time`, which OpenID Connect requires for this request) the confirmation lasts 5 minutes; when it does not, each sensitive action needs its own sign-in at the provider. The confirmation unlocks these actions for 5 minutes, for that browser session only.
 
 API clients see `403` with the detail `step_up_required`; the answer to `GET /v1/auth/session` carries `step_up_until` while the window is open. Personal access tokens cannot perform these actions at all.
 
