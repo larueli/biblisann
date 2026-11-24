@@ -56,7 +56,11 @@ func (s *Server) registerOIDC(a huma.API, mux *http.ServeMux) {
 			HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode})
 		http.Redirect(w, r, url, http.StatusFound)
 	})
+	s.registerOIDCStepUp(mux)
 	mux.HandleFunc("GET /v1/auth/oidc/callback", func(w http.ResponseWriter, r *http.Request) {
+		if s.finishOIDCStepUp(w, r) {
+			return
+		}
 		c, err := r.Cookie(oidcCookie)
 		state := r.URL.Query().Get("state")
 		if err != nil || state == "" || subtle.ConstantTimeCompare([]byte(c.Value), []byte(state)) != 1 {

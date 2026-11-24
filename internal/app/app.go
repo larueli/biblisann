@@ -240,7 +240,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 	var oidcSvc *oidc.Service
 	if cfg.OIDCIssuer != "" {
 		oidcSvc = oidc.New(oidc.Config{Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret.Reveal(),
-			RedirectURL: cfg.BaseURL.String() + "/v1/auth/oidc/callback", Scopes: cfg.OIDCScopes, GroupsClaim: cfg.OIDCGroupsClaim,
+			RedirectURL: cfg.BaseURL.String() + "/v1/auth/oidc/callback", Scopes: cfg.OIDCScopes, GroupsClaim: cfg.OIDCGroupsClaim, StepUpLenient: cfg.OIDCStepUpLenient,
 			AdminGroup: cfg.OIDCAdminGroup, AutoCreate: cfg.OIDCAutoCreate, Label: cfg.OIDCLabel}, pool, authSvc, fetcher.Std())
 	}
 	h, _ := api.New(api.Deps{WebPushKey: cfg.VAPIDPublicKey, HCSync: hcs, SourceURL: cfg.SourceURL, Metrics: telemetry.New(version.Version(), pool), MetricsToken: cfg.MetricsToken.Reveal(), MetricsPublic: cfg.MetricsPublic, Account: account.NewService(pool, libSvc, catSvc, listsSvc, loansSvc, readingSvc), Hardcover: hc, Passkeys: passkeySvc, OPDS: opds.New(tokenSvc, libSvc, catSvc, cfg.BaseURL.String()), OIDC: oidcSvc, SCIM: scim.New(pool, tokenSvc, cfg.BaseURL.String()),

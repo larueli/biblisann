@@ -47,6 +47,7 @@ type client struct {
 	srv    *httptest.Server
 	cookie *http.Cookie
 	csrf   string
+	pw     string
 }
 
 func (c *client) do(method, path string, body any, hdr map[string]string) (int, map[string]any, http.Header) {
@@ -105,6 +106,15 @@ func (c *client) login(email, pw string) {
 		}
 	}
 	c.csrf = out["csrf_token"].(string)
+	c.pw = pw
+}
+
+// stepUp re-authenticates with the password used to log in.
+func (c *client) stepUp() {
+	c.t.Helper()
+	if st, out := c.w("POST", "/v1/auth/step-up", map[string]string{"password": c.pw}); st != 200 {
+		c.t.Fatalf("step-up %d %v", st, out)
+	}
 }
 
 func newServer(t *testing.T) (*httptest.Server, *auth.Service) {
@@ -293,6 +303,7 @@ func TestOrganiseFlow(t *testing.T) {
 	if st, _ := c.w("POST", "/v1/instances/"+inst+"/lend", map[string]any{"counterparty": "Paul"}); st != 409 {
 		t.Errorf("double lend: %d", st)
 	}
+	c.stepUp()
 	_, tok := c.w("POST", "/v1/me/tokens", map[string]any{"name": "calendar", "kind": "feed"})
 	resp, err := http.Get(srv.URL + "/v1/feeds/loans.ics?token=" + tok["token"].(string))
 	if err != nil {
@@ -399,6 +410,7 @@ func TestMFAOverAPI(t *testing.T) {
 	c := &client{t: t, srv: srv}
 	c.do("POST", "/v1/auth/register", map[string]string{"email": "me@example.org", "password": "tulips in the garden"}, nil)
 	c.login("me@example.org", "tulips in the garden")
+	c.stepUp()
 	st, enr := c.w("POST", "/v1/me/mfa/totp", nil)
 	if st != 200 {
 		t.Fatalf("enroll %d %v", st, enr)
@@ -522,7 +534,8 @@ func TestSessionsExportImportDelete(t *testing.T) {
 		t.Errorf("revoke sessions: %d", st)
 	}
 
-	// self-deletion needs the typed email and the password
+	// self-deletion needs a fresh authentication, the typed email and the password
+	c.stepUp()
 	if st, _ := c.w("DELETE", "/v1/me", map[string]any{"confirm_email": "admin@example.org", "password": "wrong wrong wrong"}); st != 401 {
 		t.Errorf("wrong password: %d", st)
 	}

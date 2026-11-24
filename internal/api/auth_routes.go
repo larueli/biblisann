@@ -26,9 +26,10 @@ type userBody struct {
 }
 
 type sessionBody struct {
-	User      userBody  `json:"user"`
-	CSRFToken string    `json:"csrf_token" doc:"Send as X-CSRF-Token on every non-GET request made with the session cookie."`
-	ExpiresAt time.Time `json:"expires_at"`
+	User        userBody   `json:"user"`
+	CSRFToken   string     `json:"csrf_token" doc:"Send as X-CSRF-Token on every non-GET request made with the session cookie."`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	StepUpUntil *time.Time `json:"step_up_until,omitempty" doc:"Set while a recent re-authentication unlocks sensitive actions."`
 }
 
 type loginBody struct {
@@ -178,6 +179,8 @@ func (s *Server) registerAuth(a huma.API) {
 		MFAEnabled        bool `json:"mfa_enabled"`
 		ResetAvailable    bool `json:"reset_available"`
 		PasskeysAvailable bool `json:"passkeys_available"`
+		HasPassword       bool `json:"has_password" doc:"The account can re-authenticate with a password."`
+		SSOAvailable      bool `json:"sso_available" doc:"Single sign-on is configured: it can re-authenticate."`
 	}
 	Register(a, huma.Operation{OperationID: "get-security", Method: http.MethodGet, Path: "/v1/me/security",
 		Summary: "Which sign-in protections exist on this server and which I use", Tags: []string{"auth"}}, PermAuthenticated,
@@ -186,7 +189,8 @@ func (s *Server) registerAuth(a huma.API) {
 			if err != nil {
 				return nil, mapError(s.Log, err)
 			}
-			return &struct{ Body securityBody }{securityBody{s.Auth.MFAAvailable(), s.Auth.IsMFAEnabled(ctx, p.UserID), s.Auth.ResetAvailable(), false}}, nil
+			return &struct{ Body securityBody }{securityBody{s.Auth.MFAAvailable(), s.Auth.IsMFAEnabled(ctx, p.UserID), s.Auth.ResetAvailable(),
+				s.Passkeys != nil, s.Auth.HasPassword(ctx, p.UserID), s.OIDC != nil}}, nil
 		})
 	Register(a, huma.Operation{OperationID: "enroll-totp", Method: http.MethodPost, Path: "/v1/me/mfa/totp",
 		Summary: "Start authenticator-app enrollment", Tags: []string{"auth"}, Errors: []int{503}}, PermAuthenticated,
@@ -196,8 +200,8 @@ func (s *Server) registerAuth(a huma.API) {
 				URI    string `json:"uri" doc:"otpauth:// URI to render as a QR code."`
 			}
 		}, error) {
-			if SessionFrom(ctx) == nil {
-				return nil, huma.Error403Forbidden("a browser session is required")
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
 			}
 			p, _ := authz.From(ctx)
 			secret, uri, err := s.Auth.EnrollTOTP(ctx, p.UserID, "Biblisann")
@@ -259,8 +263,8 @@ func (s *Server) registerAuth(a huma.API) {
 				Password string `json:"password" maxLength:"256"`
 			}
 		}) (*struct{}, error) {
-			if SessionFrom(ctx) == nil {
-				return nil, huma.Error403Forbidden("a browser session is required")
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
 			}
 			p, _ := authz.From(ctx)
 			if err := s.throttle(ctx, "totp-disable", p.UserID.String()); err != nil {
@@ -276,7 +280,8 @@ func (s *Server) registerAuth(a huma.API) {
 				return nil, huma.Error401Unauthorized("a browser session is required")
 			}
 			return &struct{ Body sessionBody }{sessionBody{User: userBody{ID: sess.UserID, Email: sess.Email, Name: sess.Name,
-				IsAdmin: sess.IsAdmin, Locale: sess.Locale}, CSRFToken: sess.CSRFToken, ExpiresAt: sess.ExpiresAt}}, nil
+				IsAdmin: sess.IsAdmin, Locale: sess.Locale}, CSRFToken: sess.CSRFToken, ExpiresAt: sess.ExpiresAt,
+				StepUpUntil: s.stepUpUntil(sess)}}, nil
 		})
 
 	Register(a, huma.Operation{OperationID: "logout", Method: http.MethodPost, Path: "/v1/auth/logout",
@@ -304,6 +309,9 @@ func (s *Server) registerAuth(a huma.API) {
 			sess := SessionFrom(ctx)
 			if sess == nil {
 				return nil, huma.Error401Unauthorized("a browser session is required")
+			}
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
 			}
 			if err := s.throttle(ctx, "password", sess.UserID.String()); err != nil {
 				return nil, err
@@ -351,4 +359,12 @@ func ipKey(a netip.Addr) string {
 		}
 	}
 	return a.String()
+}
+
+// stepUpUntil is the end of the step-up window, or nil when it is closed.
+func (s *Server) stepUpUntil(sess *auth.Session) *time.Time {
+	if s.Auth.StepUpValid(sess) {
+		return sess.StepUpUntil
+	}
+	return nil
 }

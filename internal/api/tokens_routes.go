@@ -68,6 +68,9 @@ func (s *Server) registerTokens(a huma.API) {
 				Token string `json:"token" doc:"The secret. Shown once."`
 			}
 		}, error) {
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
+			}
 			kind := in.Body.Kind
 			if kind == "" {
 				kind = tokens.KindPAT

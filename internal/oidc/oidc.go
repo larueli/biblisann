@@ -39,7 +39,10 @@ type Config struct {
 	GroupsClaim  string
 	AdminGroup   string
 	AutoCreate   bool
-	Label        string
+	// StepUpLenient accepts a re-authentication without an auth_time claim when the ID token was
+	// issued just now (the provider was still asked for prompt=login).
+	StepUpLenient bool
+	Label         string
 }
 
 // Errors.
@@ -48,6 +51,7 @@ var (
 	ErrNotAllowed      = errors.New("no account for this identity and automatic creation is off")
 	ErrBadFlow         = errors.New("invalid or expired sign-in request")
 	ErrDisabled        = errors.New("this account is disabled")
+	ErrStaleAuth       = errors.New("the identity provider did not authenticate the user again")
 )
 
 const flowLife = 10 * time.Minute
@@ -119,6 +123,21 @@ func hash(s string) []byte { h := sha256.Sum256([]byte(s)); return h[:] }
 
 // Begin returns the URL to send the browser to.
 func (s *Service) Begin(ctx context.Context) (authURL, state string, err error) {
+	return s.begin(ctx, purposeLogin)
+}
+
+// BeginStepUp returns the URL that makes the identity provider authenticate the user again
+// (prompt=login, max_age=0) for a sensitive action.
+func (s *Service) BeginStepUp(ctx context.Context) (authURL, state string, err error) {
+	return s.begin(ctx, purposeStepUp, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+}
+
+const (
+	purposeLogin  = "login"
+	purposeStepUp = "step_up"
+)
+
+func (s *Service) begin(ctx context.Context, purpose string, extra ...oauth2.AuthCodeOption) (authURL, state string, err error) {
 	p, err := s.discover(ctx)
 	if err != nil {
 		return "", "", err
@@ -133,11 +152,12 @@ func (s *Service) Begin(ctx context.Context) (authURL, state string, err error) 
 	}
 	verifier := oauth2.GenerateVerifier()
 	if err := s.q.CreateOIDCFlow(ctx, dbsqlc.CreateOIDCFlowParams{StateHash: hash(state), Nonce: nonce, Verifier: verifier,
-		ExpiresAt: time.Now().Add(flowLife)}); err != nil {
+		Purpose: purpose, ExpiresAt: time.Now().Add(flowLife)}); err != nil {
 		return "", "", err
 	}
 	_ = s.q.PurgeOIDCFlows(ctx)
-	return s.oauth(p).AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), gooidc.Nonce(nonce)), state, nil
+	opts := append([]oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier), gooidc.Nonce(nonce)}, extra...)
+	return s.oauth(p).AuthCodeURL(state, opts...), state, nil
 }
 
 type claims struct {
@@ -146,16 +166,30 @@ type claims struct {
 	EmailVerified bool   `json:"email_verified"`
 	Name          string `json:"name"`
 	Locale        string `json:"locale"`
+	AuthTime      int64  `json:"auth_time"`
 }
 
-// Complete finishes the flow and returns the local user ID.
+// Complete finishes a sign-in flow and returns the local user ID.
 func (s *Service) Complete(ctx context.Context, code, state string) (uuid.UUID, error) {
+	return s.complete(ctx, code, state, purposeLogin)
+}
+
+// CompleteStepUp finishes a re-authentication flow and returns the local user ID. The identity
+// provider must report an authentication time inside the step-up window.
+func (s *Service) CompleteStepUp(ctx context.Context, code, state string) (uuid.UUID, error) {
+	return s.complete(ctx, code, state, purposeStepUp)
+}
+
+func (s *Service) complete(ctx context.Context, code, state, purpose string) (uuid.UUID, error) {
 	flow, err := s.q.ConsumeOIDCFlow(ctx, hash(state))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, ErrBadFlow
 	}
 	if err != nil {
 		return uuid.Nil, err
+	}
+	if flow.Purpose != purpose {
+		return uuid.Nil, ErrBadFlow
 	}
 	p, err := s.discover(ctx)
 	if err != nil {
@@ -180,6 +214,17 @@ func (s *Service) Complete(ctx context.Context, code, state string) (uuid.UUID, 
 	if err := idt.Claims(&c); err != nil {
 		return uuid.Nil, err
 	}
+	if purpose == purposeStepUp {
+		// With max_age=0 the provider must report when the user authenticated. No claim, or an old
+		// one, means it did not really ask again.
+		at := time.Unix(c.AuthTime, 0)
+		if c.AuthTime == 0 && s.cfg.StepUpLenient {
+			at = idt.IssuedAt
+		}
+		if at.IsZero() || c.AuthTime == 0 && !s.cfg.StepUpLenient || time.Since(at) > auth.StepUpWindow || time.Until(at) > time.Minute {
+			return uuid.Nil, ErrStaleAuth
+		}
+	}
 	var all map[string]any
 	_ = idt.Claims(&all)
 	groups := stringList(all[s.cfg.GroupsClaim])
@@ -188,8 +233,10 @@ func (s *Service) Complete(ctx context.Context, code, state string) (uuid.UUID, 
 	if err != nil {
 		return uuid.Nil, err
 	}
-	if err := s.syncGroups(ctx, uid, groups); err != nil {
-		return uuid.Nil, err
+	if purpose == purposeLogin {
+		if err := s.syncGroups(ctx, uid, groups); err != nil {
+			return uuid.Nil, err
+		}
 	}
 	return uid, nil
 }

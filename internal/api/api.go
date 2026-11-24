@@ -164,6 +164,7 @@ func New(d Deps) (http.Handler, huma.API) {
 	mux.HandleFunc("GET /v1/me/export", srv.serveExport)
 	srv.registerOIDC(a, mux)
 	srv.registerPasskeys(a)
+	srv.registerStepUp(a)
 	srv.registerOAuth(a) // operations are always described; handlers answer 404 when the feature is off
 	if d.OAuth != nil {
 		limiter := d.Limiter

@@ -307,5 +307,16 @@
     "empty": "Nothing here.",
     "moveTo": "Move to",
     "close": "Close"
+  },
+  "stepUp": {
+    "title": "Confirm it is you",
+    "explain": "This action is sensitive. Confirm your identity again; it stays unlocked for 5 minutes.",
+    "password": "Password",
+    "code": "Authenticator or recovery code",
+    "confirm": "Confirm",
+    "passkey": "Use a passkey",
+    "sso": "Sign in again with single sign-on",
+    "cancel": "Cancel",
+    "failed": "Confirmation failed."
   }
 }

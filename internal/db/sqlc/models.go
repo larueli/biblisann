@@ -301,6 +301,7 @@ type OidcFlow struct {
 	Nonce     string
 	Verifier  string
 	ExpiresAt time.Time
+	Purpose   string
 }
 
 type PasswordReset struct {
@@ -351,14 +352,15 @@ type RecoveryCode struct {
 }
 
 type Session struct {
-	TokenHash []byte
-	UserID    uuid.UUID
-	CsrfToken string
-	CreatedAt time.Time
-	ExpiresAt time.Time
-	LastSeen  time.Time
-	UserAgent string
-	ID        uuid.UUID
+	TokenHash   []byte
+	UserID      uuid.UUID
+	CsrfToken   string
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	LastSeen    time.Time
+	UserAgent   string
+	ID          uuid.UUID
+	StepupUntil *time.Time
 }
 
 type User struct {

@@ -4,6 +4,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createAppRouter } from "./app/router";
+import { StepUpDialog } from "./features/auth/StepUpDialog";
 import "./i18n";
 import "./index.css";
 
@@ -17,6 +18,7 @@ createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <StepUpDialog />
     </QueryClientProvider>
   </StrictMode>,
 );

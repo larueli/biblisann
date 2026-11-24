@@ -8,6 +8,12 @@
 - **Single sign-on (OIDC)**: set the `BIBLISANN_OIDC_*` variables. An identity is attached to an existing account only if the provider says the email is verified. Groups in the token become groups in Biblisann; `BIBLISANN_OIDC_ADMIN_GROUP` makes its members administrators.
 - **Forgot password**: needs SMTP. The link works once for one hour and signs you out everywhere.
 
+## Confirming sensitive actions (step-up)
+
+Changing the password, turning two-factor on or off, adding or removing a passkey, creating a token and deleting the account ask you to prove who you are again, even with a valid session. You can confirm with your password (plus an authenticator or recovery code when two-factor is on), with a passkey, or by signing in again at your single sign-on provider. With single sign-on the provider must report when you signed in (`auth_time`); if yours does not, see `BIBLISANN_OIDC_STEP_UP_LENIENT` in the configuration reference. The confirmation unlocks these actions for 5 minutes, for that browser session only.
+
+API clients see `403` with the detail `step_up_required`; the answer to `GET /v1/auth/session` carries `step_up_until` while the window is open. Personal access tokens cannot perform these actions at all.
+
 ## Provisioning with SCIM
 
 An administrator creates a provisioning token in Settings (*Create provisioning token (SCIM)*, shown once) and gives it, with `<BASE_URL>/scim/v2`, to the identity provider. Users are created without a password (they sign in through OIDC); "delete" in the provider deactivates the account.

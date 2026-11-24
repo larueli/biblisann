@@ -80,6 +80,9 @@ func (s *Server) registerPasskeys(a huma.API) {
 			if sess == nil {
 				return nil, huma.Error403Forbidden("a browser session is required")
 			}
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
+			}
 			id, opts, err := s.Passkeys.BeginRegistration(ctx, sess.UserID)
 			if err != nil {
 				return nil, s.passkeyErr(err)
@@ -138,6 +141,9 @@ func (s *Server) registerPasskeys(a huma.API) {
 			sess := SessionFrom(ctx)
 			if s.Passkeys == nil || sess == nil {
 				return nil, off()
+			}
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
 			}
 			if err := s.Passkeys.Delete(ctx, sess.UserID, in.ID); err != nil {
 				if errors.Is(err, passkeys.ErrUnknown) {

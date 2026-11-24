@@ -2327,6 +2327,10 @@
       "SecurityBody": {
         "additionalProperties": false,
         "properties": {
+          "has_password": {
+            "description": "The account can re-authenticate with a password.",
+            "type": "boolean"
+          },
           "mfa_available": {
             "type": "boolean"
           },
@@ -2338,13 +2342,19 @@
           },
           "reset_available": {
             "type": "boolean"
+          },
+          "sso_available": {
+            "description": "Single sign-on is configured: it can re-authenticate.",
+            "type": "boolean"
           }
         },
         "required": [
           "mfa_available",
           "mfa_enabled",
           "reset_available",
-          "passkeys_available"
+          "passkeys_available",
+          "has_password",
+          "sso_available"
         ],
         "type": "object"
       },
@@ -2385,6 +2395,11 @@
             "type": "string"
           },
           "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "step_up_until": {
+            "description": "Set while a recent re-authentication unlocks sensitive actions.",
             "format": "date-time",
             "type": "string"
           },
@@ -2520,6 +2535,53 @@
           "read_per_year",
           "average_grade",
           "graded"
+        ],
+        "type": "object"
+      },
+      "Step-up-passkey-finishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "credential": {},
+          "session_id": {
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "credential"
+        ],
+        "type": "object"
+      },
+      "Step-upRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "Authenticator or recovery code, when two-factor is on.",
+            "maxLength": 32,
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "type": "object"
+      },
+      "StepUpBody": {
+        "additionalProperties": false,
+        "properties": {
+          "until": {
+            "description": "The step-up window closes at this time (5 minutes after the last re-authentication).",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "until"
         ],
         "type": "object"
       },
@@ -3779,6 +3841,253 @@
           }
         },
         "summary": "Current user and CSRF token",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "authenticated"
+      }
+    },
+    "/v1/auth/step-up": {
+      "post": {
+        "description": "Opens a 5-minute window for sensitive actions (password, two-factor and passkey changes, new tokens, account deletion). Accounts without a password use a passkey or the identity provider instead.",
+        "operationId": "step-up",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Step-upRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUpBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Re-authenticate with the password (and a code when two-factor is on)",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "authenticated"
+      }
+    },
+    "/v1/auth/step-up/passkey/begin": {
+      "post": {
+        "operationId": "step-up-passkey-begin",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ceremony"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Start a re-authentication with a passkey",
+        "tags": [
+          "auth"
+        ],
+        "x-permission": "authenticated"
+      }
+    },
+    "/v1/auth/step-up/passkey/finish": {
+      "post": {
+        "operationId": "step-up-passkey-finish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Step-up-passkey-finishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUpBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Finish a re-authentication with a passkey of this account",
         "tags": [
           "auth"
         ],

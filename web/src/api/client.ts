@@ -1,4 +1,5 @@
 import createClient, { type Middleware } from "openapi-fetch";
+import { requestStepUp, stepUpRequiredDetail } from "../features/auth/stepup";
 import type { components, paths } from "./schema";
 
 export type Schemas = components["schemas"];
@@ -26,6 +27,38 @@ export const api = createClient<paths>({
   fetch: (request) => globalThis.fetch(request),
 });
 api.use(csrf);
+
+// A sensitive action answers 403 "step_up_required" until the user re-authenticates. Ask once,
+// then replay the original request (the CSRF header is already on the clone).
+const replayable = new Map<string, Request>();
+const stepUp: Middleware = {
+  onRequest({ request, id }) {
+    if (
+      request.method !== "GET" &&
+      request.method !== "HEAD" &&
+      !request.url.includes("/v1/auth/step-up")
+    ) {
+      replayable.set(id, request.clone());
+    }
+    return request;
+  },
+  async onResponse({ response, id }) {
+    const original = replayable.get(id);
+    replayable.delete(id);
+    if (!original || response.status !== 403) return undefined;
+    const body = (await response
+      .clone()
+      .json()
+      .catch(() => null)) as { detail?: unknown } | null;
+    if (body?.detail !== stepUpRequiredDetail) return undefined;
+    if (!(await requestStepUp())) return undefined;
+    return globalThis.fetch(original);
+  },
+  onError({ id }) {
+    replayable.delete(id);
+  },
+};
+api.use(stepUp);
 
 /** Error carrying the HTTP status, so callers can tell "offline" from "refused". */
 export class ApiError extends Error {

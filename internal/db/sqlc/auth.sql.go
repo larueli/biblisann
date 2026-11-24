@@ -169,7 +169,7 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID uuid.UUID) erro
 }
 
 const getSession = `-- name: GetSession :one
-SELECT s.token_hash, s.user_id, s.csrf_token, s.expires_at,
+SELECT s.token_hash, s.user_id, s.csrf_token, s.expires_at, s.stepup_until,
        u.email, u.display_name, u.is_admin, u.locale, u.disabled_at
 FROM sessions s JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > now()
@@ -180,6 +180,7 @@ type GetSessionRow struct {
 	UserID      uuid.UUID
 	CsrfToken   string
 	ExpiresAt   time.Time
+	StepupUntil *time.Time
 	Email       string
 	DisplayName string
 	IsAdmin     bool
@@ -195,6 +196,7 @@ func (q *Queries) GetSession(ctx context.Context, tokenHash []byte) (GetSessionR
 		&i.UserID,
 		&i.CsrfToken,
 		&i.ExpiresAt,
+		&i.StepupUntil,
 		&i.Email,
 		&i.DisplayName,
 		&i.IsAdmin,
@@ -330,6 +332,20 @@ func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const markSessionStepUp = `-- name: MarkSessionStepUp :exec
+UPDATE sessions SET stepup_until = $2 WHERE token_hash = $1
+`
+
+type MarkSessionStepUpParams struct {
+	TokenHash   []byte
+	StepupUntil *time.Time
+}
+
+func (q *Queries) MarkSessionStepUp(ctx context.Context, arg MarkSessionStepUpParams) error {
+	_, err := q.db.Exec(ctx, markSessionStepUp, arg.TokenHash, arg.StepupUntil)
+	return err
 }
 
 const setUserDisabled = `-- name: SetUserDisabled :exec

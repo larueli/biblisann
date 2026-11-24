@@ -307,5 +307,16 @@
     "empty": "Rien ici.",
     "moveTo": "Déplacer vers",
     "close": "Fermer"
+  },
+  "stepUp": {
+    "title": "Confirmez que c'est bien vous",
+    "explain": "Cette action est sensible. Confirmez à nouveau votre identité ; elle reste déverrouillée 5 minutes.",
+    "password": "Mot de passe",
+    "code": "Code de l'application ou code de secours",
+    "confirm": "Confirmer",
+    "passkey": "Utiliser une clé d'accès",
+    "sso": "Se reconnecter par authentification unique",
+    "cancel": "Annuler",
+    "failed": "La confirmation a échoué."
   }
 }

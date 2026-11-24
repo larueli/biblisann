@@ -13,18 +13,19 @@ import (
 )
 
 const consumeOIDCFlow = `-- name: ConsumeOIDCFlow :one
-DELETE FROM oidc_flows WHERE state_hash = $1 AND expires_at > now() RETURNING nonce, verifier
+DELETE FROM oidc_flows WHERE state_hash = $1 AND expires_at > now() RETURNING nonce, verifier, purpose
 `
 
 type ConsumeOIDCFlowRow struct {
 	Nonce    string
 	Verifier string
+	Purpose  string
 }
 
 func (q *Queries) ConsumeOIDCFlow(ctx context.Context, stateHash []byte) (ConsumeOIDCFlowRow, error) {
 	row := q.db.QueryRow(ctx, consumeOIDCFlow, stateHash)
 	var i ConsumeOIDCFlowRow
-	err := row.Scan(&i.Nonce, &i.Verifier)
+	err := row.Scan(&i.Nonce, &i.Verifier, &i.Purpose)
 	return i, err
 }
 
@@ -71,13 +72,14 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 }
 
 const createOIDCFlow = `-- name: CreateOIDCFlow :exec
-INSERT INTO oidc_flows (state_hash, nonce, verifier, expires_at) VALUES ($1, $2, $3, $4)
+INSERT INTO oidc_flows (state_hash, nonce, verifier, purpose, expires_at) VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateOIDCFlowParams struct {
 	StateHash []byte
 	Nonce     string
 	Verifier  string
+	Purpose   string
 	ExpiresAt time.Time
 }
 
@@ -86,6 +88,7 @@ func (q *Queries) CreateOIDCFlow(ctx context.Context, arg CreateOIDCFlowParams) 
 		arg.StateHash,
 		arg.Nonce,
 		arg.Verifier,
+		arg.Purpose,
 		arg.ExpiresAt,
 	)
 	return err

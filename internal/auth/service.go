@@ -68,11 +68,13 @@ type Session struct {
 	Token     string // the cookie value, only known at creation
 	CSRFToken string
 	ExpiresAt time.Time
-	UserID    uuid.UUID
-	Email     string
-	Name      string
-	IsAdmin   bool
-	Locale    string
+	// StepUpUntil is when the last re-authentication stops counting (nil: never done).
+	StepUpUntil *time.Time
+	UserID      uuid.UUID
+	Email       string
+	Name        string
+	IsAdmin     bool
+	Locale      string
 }
 
 // NormalizeEmail validates and canonicalizes an address (trimmed, bare address, max 320 bytes).
@@ -243,7 +245,7 @@ func (s *Service) Lookup(ctx context.Context, token string) (*Session, error) {
 		return nil, ErrSessionNotFound
 	}
 	_ = s.q.TouchSession(ctx, h) // best effort
-	return &Session{CSRFToken: row.CsrfToken, ExpiresAt: row.ExpiresAt, UserID: row.UserID, Email: row.Email,
+	return &Session{CSRFToken: row.CsrfToken, ExpiresAt: row.ExpiresAt, StepUpUntil: row.StepupUntil, UserID: row.UserID, Email: row.Email,
 		Name: row.DisplayName, IsAdmin: row.IsAdmin, Locale: row.Locale}, nil
 }
 

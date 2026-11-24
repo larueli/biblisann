@@ -213,6 +213,9 @@ func (s *Server) registerAccount(a huma.API) {
 			if sess == nil {
 				return nil, huma.Error403Forbidden("a browser session is required")
 			}
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
+			}
 			if err := s.throttle(ctx, "delete-account", sess.UserID.String()); err != nil {
 				return nil, err
 			}
