@@ -80,8 +80,8 @@ Added during Slices 1 to 3 (defaults taken):
 Still open (Slice 0 questions that are not resolved yet; the others were answered or implemented):
 
 - [ ] **GitHub actions needed from you**: create the repository, the releaser App, the branch protection and Pages (`docs/dev/github.md`), then push and open the PR. Nothing has been pushed (no remote is configured).
-- [ ] **TypeScript 5.9 instead of 7**: pinned until `openapi-typescript` supports TypeScript 7 (or the generator is replaced). Technical, nothing to decide.
-- [ ] **shadcn/ui** is in the default stack but not installed (Dexie is). Add it with the first screen that needs it.
+- [x] **TypeScript 7** for the app; the generator runs on TypeScript 5.9 in `web/tools/openapi-gen` (ADR 0005).
+- [x] **shadcn/ui**: Button, Input and Dialog live in `web/src/components/ui`; the shared class names in `app/ui.ts` derive from them, so existing screens follow. More components are added when a screen needs them.
 - [x] **Helm Pod Security**: `make helm-check` (kubeconform + kube-linter, in prek and CI).
 
 Done since: OpenAPI docs UI (self-hosted), `oasdiff` gate, metrics and tracing, AGPL source link, container UID and PostgreSQL 18 minimum, contributions (inbound = outbound), origin-only base URL, docs domain on GitHub Pages.
@@ -98,5 +98,5 @@ Decisions taken (to be written into an ADR with the first implementing PR):
 - [x] Helm: mount the metrics token as a file, or reference an existing Secret and key (sops, sealed secrets); the binary accepts the env var and the `_FILE` variant.
 - [x] Sharing: library sharing requires library admin. Sharing with an unknown email does nothing for non-instance-administrators (same answer as a known one); instance administrators are asked to confirm before an invitation (7-day link, emailed when SMTP is set) is created; the link also lets the invitee register when registration is closed.
 - [x] CI: kube-linter and kubeconform on the Helm chart through prek.
-- [ ] Add shadcn/ui and Tailwind-based components to the web UI.
-- [ ] Generator on TypeScript 5.9 in an isolated tool directory, application on TypeScript 7.
+- [x] shadcn/ui added to the web UI.
+- [x] Generator on TypeScript 5.9 in an isolated tool directory, application on TypeScript 7.

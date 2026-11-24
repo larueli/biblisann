@@ -32,7 +32,7 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 - **RAM**: the host has no swap. Run Go tests with `-p 1` (or 2) and `GOMEMLIMIT`; `make test`/`make lint` already do. Do not run two `make check` at once. Never `pkill -f` a pattern that matches your own shell command.
 - `node` on this machine is a bun shim: use `PATH=/usr/bin:$PATH` for web tooling.
 - Tests start one small PostgreSQL container per package (`internal/dbtest`); Docker must be running.
-- TypeScript is pinned to 5.9.3 (`openapi-typescript` needs it); pnpm refuses releases younger than 24 h.
+- The web app uses TypeScript 7; `openapi-typescript` runs with TypeScript 5.9 in `web/tools/openapi-gen` (separate lockfile, installed by `pnpm run generate:api`). pnpm refuses releases younger than 24 h.
 - `make generate` regenerates sqlc, `api/openapi.json` and the web client; the pre-push hook fails if they are stale.
 - Migrations 00002 to 00008 were edited freely before any release; from the first release they are immutable.
 - Huma does not flatten embedded structs in schemas: inline fields in response types.

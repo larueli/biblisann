@@ -33,7 +33,8 @@ Supply-chain attacks (typosquatting, hallucinated package names, abandoned packa
 | `tailwindcss`, `@tailwindcss/vite` | Styling | MIT | CSS modules | Slice 0 |
 | `i18next`, `react-i18next`, `i18next-browser-languagedetector` | i18n, browser language detection | MIT | `react-intl`, `lingui` | Slice 0 |
 | `openapi-typescript`, `openapi-fetch` | Typed API client generated from the spec | MIT | `orval`, hand-written types (forbidden) | Slice 0 |
-| `typescript` (pinned to 5.9.x) | Type checking | Apache-2.0 | TypeScript 7: `openapi-typescript` 7 does not support it yet (no JS compiler API). Revisit when it does. | Slice 0 |
+| `typescript` 7.0.x | Type checking of the web app | Apache-2.0 | stay on 5.9 | Follow-ups |
+| `typescript` 5.9.x + `openapi-typescript` 7.13 in `web/tools/openapi-gen` (own lockfile) | Client generation only: `openapi-typescript` needs the JavaScript compiler API that TypeScript 7 no longer ships | Apache-2.0 / MIT | `@hey-api/openapi-ts`, `orval`, `kubb` (replace `openapi-fetch` and every call site; TypeScript 7 support not verified) | Follow-ups |
 | `vitest`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom` | Unit and component tests | MIT | Jest | Slice 0 |
 | `@playwright/test` | End-to-end smoke tests | Apache-2.0 | Cypress | Slice 0 |
 | `@biomejs/biome` | Lint and format | MIT OR Apache-2.0 | ESLint + Prettier | Slice 0 |
@@ -60,6 +61,8 @@ Supply-chain attacks (typosquatting, hallucinated package names, abandoned packa
 | `swagger-ui-dist`, `redoc`, `@stoplight/elements`, `@scalar/api-reference` (build time: their prebuilt bundles are copied into the app) | Self-hosted interactive API documentation | Apache-2.0, MIT, Apache-2.0, MIT | CDN-loaded viewers (third-party scripts at runtime: rejected) | Slice 3 follow-up |
 | `zensical` (docs build tool, run with `uvx`, not part of the product) | Documentation site | MIT | MkDocs Material (see ADR 0012) | Slice 0 |
 | `kubeconform` v0.8.0 and `kube-linter` v0.8.3 (CI tools, run with `go run`, not part of the product) | Validate the Helm chart manifests and its Pod Security posture | Apache-2.0 | `kubectl --dry-run` (needs a cluster), `kubescape` (heavier) | Follow-ups |
+| `@radix-ui/react-dialog`, `@radix-ui/react-slot` | Accessible primitives under the shadcn/ui Dialog and Button (focus trap, Escape, aria) | MIT | hand-written dialog (accessibility bugs), `react-aria` (larger) | Follow-ups |
+| `class-variance-authority`, `clsx`, `tailwind-merge` | Class composition used by shadcn/ui components (`cn`, variants) | Apache-2.0 / MIT / MIT | template strings (no conflict resolution) | Follow-ups |
 
 ## Consequences
 

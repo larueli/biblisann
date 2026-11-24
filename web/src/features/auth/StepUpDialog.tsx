@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, problemMessage } from "../../api/client";
-import { field, muted, primary, secondary } from "../../app/ui";
+import { muted } from "../../app/ui";
+import { Button } from "../../components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../components/ui/dialog";
+import { Input } from "../../components/ui/input";
 import { getPasskey, passkeysSupported } from "./passkeys";
 import { settleStepUp, subscribeStepUp } from "./stepup";
 
@@ -61,21 +64,13 @@ export function StepUpDialog() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="stepup-title"
-        className="flex w-full max-w-sm flex-col gap-3 rounded bg-white p-4 dark:bg-slate-900"
-      >
-        <h2 id="stepup-title" className="text-lg font-semibold">
-          {t("stepUp.title")}
-        </h2>
-        <p className={muted}>{t("stepUp.explain")}</p>
+    <Dialog open onOpenChange={(o) => !o && finish(false)}>
+      <DialogContent>
+        <DialogTitle className="text-lg font-semibold">{t("stepUp.title")}</DialogTitle>
+        <DialogDescription className={muted}>{t("stepUp.explain")}</DialogDescription>
         {sec.data?.has_password && (
           <form onSubmit={withPassword} className="flex flex-col gap-2">
-            <input
-              className={field}
+            <Input
               type="password"
               autoComplete="current-password"
               placeholder={t("stepUp.password")}
@@ -84,8 +79,7 @@ export function StepUpDialog() {
               required
             />
             {sec.data.mfa_enabled && (
-              <input
-                className={field}
+              <Input
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 placeholder={t("stepUp.code")}
@@ -94,30 +88,30 @@ export function StepUpDialog() {
                 required
               />
             )}
-            <button type="submit" className={primary} disabled={busy}>
+            <Button type="submit" disabled={busy}>
               {t("stepUp.confirm")}
-            </button>
+            </Button>
           </form>
         )}
         {sec.data?.passkeys_available && passkeysSupported() && (
-          <button type="button" className={secondary} disabled={busy} onClick={withPasskey}>
+          <Button type="button" variant="outline" disabled={busy} onClick={withPasskey}>
             {t("stepUp.passkey")}
-          </button>
+          </Button>
         )}
         {sec.data?.sso_available && (
-          <button type="button" className={secondary} disabled={busy} onClick={withSso}>
+          <Button type="button" variant="outline" disabled={busy} onClick={withSso}>
             {t("stepUp.sso")}
-          </button>
+          </Button>
         )}
         {error && (
           <p role="alert" className="text-sm text-red-700 dark:text-red-400">
             {error}
           </p>
         )}
-        <button type="button" className={secondary} onClick={() => finish(false)}>
+        <Button type="button" variant="outline" onClick={() => finish(false)}>
           {t("stepUp.cancel")}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }

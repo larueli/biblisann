@@ -1,0 +1,13 @@
+{
+  "name": "biblisann-openapi-gen",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-or-later",
+  "description": "Runs openapi-typescript on TypeScript 5.9: it needs the JavaScript compiler API that TypeScript 7 no longer ships. The application itself is type-checked with TypeScript 7 (../../package.json).",
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

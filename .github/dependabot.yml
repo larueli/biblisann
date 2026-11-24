@@ -37,6 +37,18 @@ updates:
       web-minor-patch:
         update-types: [minor, patch]
 
+  - package-ecosystem: npm
+    directory: /web/tools/openapi-gen
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      openapi-gen-minor-patch:
+        update-types: [minor, patch]
+
   - package-ecosystem: docker
     directory: /
     schedule:

@@ -32,7 +32,9 @@ jobs:
         with:
           node-version-file: web/.nvmrc
           cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
+          cache-dependency-path: |
+            web/pnpm-lock.yaml
+            web/tools/openapi-gen/pnpm-lock.yaml
       - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
         with:
           install-only: true
@@ -111,7 +113,9 @@ jobs:
         with:
           node-version-file: web/.nvmrc
           cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
+          cache-dependency-path: |
+            web/pnpm-lock.yaml
+            web/tools/openapi-gen/pnpm-lock.yaml
       - run: cd web && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
       - run: make e2e VERSION=ci
 

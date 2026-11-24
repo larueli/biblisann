@@ -30,7 +30,7 @@ api/openapi.json     generated spec, committed; web/src/api/schema.d.ts is gener
 
 ## Web
 
-Strict TypeScript, feature folders, TanStack Router and Query, Tailwind, i18next (`en` and `fr` keys must match; a test enforces it). The language comes from the browser and falls back to English. The service worker never answers `/v1`, `/openapi.*` or probe paths. Offline storage (Dexie), shadcn/ui components and the barcode scanner arrive in Slice 1.
+Strict TypeScript, feature folders, TanStack Router and Query, Tailwind, i18next (`en` and `fr` keys must match; a test enforces it). The language comes from the browser and falls back to English. The service worker never answers `/v1`, `/openapi.*` or probe paths. Offline storage (Dexie), the shadcn/ui components in `web/src/components/ui` and the barcode scanner are in place. The app is type-checked with TypeScript 7; `openapi-typescript` runs with TypeScript 5.9 in `web/tools/openapi-gen` (it needs the JavaScript compiler API).
 
 ## Local development
 
