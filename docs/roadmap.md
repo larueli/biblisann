@@ -75,29 +75,28 @@ Added during Slices 1 to 3 (defaults taken):
 - [x] **Web UI gaps** closed (ADR 0024): library sharing and profile management, group management, SCIM token creation, Web Push subscription with a custom service worker, a graphical shelf view.
 - [x] **Valkey-backed cache**: decided against (no measured bottleneck; revocation risk). Revisit only with measurements. Sessions and OAuth grants can be revoked by users and administrators; reusing a refresh token revokes its whole family (ADR 0024).
 - [x] **GDPR**: per-user export, per-library export/import and account deletion exist (ADR 0022). Orphaned cover files are not yet garbage-collected.
-- [ ] **Version policy**: Slice 3 is delivered in code, so the "stay on 0.x until Slice 3 is delivered" rule now says a `1.0.0` could be cut: decide after the real-world validation above (`Release-As: 1.0.0`).
+- [x] **Version policy**: stay on `0.x.y` until you have tested most of the product. Do not cut `1.0.0` before then; when ready, use `Release-As: 1.0.0`.
 
-Still open (questions saved during the unattended Slice 0 build, with the default I took):
+Still open (Slice 0 questions that are not resolved yet; the others were answered or implemented):
 
-- [ ] **GitHub actions needed from you**: create the repository, the releaser App, the branch protection and Pages (`docs/dev/github.md`), then push `feat/0-foundations` and open the PR. Nothing was pushed.
-- [ ] **TypeScript 5.9 instead of 7**: `openapi-typescript` 7.13 crashes on TypeScript 7 (no JS compiler API). Default taken: pin 5.9.3, revisit when the generator supports 7 (or switch generator).
-- [ ] **OpenAPI docs UI**: disabled because Huma's bundled UI loads third-party scripts (CSP forbids them). Options: embed a UI (Scalar or Swagger UI) as static files, or keep only the raw spec. Default: raw spec only.
-- [ ] **Breaking-change gate** (`oasdiff`, spec section 7) is not wired: it needs a baseline from `main`. Default: add it as soon as the first release exists.
-- [ ] **Metrics and tracing** (Prometheus, OpenTelemetry, spec section 9) are not in Slice 0. Default: Slice 1, behind config.
-- [ ] **shadcn/ui and Dexie** are in the default stack but not installed yet (nothing uses them). Default: add them with the first screen and the offline index in Slice 1.
-- [ ] **Container UID** is 65532 (distroless `nonroot`); PostgreSQL 18 is the tested version (Compose, CI, tests). Confirm you want PG 18 as the minimum, or lower it.
-- [ ] **Helm Pod Security**: the chart is restricted-compliant by construction, but no tool checks it in CI (kubeconform, kube-linter, or a kind cluster with PSS enforced). Default: add a `kube-linter` job later.
-- [ ] **Contributions**: no DCO or CLA. Confirm that "inbound = outbound" (AGPL) is enough, which rules out a later dual license without asking contributors.
-- [ ] **Source link for AGPL section 13**: the UI must offer the source to network users. Default: footer link in Slice 1 (needs a configurable URL for forks).
-- [ ] **Sub-path deployment** (`https://host/biblisann/`) is rejected by `BIBLISANN_BASE_URL`. Default: origin only; revisit if requested.
-- [ ] **Docs domain**: Pages at `larueli.github.io/biblisann`. Custom domain not decided.
+- [ ] **GitHub actions needed from you**: create the repository, the releaser App, the branch protection and Pages (`docs/dev/github.md`), then push and open the PR. Nothing has been pushed (no remote is configured).
+- [ ] **TypeScript 5.9 instead of 7**: pinned until `openapi-typescript` supports TypeScript 7 (or the generator is replaced). Technical, nothing to decide.
+- [ ] **shadcn/ui** is in the default stack but not installed (Dexie is). Add it with the first screen that needs it.
+- [ ] **Helm Pod Security**: no CI tool checks the chart (kube-linter or kubeconform). Add a job.
+
+Done since: OpenAPI docs UI (self-hosted), `oasdiff` gate, metrics and tracing, AGPL source link, container UID and PostgreSQL 18 minimum, contributions (inbound = outbound), origin-only base URL, docs domain on GitHub Pages.
 
 ## Follow-ups from the security audit (ADR 0025)
 
-- [ ] Administrator edit/delete of catalog rows and provider refresh for user-created ISBN editions.
-- [ ] Recipient confirmation for email notification channels; daily cap per user.
-- [ ] Loans visible to members with `loan.write` and re-checked on return after a member loses access.
-- [ ] Recent re-authentication before adding a passkey, enrolling TOTP or creating a token.
-- [ ] Per-user quotas; stream account imports to disk.
-- [ ] Helm: mount the metrics token as a file.
-- [ ] Same answer for sharing with known and unknown emails (invitation flow).
+Decisions taken (to be written into an ADR with the first implementing PR):
+
+- [ ] Administrator edit/delete of catalog rows and provider refresh for user-created ISBN editions (administrators only; a refresh replaces unverified user data when a provider answers).
+- [ ] Email notification channels: recipient confirmation unless the address is the account's own verified one; daily cap per user.
+- [ ] Loans visible and returnable by every member with `loan.write` (editor and above in the standard profiles); re-checked on return after a member loses access.
+- [ ] Step-up authentication (valid 5 minutes, also for OIDC users) before: password change, TOTP enrollment, passkey add/change, token creation, account deletion.
+- [ ] Quotas with standard rate-limit headers (`RateLimit` / `RateLimit-Policy`, `Retry-After`) for API and bulk imports; the web UI slows down and shows progress to respect them. New feature: bulk add from a list of ISBNs. Account imports are streamed to disk.
+- [ ] Helm: mount the metrics token as a file, or reference an existing Secret and key (sops, sealed secrets); the binary accepts the env var and the `_FILE` variant.
+- [ ] Sharing: library sharing requires library admin. Sharing with an unknown email does nothing for non-admins (same answer as a known one); for admins, an explicit confirmation is asked before an invitation is created.
+- [ ] CI: kube-linter and kubeconform on the Helm chart through prek.
+- [ ] Add shadcn/ui and Tailwind-based components to the web UI.
+- [ ] Generator on TypeScript 5.9 in an isolated tool directory, application on TypeScript 7.

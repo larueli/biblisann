@@ -26,6 +26,11 @@ This file is the single source of truth for every AI coding agent (Claude Code, 
 
 Tests and lint are a merge gate whatever their rank: `make check` must pass.
 
+## Honesty rules
+
+- Challenge the owner's choices: when a request looks wrong, risky, outdated or inferior to an alternative, say so with the reason and a recommendation before (or while) doing it. The owner decides; silence is not agreement.
+- Say when you are not sure or do not know. Never present a guess as a fact; verify (registry, docs, code, a test) or label it as unverified.
+
 ## Stack (decided, see ADRs)
 
 - Backend: Go (current stable), one static binary that embeds the built frontend (`go:embed`).
