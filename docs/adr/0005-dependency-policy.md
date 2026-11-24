@@ -59,6 +59,7 @@ Supply-chain attacks (typosquatting, hallucinated package names, abandoned packa
 | `github.com/oasdiff/oasdiff` (CI tool, `go run`, not linked) | Breaking OpenAPI change detection | Apache-2.0 | `openapi-diff` (Java) | Slice 3 follow-up |
 | `swagger-ui-dist`, `redoc`, `@stoplight/elements`, `@scalar/api-reference` (build time: their prebuilt bundles are copied into the app) | Self-hosted interactive API documentation | Apache-2.0, MIT, Apache-2.0, MIT | CDN-loaded viewers (third-party scripts at runtime: rejected) | Slice 3 follow-up |
 | `zensical` (docs build tool, run with `uvx`, not part of the product) | Documentation site | MIT | MkDocs Material (see ADR 0012) | Slice 0 |
+| `kubeconform` v0.8.0 and `kube-linter` v0.8.3 (CI tools, run with `go run`, not part of the product) | Validate the Helm chart manifests and its Pod Security posture | Apache-2.0 | `kubectl --dry-run` (needs a cluster), `kubescape` (heavier) | Follow-ups |
 
 ## Consequences
 

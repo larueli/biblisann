@@ -69,6 +69,13 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: helm-check
+        name: Helm chart (kubeconform, kube-linter)
+        entry: make helm-check
+        language: system
+        files: '^(deploy/helm/|scripts/(check-helm\.sh|kube-linter\.yaml)$)'
+        pass_filenames: false
+
       - id: lint
         name: lint (Go and web)
         entry: make lint

@@ -55,6 +55,8 @@ extraEnvFrom: []
 # Prometheus metrics at /metrics. The route does not exist unless you give it a bearer token
 # (tokenSecret) or declare it public (public: true, only when something else protects it, such as a
 # NetworkPolicy or the ingress). OpenTelemetry traces: set OTEL_EXPORTER_OTLP_ENDPOINT through extraEnv.
+# tokenSecret references an existing Secret (sops, sealed secrets, external-secrets...): the key is
+# mounted as a file (BIBLISANN_METRICS_TOKEN_FILE), never put in the environment.
 metrics:
   tokenSecret: {name: "", key: token}
   public: false

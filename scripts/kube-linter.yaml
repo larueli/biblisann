@@ -1,0 +1,22 @@
+# kube-linter configuration for the rendered Helm chart. The default checks stay on; the chart
+# must also satisfy the restricted Pod Security Standard (non-root, read-only root filesystem,
+# no capabilities, no privilege escalation).
+checks:
+  addAllBuiltIn: true
+  exclude:
+    # Resource requests and limits are values the operator sets (values.yaml documents them).
+    - unset-cpu-requirements
+    - unset-memory-requirements
+    # A single replica is the default; high availability is a values choice (replicaCount, PDB).
+    - minimum-three-replicas
+    # Style or organisation policies that do not apply to a published chart.
+    - sorted-keys
+    - required-annotation-email
+    - required-label-owner
+    - no-node-affinity
+    - dnsconfig-options
+    - restart-policy
+    # Helm installs into the namespace the operator chooses.
+    - use-namespace
+    # The NetworkPolicy is opt-in (networkPolicy.enabled) because the allowed peers are site specific.
+    - non-isolated-pod

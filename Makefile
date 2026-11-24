@@ -12,8 +12,10 @@ GOLANGCI_LINT_VERSION ?= v2.15.0
 IMAGE ?= biblisann:dev
 VERSION ?= dev
 ZENSICAL_VERSION ?= 0.1.3
+KUBECONFORM_VERSION ?= v0.8.0
+KUBE_LINTER_VERSION ?= v0.8.3
 
-.PHONY: api-compat e2e help hooks task check commit-lint docs-check fmt lint test vuln generate generate-check web-check build dev dev-down docker docs docs-serve
+.PHONY: helm-check api-compat e2e help hooks task check commit-lint docs-check fmt lint test vuln generate generate-check web-check build dev dev-down docker docs docs-serve
 
 help: ## List targets
 > @grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -50,6 +52,9 @@ lint: ## Lint Go and web code
 
 test: ## Run Go tests with the race detector (Docker needed for testcontainers)
 > @if [ -f go.mod ]; then GOMEMLIMIT=1GiB go test -p 2 -race -count=1 ./...; else echo "test: no go.mod yet, skipped"; fi
+
+helm-check: ## Render the Helm chart and validate it with kubeconform and kube-linter
+> KUBECONFORM_VERSION=$(KUBECONFORM_VERSION) KUBE_LINTER_VERSION=$(KUBE_LINTER_VERSION) scripts/check-helm.sh
 
 vuln: ## Scan the Go binary and the web dependencies for known vulnerabilities
 # Binary mode scans what ships and needs far less memory than source mode (which gets OOM-killed on small hosts).

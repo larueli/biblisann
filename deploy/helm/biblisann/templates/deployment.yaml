@@ -55,11 +55,8 @@ spec:
             - name: BIBLISANN_DATABASE_URL_FILE
               value: /run/secrets/database/url
             {{- if .Values.metrics.tokenSecret.name }}
-            - name: BIBLISANN_METRICS_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.metrics.tokenSecret.name }}
-                  key: {{ .Values.metrics.tokenSecret.key }}
+            - name: BIBLISANN_METRICS_TOKEN_FILE
+              value: /run/secrets/metrics/token
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
@@ -82,6 +79,11 @@ spec:
             - name: database
               mountPath: /run/secrets/database
               readOnly: true
+            {{- if .Values.metrics.tokenSecret.name }}
+            - name: metrics-token
+              mountPath: /run/secrets/metrics
+              readOnly: true
+            {{- end }}
             - name: data
               mountPath: /data
       volumes:
@@ -100,6 +102,15 @@ spec:
             items:
               - key: {{ include "biblisann.dbSecretKey" . }}
                 path: url
+        {{- if .Values.metrics.tokenSecret.name }}
+        - name: metrics-token
+          secret:
+            secretName: {{ .Values.metrics.tokenSecret.name }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.metrics.tokenSecret.key }}
+                path: token
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}

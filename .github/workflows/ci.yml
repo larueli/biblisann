@@ -86,6 +86,11 @@ jobs:
           helm lint deploy/helm/biblisann --set database.external.existingSecret=db
           helm template biblisann deploy/helm/biblisann --set database.external.existingSecret=db > /dev/null
           helm template biblisann deploy/helm/biblisann --set database.mode=cnpg --set ingress.enabled=true > /dev/null
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: make helm-check
 
   # Smoke test of the real binary with PostgreSQL: Playwright drives the built web app
   # (scripts/e2e.sh starts its own PostgreSQL container).
