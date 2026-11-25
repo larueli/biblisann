@@ -100,4 +100,4 @@ Decisions taken (to be written into an ADR with the first implementing PR):
 - [x] CI: kube-linter and kubeconform on the Helm chart through prek.
 - [x] shadcn/ui added to the web UI.
 - [x] Generator on TypeScript 5.9 in an isolated tool directory, application on TypeScript 7.
-- [ ] From the review of ADR 0026: filter the calendar feed by the owner's current `loan.write` access; meter `/mcp` and `/opds` in the request quota (the MCP scan tool triggers provider lookups); move the catalog administrator check into `internal/catalog`; consider step-up for `restore-instance`, `admin-delete-user` and `admin-set-disabled`; hide private contact names from other loan managers.
+- [x] From the review of ADR 0026: calendar feed filtered by current `loan.write`, `/mcp` and `/opds` metered (MCP `add_book` weighs 5), catalog administrator check in `internal/catalog`, step-up for `admin-delete-user`. Left as is on purpose: private contact names visible to other loan managers, no step-up for disabling users (reversible, needed during incidents). Idea not done: step-up for the full backup download (a plain GET handler).

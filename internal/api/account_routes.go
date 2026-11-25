@@ -315,12 +315,16 @@ func (s *Server) registerAccount(a huma.API) {
 			return nil, mapError(s.Log, s.TokenSvc.RevokeAllPATs(ctx, in.ID))
 		})
 	Register(a, huma.Operation{OperationID: "admin-delete-user", Method: http.MethodDelete, Path: "/v1/admin/users/{id}",
-		Summary: "Delete an account (instance administrators)", Tags: []string{"admin"}, DefaultStatus: http.StatusNoContent, Errors: []int{404, 409}}, PermInstanceAdmin,
+		Summary: "Delete an account (instance administrators, needs a recent re-authentication)", Tags: []string{"admin"}, DefaultStatus: http.StatusNoContent, Errors: []int{403, 404, 409}}, PermInstanceAdmin,
 		func(ctx context.Context, in *struct {
 			ID                uuid.UUID `path:"id"`
 			PromoteSuccessors bool      `query:"promote_successors"`
 		}) (*struct{}, error) {
 			if _, err := requireAdmin(ctx); err != nil {
+				return nil, err
+			}
+			// Irreversible: as sensitive as deleting one's own account.
+			if err := s.requireStepUp(ctx); err != nil {
 				return nil, err
 			}
 			return nil, accountErr(s, s.Account.Delete(ctx, in.ID, in.PromoteSuccessors))

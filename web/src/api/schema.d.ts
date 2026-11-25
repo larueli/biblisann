@@ -48,7 +48,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete an account (instance administrators) */
+        /** Delete an account (instance administrators, needs a recent re-authentication) */
         delete: operations["admin-delete-user"];
         options?: never;
         head?: never;
@@ -2716,6 +2716,15 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

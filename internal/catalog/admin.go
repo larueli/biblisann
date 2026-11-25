@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/larueli/biblisann/internal/authz"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
 )
 
@@ -40,8 +41,24 @@ type EditionPatch struct {
 	SeriesPos   *float64
 }
 
+// adminOnly denies by default: only an administrator's browser session may change the shared
+// catalog. Anything else is told the edition does not exist, like every administration route.
+func adminOnly(ctx context.Context) error {
+	p, err := authz.From(ctx)
+	if err != nil {
+		return err
+	}
+	if !p.IsAdmin || p.Via != "session" {
+		return authz.ErrNotFound
+	}
+	return nil
+}
+
 // Update applies a manual edit to a shared edition. The caller must be an administrator.
 func (s *Service) Update(ctx context.Context, id uuid.UUID, p EditionPatch) (dbsqlc.Edition, error) {
+	if err := adminOnly(ctx); err != nil {
+		return dbsqlc.Edition{}, err
+	}
 	e, err := s.Get(ctx, id)
 	if err != nil {
 		return e, err
@@ -121,6 +138,9 @@ func (s *Service) store(ctx context.Context, e dbsqlc.Edition, prov map[string]P
 
 // SetSyncExcluded includes or excludes an edition from provider refreshes.
 func (s *Service) SetSyncExcluded(ctx context.Context, id uuid.UUID, excluded bool) (dbsqlc.Edition, error) {
+	if err := adminOnly(ctx); err != nil {
+		return dbsqlc.Edition{}, err
+	}
 	e, err := s.q.SetEditionSyncExcluded(ctx, dbsqlc.SetEditionSyncExcludedParams{ID: id, SyncExcluded: excluded})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return e, ErrNotFound
@@ -131,6 +151,9 @@ func (s *Service) SetSyncExcluded(ctx context.Context, id uuid.UUID, excluded bo
 // Refresh asks the providers again and replaces the fields that are not locked by a manual edit.
 // Fields no provider knows are kept. An edition excluded from refreshes is never touched.
 func (s *Service) Refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSettings) (dbsqlc.Edition, error) {
+	if err := adminOnly(ctx); err != nil {
+		return dbsqlc.Edition{}, err
+	}
 	e, err := s.Get(ctx, id)
 	if err != nil {
 		return e, err
@@ -208,6 +231,9 @@ func (s *Service) Refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSe
 
 // Delete removes an edition no library holds any more.
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {
+	if err := adminOnly(ctx); err != nil {
+		return err
+	}
 	if _, err := s.Get(ctx, id); err != nil {
 		return err
 	}

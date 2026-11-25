@@ -77,3 +77,22 @@ func TestAdminSetsPasswordAndSSOUsersCannot(t *testing.T) {
 		t.Errorf("non-admin: %d", st)
 	}
 }
+
+func TestAdminDeleteUserNeedsStepUp(t *testing.T) {
+	srv, authSvc := newServer(t)
+	admin := &client{t: t, srv: srv}
+	admin.do("POST", "/v1/auth/register", map[string]string{"email": "admin@example.org", "password": "tulips in the garden"}, nil)
+	admin.login("admin@example.org", "tulips in the garden")
+	bob, err := authSvc.CreateUser(t.Context(), "bob@example.org", "bobs long password", "Bob", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/v1/admin/users/" + bob.ID.String()
+	if st, out := admin.w("DELETE", path, nil); st != 403 || out["detail"] != "step_up_required" {
+		t.Fatalf("without step-up: %d %v", st, out)
+	}
+	admin.stepUp()
+	if st, out := admin.w("DELETE", path, nil); st != 204 {
+		t.Fatalf("after step-up: %d %v", st, out)
+	}
+}
