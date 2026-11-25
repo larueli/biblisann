@@ -48,6 +48,17 @@ helm install biblisann oci://ghcr.io/larueli/charts/biblisann --version <version
 
 Use `--set database.mode=cnpg` to let the chart create a [CloudNativePG](https://cloudnative-pg.io/) cluster instead (the operator must be installed). The chart's defaults satisfy the *restricted* Pod Security Standard: non-root, read-only root filesystem, no capabilities, `RuntimeDefault` seccomp.
 
+### Chart settings that matter
+
+| Value | Purpose |
+|-------|---------|
+| `metrics.tokenSecret.name` / `.key` | An existing Secret (created by sops, sealed secrets, external-secrets...) holding the `/metrics` bearer token. It is mounted as a file and read through `BIBLISANN_METRICS_TOKEN_FILE`: the token never appears in the pod's environment. |
+| `metrics.public` | `true` serves `/metrics` without a token, only when something else protects it (NetworkPolicy, ingress). |
+| `tmpSizeLimit` (`256Mi`) | Size of the writable `/tmp` mounted next to the read-only root filesystem. Imports spool covers there: allow 64 MiB per concurrent import (two at a time). |
+| `extraEnv`, `extraEnvFrom` | Everything in the [configuration reference](configuration.md): SMTP, S3, OIDC, `BIBLISANN_API_RATE_LIMIT`, `BIBLISANN_EMAIL_DAILY_CAP`. Put secrets in a Secret and use `_FILE` variants or `valueFrom`. |
+
+Mail (invitations, email confirmation codes, password reset) needs SMTP settings; without them those features are off or show the link to the administrator instead.
+
 ## From source
 
 Requires Go and Node (see `go.mod` and `web/.nvmrc`) and pnpm.

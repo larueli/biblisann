@@ -31,6 +31,7 @@ nav = [
     { "Architecture" = "dev/architecture.md" },
     { "Addon providers" = "dev/addons.md" },
     { "API documentation" = "dev/api-docs.md" },
+    { "API guide" = "dev/api-guide.md" },
     { "GitHub setup" = "dev/github.md" },
     { "Versioning and releases" = "dev/versioning.md" },
     { "Windows setup" = "dev/setup-windows.md" },
