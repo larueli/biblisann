@@ -125,6 +125,7 @@ func newServer(t *testing.T) (*httptest.Server, *auth.Service) {
 	lib := library.NewService(pool)
 	tk := tokens.NewService(pool)
 	catSvc := catalog.NewService(pool, catalog.Config{Providers: []providers.Provider{fakeProvider{}}, Covers: covers, Log: log})
+	catSvc.SetAccess(lib)
 	h, _ := api.New(api.Deps{Version: "test", DB: pool, Log: log, BaseURL: &url.URL{Scheme: "http", Host: "localhost:8080"},
 		Auth: authSvc, Library: lib, Catalog: catSvc,
 		Account:  account.NewService(pool, lib, catSvc, lists.NewService(pool, lib), loans.NewService(pool, lib), reading.NewService(pool)),

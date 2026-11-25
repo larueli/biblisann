@@ -84,3 +84,66 @@ func TestCatalogRefreshIsAdministratorOnly(t *testing.T) {
 		t.Errorf("admin without a queue: %d", st)
 	}
 }
+
+func TestMembersCanRefreshWhatTheirLibraryHolds(t *testing.T) {
+	srv, authSvc := newServer(t)
+	owner := &client{t: t, srv: srv}
+	owner.do("POST", "/v1/auth/register", map[string]string{"email": "owner@example.org", "password": "tulips in the garden"}, nil)
+	owner.login("owner@example.org", "tulips in the garden")
+	_, lib := owner.w("POST", "/v1/libraries", map[string]any{"name": "Home"})
+	libID := lib["id"].(string)
+	_, r := owner.w("POST", "/v1/libraries/"+libID+"/scan", map[string]any{"isbn": "9782070612758"}, "Idempotency-Key", "scan-key-0001")
+	edition := "/v1/editions/" + r["edition"].(map[string]any)["id"].(string)
+
+	roles := map[string]string{"editor": "edit", "reader": "read", "libadmin": "admin"}
+	people := map[string]*client{}
+	for name, role := range roles {
+		email := name + "@example.org"
+		if _, err := authSvc.CreateUser(t.Context(), email, "a long password here", name, false); err != nil {
+			t.Fatal(err)
+		}
+		if st, _ := owner.w("PUT", "/v1/libraries/"+libID+"/sharing/users", map[string]any{"email": email, "grant": map[string]any{"role": role}}); st != 200 {
+			t.Fatalf("share with %s: %d", name, st)
+		}
+		c := &client{t: t, srv: srv}
+		c.login(email, "a long password here")
+		people[name] = c
+	}
+	if _, err := authSvc.CreateUser(t.Context(), "stranger@example.org", "a long password here", "stranger", false); err != nil {
+		t.Fatal(err)
+	}
+	stranger := &client{t: t, srv: srv}
+	stranger.login("stranger@example.org", "a long password here")
+
+	// one book: editors and library administrators may, readers and strangers may not
+	for name, want := range map[string]int{"editor": 200, "libadmin": 200, "reader": 404} {
+		if st, out := people[name].w("POST", edition+"/refresh", nil); st != want {
+			t.Errorf("%s refreshes one book: %d %v", name, st, out)
+		}
+	}
+	if st, _ := stranger.w("POST", edition+"/refresh", nil); st != 404 {
+		t.Errorf("stranger refreshes one book: %d", st)
+	}
+
+	// a whole library (the test server runs no queue: 503 means the permission check passed)
+	path := "/v1/libraries/" + libID + "/catalog/refresh"
+	for name, want := range map[string]int{"editor": 503, "libadmin": 503, "reader": 403} {
+		if st, _ := people[name].w("POST", path, map[string]any{}); st != want {
+			t.Errorf("%s refreshes the library: %d, want %d", name, st, want)
+		}
+	}
+	if st, _ := stranger.w("POST", path, map[string]any{}); st != 404 {
+		t.Errorf("stranger refreshes the library: %d", st)
+	}
+	// including books providers already described is for library administrators
+	if st, _ := people["editor"].w("POST", path, map[string]any{"all": true}); st != 403 {
+		t.Errorf("editor asks for all: %d", st)
+	}
+	if st, _ := people["libadmin"].w("POST", path, map[string]any{"all": true}); st != 503 {
+		t.Errorf("library admin asks for all: %d", st)
+	}
+	// the whole server stays an instance administrator's
+	if st, _ := people["libadmin"].w("POST", "/v1/admin/catalog/refresh", map[string]any{}); st != 404 {
+		t.Errorf("library admin refreshes the server: %d", st)
+	}
+}

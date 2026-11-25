@@ -266,15 +266,12 @@ func (s *Server) registerCatalog(a huma.API) {
 			return &struct{ Body editionBody }{toEditionBody(e)}, nil
 		})
 	Register(a, huma.Operation{OperationID: "refresh-edition", Method: http.MethodPost, Path: "/v1/editions/{id}/refresh",
-		Summary:     "Ask the providers again (administrators)",
+		Summary:     "Ask the providers again about one book (administrators, and editors of a library that holds it)",
 		Description: "Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn, and can be excluded from future refreshes. 409 when the edition is excluded, 502 when every provider failed.",
-		Tags:        []string{"catalog"}, Errors: []int{404, 409, 429, 502}}, PermInstanceAdmin,
+		Tags:        []string{"catalog"}, Errors: []int{404, 409, 429, 502}}, PermAuthenticated,
 		func(ctx context.Context, in *struct {
 			ID uuid.UUID `path:"id"`
 		}) (*struct{ Body editionBody }, error) {
-			if _, err := requireAdmin(ctx); err != nil {
-				return nil, err
-			}
 			if err := s.throttle(ctx, "refresh-edition", ""); err != nil {
 				return nil, err
 			}
@@ -310,6 +307,34 @@ func (s *Server) registerCatalog(a huma.API) {
 				return nil, mapError(s.Log, err)
 			}
 			return nil, nil
+		})
+	Register(a, huma.Operation{OperationID: "refresh-library-catalog", Method: http.MethodPost, Path: "/v1/libraries/{id}/catalog/refresh",
+		Summary: "Start a metadata refresh in the background for the books of one library (editors and administrators)",
+		Description: "Asks the providers again about the library's books they did not know, one lookup per second, up to 500 per run. " +
+			"all=true also refreshes books providers already described and needs library administration. Books excluded from refreshes are never touched.",
+		Tags: []string{"catalog"}, DefaultStatus: http.StatusAccepted, Errors: []int{403, 404, 429, 503}}, PermLibraryEdit,
+		func(ctx context.Context, in *struct {
+			ID   uuid.UUID `path:"id"`
+			Body struct {
+				All bool `json:"all,omitempty" doc:"Also refresh books providers already described (library administrators)."`
+			}
+		}) (*struct{}, error) {
+			perm := authz.PermWrite
+			if in.Body.All {
+				perm = authz.PermAdmin
+			}
+			if _, err := s.Library.RequirePerm(ctx, nil, in.ID, perm); err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			if s.Jobs == nil {
+				return nil, huma.Error503ServiceUnavailable("background jobs are not running")
+			}
+			if err := s.throttle(ctx, "refresh-library", in.ID.String()); err != nil {
+				return nil, err
+			}
+			lib := in.ID
+			err := s.Jobs.EnqueueMetadataRefresh(ctx, jobs.MetadataRefreshArgs{LibraryID: &lib, IncludeKnown: in.Body.All, IgnoreWait: true})
+			return nil, mapError(s.Log, err)
 		})
 	Register(a, huma.Operation{OperationID: "delete-edition", Method: http.MethodDelete, Path: "/v1/editions/{id}",
 		Summary: "Delete an edition no library holds any more (administrators)", Tags: []string{"catalog"}, DefaultStatus: http.StatusNoContent, Errors: []int{404, 409}}, PermInstanceAdmin,

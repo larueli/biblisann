@@ -367,5 +367,10 @@
     "all": "Aussi les livres déjà décrits par les fournisseurs",
     "start": "Actualiser maintenant",
     "started": "Lancée. Elle tourne en arrière-plan."
+  },
+  "refresh": {
+    "library": "Actualiser les métadonnées des livres inconnus",
+    "book": "Actualiser les métadonnées",
+    "started": "Lancée. Elle tourne en arrière-plan."
   }
 }

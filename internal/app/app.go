@@ -160,6 +160,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		Log:               log,
 	})
 	libSvc := library.NewService(pool)
+	catSvc.SetAccess(libSvc)
 	scanSvc := scan.New(catSvc, libSvc)
 	readingSvc := reading.NewService(pool)
 	listsSvc := lists.NewService(pool, libSvc)

@@ -2,10 +2,12 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BookActions } from "./BookActions";
+import { canRefresh, RefreshLibraryButton } from "./RefreshButtons";
 import { useCreateLibrary, useInstances, useLibraries } from "./useLibraries";
 
 function Shelf({ libraryId }: { libraryId: string }) {
   const { t } = useTranslation();
+  const role = useLibraries().data?.find((l) => l.id === libraryId)?.role;
   const [q, setQ] = useState("");
   const instances = useInstances(libraryId, q);
   return (
@@ -27,6 +29,7 @@ function Shelf({ libraryId }: { libraryId: string }) {
           {t("library.scan")}
         </Link>
       </div>
+      {canRefresh(role) && <RefreshLibraryButton libraryId={libraryId} />}
       {instances.isPending && <p>{t("common.loading")}</p>}
       {instances.data?.length === 0 && <p>{t(q ? "library.noResults" : "library.empty")}</p>}
       <ul className="flex flex-col divide-y divide-slate-300 dark:divide-slate-700">

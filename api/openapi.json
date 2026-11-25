@@ -2293,6 +2293,16 @@
         },
         "type": "object"
       },
+      "Refresh-library-catalogRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "all": {
+            "description": "Also refresh books providers already described (library administrators).",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "RegisterRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5045,11 +5055,11 @@
             "description": "Bad Gateway"
           }
         },
-        "summary": "Ask the providers again (administrators)",
+        "summary": "Ask the providers again about one book (administrators, and editors of a library that holds it)",
         "tags": [
           "catalog"
         ],
-        "x-permission": "instance:admin"
+        "x-permission": "authenticated"
       }
     },
     "/v1/editions/{id}/sync-excluded": {
@@ -6393,6 +6403,112 @@
         "summary": "Record a book I borrowed from a person or a library",
         "tags": [
           "loans"
+        ],
+        "x-permission": "library:edit"
+      }
+    },
+    "/v1/libraries/{id}/catalog/refresh": {
+      "post": {
+        "description": "Asks the providers again about the library's books they did not know, one lookup per second, up to 500 per run. all=true also refreshes books providers already described and needs library administration. Books excluded from refreshes are never touched.",
+        "operationId": "refresh-library-catalog",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Refresh-library-catalogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Start a metadata refresh in the background for the books of one library (editors and administrators)",
+        "tags": [
+          "catalog"
         ],
         "x-permission": "library:edit"
       }

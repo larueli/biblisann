@@ -5,6 +5,8 @@ import { api, problemMessage, type Schemas } from "../../api/client";
 import { field, muted, primary, secondary } from "../../app/ui";
 import { useSession } from "../auth/session";
 import { CatalogAdmin } from "./CatalogAdmin";
+import { canRefresh, RefreshBookButton } from "./RefreshButtons";
+import { useLibraries } from "./useLibraries";
 
 type Item = Schemas["InstanceListItem"];
 const statuses = ["to_read", "reading", "read", "abandoned"] as const;
@@ -61,6 +63,7 @@ export function BookActions({ item }: { item: Item }) {
   });
 
   const isAdmin = useSession().data?.user.is_admin === true;
+  const role = useLibraries().data?.find((l) => l.id === item.library_id)?.role;
   const current = state.data?.reading?.status ?? "";
   return (
     <details className="mt-1 text-sm">
@@ -141,7 +144,11 @@ export function BookActions({ item }: { item: Item }) {
             {t("book.lend")}
           </button>
         </form>
-        {isAdmin && <CatalogAdmin editionId={item.edition_id} />}
+        {isAdmin ? (
+          <CatalogAdmin editionId={item.edition_id} />
+        ) : (
+          canRefresh(role) && <RefreshBookButton editionId={item.edition_id} />
+        )}
         {lend.isError && <p role="alert">{lend.error.message}</p>}
         {lend.isSuccess && <p role="status">{t("book.lent")}</p>}
       </div>

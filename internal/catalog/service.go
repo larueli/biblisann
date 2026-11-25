@@ -57,6 +57,7 @@ type Service struct {
 	fetcher  Fetcher
 	log      *slog.Logger
 	now      func() time.Time
+	access   Access
 }
 
 // NewService creates a Service.

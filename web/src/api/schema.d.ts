@@ -457,7 +457,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ask the providers again (administrators)
+         * Ask the providers again about one book (administrators, and editors of a library that holds it)
          * @description Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn, and can be excluded from future refreshes. 409 when the edition is excluded, 502 when every provider failed.
          */
         post: operations["refresh-edition"];
@@ -708,6 +708,26 @@ export interface paths {
         put?: never;
         /** Record a book I borrowed from a person or a library */
         post: operations["borrow-book"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/libraries/{id}/catalog/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a metadata refresh in the background for the books of one library (editors and administrators)
+         * @description Asks the providers again about the library's books they did not know, one lookup per second, up to 500 per run. all=true also refreshes books providers already described and needs library administration. Books excluded from refreshes are never touched.
+         */
+        post: operations["refresh-library-catalog"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2394,6 +2414,10 @@ export interface components {
             all?: boolean;
             /** @description Only books of this library. Omit for the whole instance. */
             library_id?: string;
+        };
+        "Refresh-library-catalogRequest": {
+            /** @description Also refresh books providers already described (library administrators). */
+            all?: boolean;
         };
         RegisterRequest: {
             /** @description Account email address (ignored with an invitation: the invited address is used). */
@@ -5327,6 +5351,93 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "refresh-library-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Refresh-library-catalogRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

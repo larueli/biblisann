@@ -90,3 +90,6 @@ WHERE NOT e.sync_excluded AND e.isbn13 IS NOT NULL
   AND (sqlc.arg('include_known')::boolean OR e.sync_status = 'not_found' OR (e.sync_status = '' AND e.provenance = '{}'::jsonb))
   AND (sqlc.arg('ignore_wait')::boolean OR e.synced_at IS NULL OR e.synced_at < now() - interval '7 days')
 ORDER BY e.synced_at NULLS FIRST, e.id LIMIT sqlc.arg('max_rows')::int;
+
+-- name: ListEditionLibraries :many
+SELECT DISTINCT library_id FROM instances WHERE edition_id = $1 AND deleted_at IS NULL;

@@ -61,6 +61,41 @@ func adminOnly(ctx context.Context) error {
 	return nil
 }
 
+// Access is what the catalog needs to know about library membership (library.Service). It is set
+// after construction because the library service itself depends on the catalog.
+type Access interface {
+	RequirePerm(ctx context.Context, q *dbsqlc.Queries, libraryID uuid.UUID, perm string) (*authz.Principal, error)
+}
+
+// SetAccess lets members who may edit a library refresh the editions it holds.
+func (s *Service) SetAccess(a Access) { s.access = a }
+
+// mayRefresh allows administrators, and anyone who may edit a library holding a copy of the
+// edition: a refresh only fills fields from providers (never hand-edited ones), so an editor can
+// ask for it, but changing data by hand stays an administrator's job.
+func (s *Service) mayRefresh(ctx context.Context, editionID uuid.UUID) error {
+	p, err := authz.From(ctx)
+	if err != nil {
+		return err
+	}
+	if p.IsAdmin && p.Via == "session" {
+		return nil
+	}
+	if s.access == nil {
+		return authz.ErrNotFound
+	}
+	libs, err := s.q.ListEditionLibraries(ctx, editionID)
+	if err != nil {
+		return err
+	}
+	for _, l := range libs {
+		if _, err := s.access.RequirePerm(ctx, nil, l, authz.PermWrite); err == nil {
+			return nil
+		}
+	}
+	return authz.ErrNotFound
+}
+
 // Update applies a manual edit to a shared edition. The caller must be an administrator.
 func (s *Service) Update(ctx context.Context, id uuid.UUID, p EditionPatch) (dbsqlc.Edition, error) {
 	if err := adminOnly(ctx); err != nil {
@@ -158,7 +193,7 @@ func (s *Service) SetSyncExcluded(ctx context.Context, id uuid.UUID, excluded bo
 // Refresh asks the providers again and replaces the fields that are not locked by a manual edit.
 // Fields no provider knows are kept. An edition excluded from refreshes is never touched.
 func (s *Service) Refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSettings) (dbsqlc.Edition, string, error) {
-	if err := adminOnly(ctx); err != nil {
+	if err := s.mayRefresh(ctx, id); err != nil {
 		return dbsqlc.Edition{}, "", err
 	}
 	return s.refresh(ctx, id, layers...)

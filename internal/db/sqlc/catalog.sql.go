@@ -369,6 +369,30 @@ func (q *Queries) InsertCover(ctx context.Context, arg InsertCoverParams) (Cover
 	return i, err
 }
 
+const listEditionLibraries = `-- name: ListEditionLibraries :many
+SELECT DISTINCT library_id FROM instances WHERE edition_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) ListEditionLibraries(ctx context.Context, editionID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEditionLibraries, editionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var library_id uuid.UUID
+		if err := rows.Scan(&library_id); err != nil {
+			return nil, err
+		}
+		items = append(items, library_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEditionsToRefresh = `-- name: ListEditionsToRefresh :many
 SELECT e.id FROM editions e
 WHERE NOT e.sync_excluded AND e.isbn13 IS NOT NULL

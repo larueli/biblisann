@@ -367,5 +367,10 @@
     "all": "Also books providers already described",
     "start": "Refresh now",
     "started": "Started. It runs in the background."
+  },
+  "refresh": {
+    "library": "Refresh metadata of unknown books",
+    "book": "Refresh metadata",
+    "started": "Started. It runs in the background."
   }
 }
