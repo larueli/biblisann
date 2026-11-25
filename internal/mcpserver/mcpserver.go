@@ -34,6 +34,9 @@ type Deps struct {
 	Reading *reading.Service
 	Lists   *lists.Service
 	Loans   *loans.Service
+	// Charge takes extra quota tokens for a tool that weighs more than a plain request (provider
+	// lookups). It returns false, and how long to wait, when the quota is spent. Nil: unlimited.
+	Charge func(p *authz.Principal, cost int) (retryAfter time.Duration, ok bool)
 	// ResourceMetadataURL, when set, is advertised in WWW-Authenticate so OAuth-capable clients can
 	// discover the authorization server (Slice 3).
 	ResourceMetadataURL string

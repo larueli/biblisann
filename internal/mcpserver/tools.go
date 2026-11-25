@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -204,6 +205,13 @@ func (d Deps) writeTools(s *mcp.Server, wrap func(context.Context) context.Conte
 			if err != nil {
 				r, _ := textErr(err)
 				return r, out, nil
+			}
+			// The HTTP request already cost 1; a provider lookup weighs 5 on the REST API too.
+			if pr, err := authz.From(wrap(c)); d.Charge != nil && err == nil {
+				if wait, ok := d.Charge(pr, 4); !ok {
+					r, _ := textErr(fmt.Errorf("request quota exceeded: try again in %d seconds", int(wait.Seconds())+1))
+					return r, out, nil
+				}
 			}
 			res, err := d.Scan.Scan(wrap(c), scan.Input{LibraryID: id, ISBN: in.ISBN, AllowDuplicate: in.AllowDuplicate, IdempotencyKey: in.RequestID})
 			if err != nil {

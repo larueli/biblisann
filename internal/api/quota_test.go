@@ -48,3 +48,37 @@ func TestQuotaMiddlewareHeadersAndRetryAfter(t *testing.T) {
 		t.Errorf("anonymous metered: %d", anon.Code)
 	}
 }
+
+func TestQuotaMeters(t *testing.T) {
+	m := ratelimit.NewMemory(3, time.Hour)
+	h := quotaMiddleware(m, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	// MCP calls are metered per user
+	user := uuid.New()
+	for i := 0; i < 3; i++ {
+		r := httptest.NewRequest("POST", "/mcp", nil)
+		r = r.WithContext(authz.With(r.Context(), &authz.Principal{UserID: user, Via: "token"}))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("mcp call %d: %d", i, w.Code)
+		}
+	}
+	r := httptest.NewRequest("POST", "/mcp", nil)
+	r = r.WithContext(authz.With(r.Context(), &authz.Principal{UserID: user, Via: "token"}))
+	if w := httptest.NewRecorder(); func() int { h.ServeHTTP(w, r); return w.Code }() != http.StatusTooManyRequests {
+		t.Error("mcp over quota was not refused")
+	}
+	// OPDS feeds are metered per client address (the token lives in the path)
+	for i := 0; i < 3; i++ {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "/opds/tok/", nil))
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("opds call %d: %d", i, w.Code)
+		}
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/opds/tok/", nil))
+	if w.Code != http.StatusTooManyRequests || w.Header().Get("Retry-After") == "" {
+		t.Errorf("opds over quota: %d", w.Code)
+	}
+}

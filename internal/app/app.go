@@ -22,6 +22,7 @@ import (
 	"github.com/larueli/biblisann/internal/account"
 	"github.com/larueli/biblisann/internal/api"
 	"github.com/larueli/biblisann/internal/auth"
+	"github.com/larueli/biblisann/internal/authz"
 	"github.com/larueli/biblisann/internal/backup"
 	"github.com/larueli/biblisann/internal/catalog"
 	"github.com/larueli/biblisann/internal/config"
@@ -268,7 +269,14 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 		Version: version.Version(), DB: pool, Web: webui.Handler(), Log: log, BaseURL: cfg.BaseURL,
 		Auth: authSvc, Mailer: mail, Library: libSvc, Catalog: catSvc, Scan: scanSvc, Reading: readingSvc,
 		Lists: listsSvc, Loans: loansSvc,
-		MCP:      mcpserver.Handler(mcpserver.Deps{Version: version.Version(), Library: libSvc, Scan: scanSvc, Reading: readingSvc, Lists: listsSvc, Loans: loansSvc}),
+		MCP: mcpserver.Handler(mcpserver.Deps{Version: version.Version(), Library: libSvc, Scan: scanSvc, Reading: readingSvc, Lists: listsSvc, Loans: loansSvc,
+			Charge: func(p *authz.Principal, cost int) (time.Duration, bool) {
+				if quota == nil {
+					return 0, true
+				}
+				d := quota.Take(api.QuotaKey(p), cost)
+				return d.RetryAfter, d.Allowed
+			}}),
 		Importer: importer.New(pool, catSvc, libSvc, readingSvc, listsSvc),
 		Backup: func(ctx context.Context, w io.Writer) error {
 			return backup.Export(ctx, pool, covers, w, version.Version())

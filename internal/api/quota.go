@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/larueli/biblisann/internal/authz"
+	"github.com/larueli/biblisann/internal/httpmw"
 	"github.com/larueli/biblisann/internal/ratelimit"
 )
 
@@ -41,15 +42,29 @@ func quotaHeaders(h http.Header, d ratelimit.Decision) {
 
 func ceilSeconds(d time.Duration) int { return int(math.Ceil(d.Seconds())) }
 
-// quotaKey identifies who the quota belongs to.
-func quotaKey(p *authz.Principal) string { return "quota|" + p.UserID.String() }
+// QuotaKey identifies who the request quota belongs to (also used by the MCP tools that weigh more).
+func QuotaKey(p *authz.Principal) string { return "quota|" + p.UserID.String() }
 
-// quotaMiddleware enforces the per-user request quota on authenticated API calls. It must sit
+// quotaMiddleware enforces the per-user request quota on authenticated API calls, MCP calls and
+// OPDS feeds. It must sit
 // inside the authenticator, which puts the principal in the context. Cover images, probes and the
 // static app are not metered.
 func quotaMiddleware(m ratelimit.Meter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/v1/") || strings.HasPrefix(r.URL.Path, "/v1/covers/") {
+		path := r.URL.Path
+		if strings.HasPrefix(path, "/opds/") {
+			// Feed readers authenticate with the token in the path, inside the handler: meter by client.
+			d := m.Take("quota|opds|"+ipKey(httpmw.ClientIP(r.Context())), 1)
+			quotaHeaders(w.Header(), d)
+			if !d.Allowed {
+				w.Header().Set("Retry-After", strconv.Itoa(max(1, ceilSeconds(d.RetryAfter))))
+				writeProblem(w, http.StatusTooManyRequests, "request quota exceeded, slow down")
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+		if (!strings.HasPrefix(path, "/v1/") && path != "/mcp") || strings.HasPrefix(path, "/v1/covers/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -58,7 +73,7 @@ func quotaMiddleware(m ratelimit.Meter, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r) // anonymous routes have their own throttles
 			return
 		}
-		d := m.Take(quotaKey(p), requestCost(r))
+		d := m.Take(QuotaKey(p), requestCost(r))
 		quotaHeaders(w.Header(), d)
 		if !d.Allowed {
 			w.Header().Set("Retry-After", strconv.Itoa(max(1, ceilSeconds(d.RetryAfter))))
