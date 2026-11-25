@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -160,6 +161,68 @@ func (s *Service) Refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSe
 	if err := adminOnly(ctx); err != nil {
 		return dbsqlc.Edition{}, "", err
 	}
+	return s.refresh(ctx, id, layers...)
+}
+
+// RefreshScope selects what a batch refresh looks at.
+type RefreshScope struct {
+	LibraryID    *uuid.UUID // nil: the whole instance
+	IncludeKnown bool       // also editions providers already described
+	IgnoreWait   bool       // do not wait a week between two attempts on the same book
+	Limit        int        // at most this many editions per run (default 200)
+}
+
+// RefreshReport counts what a batch did.
+type RefreshReport struct {
+	Checked, Updated, NotFound, NoISBN int
+	Stopped                            bool // providers were unavailable: the run ended early
+}
+
+// RefreshBatch refreshes the editions of a scope one by one, pausing between lookups so providers
+// are not hammered. It is the work of the weekly job and of the administrator's on-demand runs, so
+// it carries no principal: callers decide who may start it. Excluded editions are never touched.
+func (s *Service) RefreshBatch(ctx context.Context, sc RefreshScope, pause time.Duration) (RefreshReport, error) {
+	var rep RefreshReport
+	limit := sc.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	ids, err := s.q.ListEditionsToRefresh(ctx, dbsqlc.ListEditionsToRefreshParams{LibraryID: sc.LibraryID, IncludeKnown: sc.IncludeKnown, IgnoreWait: sc.IgnoreWait, MaxRows: int32(limit)})
+	if err != nil {
+		return rep, err
+	}
+	for i, id := range ids {
+		if i > 0 && pause > 0 {
+			select {
+			case <-ctx.Done():
+				return rep, ctx.Err()
+			case <-time.After(pause):
+			}
+		}
+		_, status, err := s.refresh(ctx, id)
+		switch {
+		case errors.Is(err, ErrSyncExcluded), errors.Is(err, ErrNotFound):
+			continue
+		case errors.Is(err, ErrProvidersUnavailable):
+			rep.Stopped = true // no point asking the next hundred books; the next run retries
+			return rep, nil
+		case err != nil:
+			return rep, err
+		}
+		rep.Checked++
+		switch status {
+		case StatusUpdated:
+			rep.Updated++
+		case StatusNotFound:
+			rep.NotFound++
+		case StatusNoISBN:
+			rep.NoISBN++
+		}
+	}
+	return rep, nil
+}
+
+func (s *Service) refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSettings) (dbsqlc.Edition, string, error) {
 	e, err := s.Get(ctx, id)
 	if err != nil {
 		return e, "", err

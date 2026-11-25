@@ -19,6 +19,7 @@ import (
 	"github.com/larueli/biblisann/internal/catalog"
 	"github.com/larueli/biblisann/internal/hcsync"
 	"github.com/larueli/biblisann/internal/importer"
+	"github.com/larueli/biblisann/internal/jobs"
 	"github.com/larueli/biblisann/internal/library"
 	"github.com/larueli/biblisann/internal/lists"
 	"github.com/larueli/biblisann/internal/loans"
@@ -68,19 +69,22 @@ type Deps struct {
 	Hardcover interface {
 		Refresh(ctx context.Context, workID uuid.UUID) error
 	} // nil: no Hardcover token configured
-	Account       *account.Service                             // nil: exports, imports and deletion are off
-	Metrics       *telemetry.Metrics                           // nil: no /metrics endpoint
-	MetricsToken  string                                       // bearer token for /metrics
-	MetricsPublic bool                                         // true: /metrics needs no authentication (protect it at the reverse proxy)
-	WebPushKey    string                                       // VAPID public key, shown to browsers that subscribe
-	SourceURL     string                                       // where the source of this version lives (AGPL section 13)
-	HCSync        *hcsync.Service                              // nil: per-user Hardcover sync is off
-	Passkeys      *passkeys.Service                            // nil: passkeys are off
-	OPDS          *opds.Handler                                // nil: no OPDS catalog
-	SCIM          *scim.Handler                                // nil: SCIM provisioning is off
-	Backup        func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
-	MCP           http.Handler                                 // the MCP endpoint, mounted at /mcp (nil: disabled)
-	Extra         func(huma.API, *Server)                      // hook for later slices to register operations
+	Account       *account.Service   // nil: exports, imports and deletion are off
+	Metrics       *telemetry.Metrics // nil: no /metrics endpoint
+	MetricsToken  string             // bearer token for /metrics
+	MetricsPublic bool               // true: /metrics needs no authentication (protect it at the reverse proxy)
+	WebPushKey    string             // VAPID public key, shown to browsers that subscribe
+	SourceURL     string             // where the source of this version lives (AGPL section 13)
+	Jobs          interface {
+		EnqueueMetadataRefresh(ctx context.Context, a jobs.MetadataRefreshArgs) error
+	} // nil: no job queue (spec export)
+	HCSync   *hcsync.Service                              // nil: per-user Hardcover sync is off
+	Passkeys *passkeys.Service                            // nil: passkeys are off
+	OPDS     *opds.Handler                                // nil: no OPDS catalog
+	SCIM     *scim.Handler                                // nil: SCIM provisioning is off
+	Backup   func(ctx context.Context, w io.Writer) error // nil: backups are not served over HTTP
+	MCP      http.Handler                                 // the MCP endpoint, mounted at /mcp (nil: disabled)
+	Extra    func(huma.API, *Server)                      // hook for later slices to register operations
 }
 
 // Server holds what route handlers share.

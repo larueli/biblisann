@@ -65,3 +65,22 @@ func TestCatalogAdministration(t *testing.T) {
 		t.Errorf("non-admin edit: %d", st)
 	}
 }
+
+func TestCatalogRefreshIsAdministratorOnly(t *testing.T) {
+	srv, authSvc := newServer(t)
+	admin := &client{t: t, srv: srv}
+	admin.do("POST", "/v1/auth/register", map[string]string{"email": "admin@example.org", "password": "tulips in the garden"}, nil)
+	admin.login("admin@example.org", "tulips in the garden")
+	if _, err := authSvc.CreateUser(t.Context(), "bob@example.org", "bobs long password", "Bob", false); err != nil {
+		t.Fatal(err)
+	}
+	bob := &client{t: t, srv: srv}
+	bob.login("bob@example.org", "bobs long password")
+	if st, _ := bob.w("POST", "/v1/admin/catalog/refresh", map[string]any{}); st != 404 {
+		t.Errorf("non-admin: %d", st)
+	}
+	// the test server runs no job queue: an administrator is told so instead of a silent success
+	if st, _ := admin.w("POST", "/v1/admin/catalog/refresh", map[string]any{"all": true}); st != 503 {
+		t.Errorf("admin without a queue: %d", st)
+	}
+}

@@ -227,7 +227,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			log.InfoContext(ctx, "garbage collection", "removed", rep.String())
 		}
 		return nil
-	}, hcSyncer, userSyncer)
+	}, hcSyncer, userSyncer, catSvc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -282,7 +282,7 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			return backup.Export(ctx, pool, covers, w, version.Version())
 		},
 		TokenSvc: tokenSvc, Tokens: api.MultiResolver{tokenSvc, oauthSvc}, OAuth: oauthSvc, Notify: dispatcher, Channels: channels,
-		Limiter: limiter, Quota: quota,
+		Limiter: limiter, Quota: quota, Jobs: jc,
 	})
 	return h, jc, nil
 }

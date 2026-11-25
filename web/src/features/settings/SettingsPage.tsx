@@ -6,6 +6,7 @@ import { field, muted, primary, secondary } from "../../app/ui";
 import { useSession } from "../auth/session";
 import { useLibraries } from "../library/useLibraries";
 import { AccountSection } from "./Account";
+import { AdminCatalog } from "./AdminCatalog";
 import { AdminGroups } from "./AdminGroups";
 import { AdminUsers } from "./AdminUsers";
 import { ChannelConfirm } from "./ChannelConfirm";
@@ -329,6 +330,7 @@ export function SettingsPage() {
       <AccountSection />
       {session.data?.user.is_admin && <AdminUsers />}
       {session.data?.user.is_admin && <AdminGroups />}
+      {session.data?.user.is_admin && <AdminCatalog />}
       {session.data?.user.is_admin && (
         <section className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold">{t("settings.backup")}</h2>

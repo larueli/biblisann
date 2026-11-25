@@ -15,6 +15,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
+	"github.com/larueli/biblisann/internal/catalog"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
 	"github.com/larueli/biblisann/internal/i18n"
 	"github.com/larueli/biblisann/internal/notify"
@@ -84,6 +85,22 @@ type UserSyncer interface {
 	SyncUserForJob(ctx context.Context, userID uuid.UUID) error
 }
 
+// MetadataRefreshArgs asks the providers again about books they did not know. Without fields it is
+// the weekly run over the whole instance; administrators start narrower or wider runs on demand.
+type MetadataRefreshArgs struct {
+	LibraryID    *uuid.UUID `json:"library_id,omitempty"`
+	IncludeKnown bool       `json:"include_known,omitempty"`
+	IgnoreWait   bool       `json:"ignore_wait,omitempty"`
+}
+
+// Kind implements river.JobArgs.
+func (MetadataRefreshArgs) Kind() string { return "metadata_refresh" }
+
+// MetadataRefresher refreshes catalog editions in batches (catalog.Service).
+type MetadataRefresher interface {
+	RefreshBatch(ctx context.Context, sc catalog.RefreshScope, pause time.Duration) (catalog.RefreshReport, error)
+}
+
 // MaintenanceArgs removes expired sessions and old idempotency keys.
 type MaintenanceArgs struct{}
 
@@ -116,7 +133,7 @@ type Client struct {
 }
 
 // New builds the client with its workers and periodic jobs. Call Start to begin processing.
-func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error, hc Syncer, us UserSyncer) (*Client, error) {
+func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error, hc Syncer, us UserSyncer, mr MetadataRefresher) (*Client, error) {
 	workers := river.NewWorkers()
 	q := dbsqlc.New(pool)
 	river.AddWorker(workers, &reminderWorker{pool: pool, q: q})
@@ -143,6 +160,13 @@ func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(
 			return UserSyncArgs{}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true, ByPeriod: 4 * time.Minute}}
 		}, &river.PeriodicJobOpts{RunOnStart: true}))
 	}
+	if mr != nil {
+		river.AddWorker(workers, &metadataRefreshWorker{r: mr, log: log})
+		// Weekly: books no provider knew get another chance (a provider may have learned them since).
+		periodic = append(periodic, river.NewPeriodicJob(river.PeriodicInterval(7*24*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
+			return MetadataRefreshArgs{}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true, ByPeriod: 6 * 24 * time.Hour}}
+		}, nil))
+	}
 	c, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues:       map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}},
 		Workers:      workers,
@@ -160,6 +184,13 @@ func (c *Client) Start(ctx context.Context) error { return c.c.Start(ctx) }
 
 // Stop waits for running jobs to finish (bounded by ctx).
 func (c *Client) Stop(ctx context.Context) error { return c.c.Stop(ctx) }
+
+// EnqueueMetadataRefresh starts a metadata refresh in the background (administrator action). The
+// same request twice within ten minutes is one job.
+func (c *Client) EnqueueMetadataRefresh(ctx context.Context, a MetadataRefreshArgs) error {
+	_, err := c.c.Insert(ctx, a, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true, ByPeriod: 10 * time.Minute}})
+	return err
+}
 
 // Notify enqueues a notification inside an existing transaction.
 func (c *Client) Notify(ctx context.Context, tx pgx.Tx, a NotifyArgs) error {
@@ -307,5 +338,27 @@ func (w *userSyncWorker) Work(ctx context.Context, _ *river.Job[UserSyncArgs]) e
 			w.log.WarnContext(ctx, "hardcover user sync failed", "user", id.String(), "error", err)
 		}
 	}
+	return nil
+}
+
+type metadataRefreshWorker struct {
+	river.WorkerDefaults[MetadataRefreshArgs]
+	r   MetadataRefresher
+	log *slog.Logger
+}
+
+func (w *metadataRefreshWorker) Timeout(*river.Job[MetadataRefreshArgs]) time.Duration {
+	return 30 * time.Minute
+}
+
+// Work refreshes up to a bounded number of editions, one lookup per second, so providers are not
+// hammered; what is left waits for the next run.
+func (w *metadataRefreshWorker) Work(ctx context.Context, job *river.Job[MetadataRefreshArgs]) error {
+	a := job.Args
+	rep, err := w.r.RefreshBatch(ctx, catalog.RefreshScope{LibraryID: a.LibraryID, IncludeKnown: a.IncludeKnown, IgnoreWait: a.IgnoreWait, Limit: 500}, time.Second)
+	if err != nil {
+		return err
+	}
+	w.log.InfoContext(ctx, "metadata refresh", "checked", rep.Checked, "updated", rep.Updated, "not_found", rep.NotFound, "providers_unavailable", rep.Stopped)
 	return nil
 }

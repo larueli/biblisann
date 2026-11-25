@@ -15,6 +15,7 @@ import (
 	"github.com/larueli/biblisann/internal/authz"
 	"github.com/larueli/biblisann/internal/catalog"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
+	"github.com/larueli/biblisann/internal/jobs"
 	"github.com/larueli/biblisann/internal/library"
 	"github.com/larueli/biblisann/internal/scan"
 	"github.com/larueli/biblisann/internal/storage"
@@ -282,6 +283,33 @@ func (s *Server) registerCatalog(a huma.API) {
 				return nil, mapError(s.Log, err)
 			}
 			return &struct{ Body editionBody }{toEditionBody(e)}, nil
+		})
+	Register(a, huma.Operation{OperationID: "refresh-catalog", Method: http.MethodPost, Path: "/v1/admin/catalog/refresh",
+		Summary: "Start a metadata refresh in the background for the whole instance or one library (administrators)",
+		Description: "Asks the providers again about books they did not know, one lookup per second, up to 500 per run. " +
+			"all=true also refreshes books providers already described (hand-edited fields stay). Books excluded from refreshes are never touched. " +
+			"The same refresh runs weekly on its own for books no provider knew.",
+		Tags: []string{"catalog"}, DefaultStatus: http.StatusAccepted, Errors: []int{404, 429, 503}}, PermInstanceAdmin,
+		func(ctx context.Context, in *struct {
+			Body struct {
+				LibraryID *uuid.UUID `json:"library_id,omitempty" doc:"Only books of this library. Omit for the whole instance."`
+				All       bool       `json:"all,omitempty" doc:"Also refresh books providers already described."`
+			}
+		}) (*struct{}, error) {
+			if _, err := requireAdmin(ctx); err != nil {
+				return nil, err
+			}
+			if s.Jobs == nil {
+				return nil, huma.Error503ServiceUnavailable("background jobs are not running")
+			}
+			if err := s.throttle(ctx, "refresh-catalog", ""); err != nil {
+				return nil, err
+			}
+			err := s.Jobs.EnqueueMetadataRefresh(ctx, jobs.MetadataRefreshArgs{LibraryID: in.Body.LibraryID, IncludeKnown: in.Body.All, IgnoreWait: true})
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			return nil, nil
 		})
 	Register(a, huma.Operation{OperationID: "delete-edition", Method: http.MethodDelete, Path: "/v1/editions/{id}",
 		Summary: "Delete an edition no library holds any more (administrators)", Tags: []string{"catalog"}, DefaultStatus: http.StatusNoContent, Errors: []int{404, 409}}, PermInstanceAdmin,

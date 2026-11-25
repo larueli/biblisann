@@ -101,3 +101,4 @@ Decisions taken (to be written into an ADR with the first implementing PR):
 - [x] shadcn/ui added to the web UI.
 - [x] Generator on TypeScript 5.9 in an isolated tool directory, application on TypeScript 7.
 - [x] From the review of ADR 0026: calendar feed filtered by current `loan.write`, `/mcp` and `/opds` metered (MCP `add_book` weighs 5), catalog administrator check in `internal/catalog`, step-up for `admin-delete-user`. Left as is on purpose: private contact names visible to other loan managers, no step-up for disabling users (reversible, needed during incidents). Idea not done: step-up for the full backup download (a plain GET handler).
+- [x] Metadata refresh of unknown books: weekly job, administrator-triggered runs per library or for the whole instance, per-book refresh, per-book opt-out (`sync_excluded`), result recorded per edition (`sync_status`, `synced_at`).

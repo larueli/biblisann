@@ -79,3 +79,14 @@ DELETE FROM provider_cache WHERE key = $1;
 
 -- name: SetEditionSyncResult :one
 UPDATE editions SET sync_status = $2, synced_at = now() WHERE id = $1 RETURNING *;
+
+-- name: ListEditionsToRefresh :many
+-- Editions a provider refresh should look at: not excluded, with an ISBN to look up. By default only
+-- "unknown" books (no provider knew them, or never looked up and no provider data), waiting a week
+-- between attempts. include_known adds every edition; ignore_wait drops the one-week pause.
+SELECT e.id FROM editions e
+WHERE NOT e.sync_excluded AND e.isbn13 IS NOT NULL
+  AND (sqlc.narg('library_id')::uuid IS NULL OR EXISTS (SELECT 1 FROM instances i WHERE i.edition_id = e.id AND i.library_id = sqlc.narg('library_id')::uuid))
+  AND (sqlc.arg('include_known')::boolean OR e.sync_status = 'not_found' OR (e.sync_status = '' AND e.provenance = '{}'::jsonb))
+  AND (sqlc.arg('ignore_wait')::boolean OR e.synced_at IS NULL OR e.synced_at < now() - interval '7 days')
+ORDER BY e.synced_at NULLS FIRST, e.id LIMIT sqlc.arg('max_rows')::int;

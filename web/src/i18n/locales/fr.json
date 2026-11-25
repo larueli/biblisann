@@ -358,5 +358,14 @@
     "summary": "{{queued}} en file, {{owned}} déjà possédés, {{invalid}} invalides.",
     "remaining": "Encore {{count}} à ajouter.",
     "slowing": "Ralentissement pour respecter la limite du serveur : prochain dans {{seconds}} s."
+  },
+  "adminCatalog": {
+    "title": "Actualisation des métadonnées",
+    "help": "Chaque semaine, les fournisseurs sont interrogés à nouveau sur les livres qu'aucun ne connaissait. Lancez une actualisation maintenant pour tout le serveur ou une bibliothèque ; les livres exclus des actualisations ne sont jamais touchés. Elle tourne en arrière-plan, une recherche par seconde.",
+    "scope": "Périmètre",
+    "wholeInstance": "Tout le serveur",
+    "all": "Aussi les livres déjà décrits par les fournisseurs",
+    "start": "Actualiser maintenant",
+    "started": "Lancée. Elle tourne en arrière-plan."
   }
 }

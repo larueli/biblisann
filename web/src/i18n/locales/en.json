@@ -358,5 +358,14 @@
     "summary": "{{queued}} queued, {{owned}} already owned, {{invalid}} not valid.",
     "remaining": "{{count}} left to add.",
     "slowing": "Slowing down to respect the server limit: next one in {{seconds}} s."
+  },
+  "adminCatalog": {
+    "title": "Book metadata refresh",
+    "help": "Every week the providers are asked again about books none of them knew. Start a run now for the whole server or one library; books you excluded from refreshes are never touched. Runs in the background, one lookup per second.",
+    "scope": "Scope",
+    "wholeInstance": "Whole server",
+    "all": "Also books providers already described",
+    "start": "Refresh now",
+    "started": "Started. It runs in the background."
   }
 }

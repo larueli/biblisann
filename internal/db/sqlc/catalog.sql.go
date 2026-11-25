@@ -369,6 +369,50 @@ func (q *Queries) InsertCover(ctx context.Context, arg InsertCoverParams) (Cover
 	return i, err
 }
 
+const listEditionsToRefresh = `-- name: ListEditionsToRefresh :many
+SELECT e.id FROM editions e
+WHERE NOT e.sync_excluded AND e.isbn13 IS NOT NULL
+  AND ($1::uuid IS NULL OR EXISTS (SELECT 1 FROM instances i WHERE i.edition_id = e.id AND i.library_id = $1::uuid))
+  AND ($2::boolean OR e.sync_status = 'not_found' OR (e.sync_status = '' AND e.provenance = '{}'::jsonb))
+  AND ($3::boolean OR e.synced_at IS NULL OR e.synced_at < now() - interval '7 days')
+ORDER BY e.synced_at NULLS FIRST, e.id LIMIT $4::int
+`
+
+type ListEditionsToRefreshParams struct {
+	LibraryID    *uuid.UUID
+	IncludeKnown bool
+	IgnoreWait   bool
+	MaxRows      int32
+}
+
+// Editions a provider refresh should look at: not excluded, with an ISBN to look up. By default only
+// "unknown" books (no provider knew them, or never looked up and no provider data), waiting a week
+// between attempts. include_known adds every edition; ignore_wait drops the one-week pause.
+func (q *Queries) ListEditionsToRefresh(ctx context.Context, arg ListEditionsToRefreshParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEditionsToRefresh,
+		arg.LibraryID,
+		arg.IncludeKnown,
+		arg.IgnoreWait,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const putProviderCache = `-- name: PutProviderCache :exec
 INSERT INTO provider_cache (provider, key, found, payload) VALUES ($1, $2, $3, $4)
 ON CONFLICT (provider, key) DO UPDATE SET found = EXCLUDED.found, payload = EXCLUDED.payload, fetched_at = now()
