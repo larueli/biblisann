@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"path"
 	"strings"
 	"time"
 
@@ -154,7 +155,9 @@ func Recover(log *slog.Logger) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				//nolint:errorlint // recover() returns a value, not an error chain
-				if v := recover(); v != nil && v != any(http.ErrAbortHandler) {
+				if v := recover(); v == any(http.ErrAbortHandler) {
+					panic(v)
+				} else if v != nil {
 					log.ErrorContext(r.Context(), "panic in handler", "panic", v, "request_id", RequestID(r.Context()))
 					w.Header().Set("Content-Type", "application/problem+json")
 					w.WriteHeader(http.StatusInternalServerError)
@@ -178,7 +181,7 @@ func (s *statusWriter) WriteHeader(code int) {
 
 func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
-// AccessLog logs one line per request. The query string is not logged (it may hold tokens).
+// AccessLog logs one line per request without client addresses or user-controlled paths.
 func AccessLog(log *slog.Logger, skip func(*http.Request) bool) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -189,9 +192,9 @@ func AccessLog(log *slog.Logger, skip func(*http.Request) bool) Middleware {
 				return
 			}
 			log.InfoContext(r.Context(), "request",
-				"method", r.Method, "path", RedactPath(r.URL.Path), "status", sw.status,
+				"method", r.Method, "status", sw.status,
 				"duration_ms", time.Since(start).Milliseconds(),
-				"client_ip", ClientIP(r.Context()).String(), "request_id", RequestID(r.Context()), "trace_id", traceID(r.Context()))
+				"request_id", RequestID(r.Context()), "trace_id", traceID(r.Context()))
 		})
 	}
 }
@@ -199,6 +202,7 @@ func AccessLog(log *slog.Logger, skip func(*http.Request) bool) Middleware {
 // RedactPath hides credentials that travel in the URL path (the OPDS feed token, invitation
 // tokens) so they never reach logs or traces.
 func RedactPath(p string) string {
+	p = path.Clean(p)
 	if _, ok := strings.CutPrefix(p, "/v1/invitations/"); ok && p != "/v1/invitations/accept" {
 		return "/v1/invitations/{token}"
 	}

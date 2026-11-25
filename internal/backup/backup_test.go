@@ -17,6 +17,7 @@ import (
 	"github.com/larueli/biblisann/internal/catalog"
 	"github.com/larueli/biblisann/internal/dbtest"
 	"github.com/larueli/biblisann/internal/library"
+	"github.com/larueli/biblisann/internal/secretbox"
 	"github.com/larueli/biblisann/internal/storage"
 )
 
@@ -56,7 +57,7 @@ func TestRoundTrip(t *testing.T) {
 
 	dst := dbtest.Pool(t)
 	dstCovers, _ := storage.NewLocal(t.TempDir())
-	if err := backup.Restore(ctx, dst, dstCovers, bytes.NewReader(buf.Bytes())); err != nil {
+	if err := backup.Restore(ctx, dst, dstCovers, bytes.NewReader(buf.Bytes()), nil); err != nil {
 		t.Fatal(err)
 	}
 	// Accounts work, data is there, the change log lets offline clients resync, covers came along.
@@ -78,11 +79,54 @@ func TestRoundTrip(t *testing.T) {
 	}
 
 	// Restoring into a non-empty instance is refused, and garbage is rejected.
-	if err := backup.Restore(ctx, dst, dstCovers, bytes.NewReader(buf.Bytes())); !errors.Is(err, backup.ErrNotEmpty) {
+	if err := backup.Restore(ctx, dst, dstCovers, bytes.NewReader(buf.Bytes()), nil); !errors.Is(err, backup.ErrNotEmpty) {
 		t.Errorf("non-empty target: %v", err)
 	}
-	if err := backup.Restore(ctx, dbtest.Pool(t), dstCovers, strings.NewReader("not a tar")); !errors.Is(err, backup.ErrFormat) {
+	if err := backup.Restore(ctx, dbtest.Pool(t), dstCovers, strings.NewReader("not a tar"), nil); !errors.Is(err, backup.ErrFormat) {
 		t.Errorf("garbage: %v", err)
+	}
+}
+
+func TestRestorePreservesFactorsAndRequiresOriginalKey(t *testing.T) {
+	ctx := context.Background()
+	src := dbtest.Pool(t)
+	covers, _ := storage.NewLocal(t.TempDir())
+	a, _ := auth.NewService(src, auth.RegistrationOpen)
+	u, err := a.Register(ctx, "user@example.org", "tulips in the garden", "Reader")
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := bytes.Repeat([]byte{1}, 32)
+	sealed, err := secretbox.Seal(key, []byte("test authenticator secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Exec(ctx, "INSERT INTO user_totp (user_id, secret_enc, confirmed_at) VALUES ($1, $2, now())", u.ID, sealed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Exec(ctx, "INSERT INTO identities (issuer, subject, user_id) VALUES ($1, $2, $3)", "https://example.org", "subject", u.ID); err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	if err := backup.Export(ctx, src, covers, &archive, "test"); err != nil {
+		t.Fatal(err)
+	}
+	dst := dbtest.Pool(t)
+	for _, wrong := range [][]byte{nil, bytes.Repeat([]byte{2}, 32)} {
+		if err := backup.Restore(ctx, dst, covers, bytes.NewReader(archive.Bytes()), wrong); err == nil {
+			t.Fatal("restore accepted an incorrect secret key")
+		}
+		var users int
+		if err := dst.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&users); err != nil || users != 0 {
+			t.Fatalf("failed restore committed users: %d, %v", users, err)
+		}
+	}
+	if err := backup.Restore(ctx, dst, covers, bytes.NewReader(archive.Bytes()), key); err != nil {
+		t.Fatal(err)
+	}
+	var factors, identities int
+	if err := dst.QueryRow(ctx, "SELECT (SELECT count(*) FROM user_totp), (SELECT count(*) FROM identities)").Scan(&factors, &identities); err != nil || factors != 1 || identities != 1 {
+		t.Fatalf("restored factors=%d identities=%d: %v", factors, identities, err)
 	}
 }
 

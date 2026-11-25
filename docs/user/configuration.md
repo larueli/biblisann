@@ -20,11 +20,11 @@ A commented starting point is in `deploy/compose/.env.example`.
 | `BIBLISANN_SHUTDOWN_TIMEOUT` | `20s` | no | Time allowed to finish in-flight requests on SIGTERM. |
 | `BIBLISANN_MIGRATE_ON_START` | `true` | no | Apply database migrations at start. |
 | `BIBLISANN_REGISTRATION` | `first-user` | no | `first-user`: only the very first account may register (it becomes the administrator). `open`: anyone. `closed`: nobody (administrators create accounts). |
-| `BIBLISANN_COVERS_DIR` | `data/covers` (`/data/covers` in the image) | no | Where cover images are stored. Mount a volume. |
+| `BIBLISANN_DATA_DIR` | `data` (`/data` in the image) | no | Root directory for persistent local application files. With `BIBLISANN_STORAGE_BACKEND=local`, covers and thumbnails are stored in its `covers` subdirectory. Use a writable, persistent directory or volume. Relative paths are resolved from the process working directory. |
 | `BIBLISANN_PROVIDERS` | `bnf,openlibrary` | no | Default metadata providers, in priority order. Libraries, users and single requests can override the list. |
 | `BIBLISANN_DISABLED_PROVIDERS` | empty | no | Providers disabled for everyone. Each lookup sends an ISBN to the provider: disable providers you do not want to leak to. |
 | `BIBLISANN_STATIC_PROVIDER_FILE` | none | no | JSON file `{"<isbn13>": {"title": "...", "authors": [...]}}` served by the `static` provider (add `static` to `BIBLISANN_PROVIDERS`). No network. |
-| `BIBLISANN_STORAGE_BACKEND` | `local` | no | `local` (covers in `BIBLISANN_COVERS_DIR`) or `s3`. |
+| `BIBLISANN_STORAGE_BACKEND` | `local` | no | `local` (covers under `BIBLISANN_DATA_DIR/covers`) or `s3`. |
 | `BIBLISANN_S3_ENDPOINT`, `_BUCKET`, `_REGION`, `_ACCESS_KEY`, `_PREFIX` | none | no | S3 location (endpoint is `host:port`, no scheme). The bucket must exist. |
 | `BIBLISANN_S3_SECRET_KEY` | none | yes (`_FILE`) | S3 secret key. `BIBLISANN_S3_USE_SSL` (default `true`). |
 | `BIBLISANN_SMTP_HOST`, `_PORT` (587), `_USERNAME`, `_FROM`, `_MODE` | none | no | Outgoing email. `_FROM` is required with a host. `_MODE`: `starttls` (default), `tls`, `none` (trusted local relay only). |
@@ -47,6 +47,16 @@ A commented starting point is in `deploy/compose/.env.example`.
 | `BIBLISANN_SOURCE_URL` | `https://github.com/larueli/biblisann` | no | Where users can get the source of this version (shown in the footer; AGPL section 13). **Forks that change the code must set their own.** |
 | `BIBLISANN_GC_SOFT_DELETE_DAYS` | `90` | no | How long a deleted copy can be restored before the daily cleanup purges it. |
 | `BIBLISANN_CONFIG_FILE` | none | no | Path of an optional config file. |
+
+The data directory is the application's persistent local file storage. Library data, accounts,
+jobs and settings are stored in PostgreSQL. Imports also need a writable temporary directory
+(`TMPDIR` or the operating system default); those temporary files are not the cover store and may
+be removed after an import completes. With S3 storage, covers are kept in the configured bucket.
+
+`BIBLISANN_DATA_DIR` replaces `BIBLISANN_COVERS_DIR`. If you configured the old variable, set the
+new variable to the parent directory containing `covers` (or move the old directory into the new
+data directory as `covers`). Startup rejects the old setting so an upgrade cannot silently point
+at an empty store.
 
 ## Endpoints for operators
 

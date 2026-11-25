@@ -33,6 +33,8 @@ func oauthProblem(err error) error {
 		return huma.Error422UnprocessableEntity("unknown client or redirect address; do not continue")
 	case errors.Is(err, oauth.ErrInvalidScope), errors.Is(err, oauth.ErrInvalidRequest):
 		return huma.Error422UnprocessableEntity(err.Error())
+	case errors.Is(err, oauth.ErrInvalidGrant):
+		return huma.Error403Forbidden("session expired or revoked")
 	}
 	return huma.Error500InternalServerError("internal error")
 }
@@ -98,7 +100,7 @@ func (s *Server) registerOAuth(a huma.API) {
 					return nil, mapError(s.Log, err)
 				}
 			}
-			url, err := s.OAuth.Approve(ctx, p.UserID, req, in.Body.Scopes, in.Body.LibraryIDs)
+			url, err := s.OAuth.Approve(ctx, p.UserID, sessionTokenFrom(ctx), req, in.Body.Scopes, in.Body.LibraryIDs)
 			if err != nil {
 				return nil, oauthProblem(err)
 			}

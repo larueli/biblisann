@@ -108,16 +108,44 @@ func (s *Service) RegisterClient(ctx context.Context, name string, redirectURIs 
 			return "", fmt.Errorf("%w: unacceptable redirect_uri", ErrInvalidRequest)
 		}
 	}
-	if n, err := s.q.CountOAuthClients(ctx); err != nil {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	if err := q.LockOAuthClientRegistration(ctx); err != nil {
+		return "", err
+	}
+	if n, err := q.CountOAuthClients(ctx); err != nil {
 		return "", err
 	} else if n >= maxClients {
-		return "", ErrTooManyClients
+		candidate, err := q.LockAbandonedOAuthClient(ctx)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrTooManyClients
+		}
+		if err != nil {
+			return "", err
+		}
+		deleted, err := q.DeleteAbandonedOAuthClient(ctx, candidate)
+		if err != nil {
+			return "", err
+		}
+		if deleted == 0 {
+			return "", ErrTooManyClients
+		}
 	}
 	id, err := randToken("bbc_", 18)
 	if err != nil {
 		return "", err
 	}
-	return id, s.q.CreateOAuthClient(ctx, dbsqlc.CreateOAuthClientParams{ID: id, Name: name, RedirectUris: redirectURIs})
+	if err := q.CreateOAuthClient(ctx, dbsqlc.CreateOAuthClientParams{ID: id, Name: name, RedirectUris: redirectURIs}); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 // Request is an authorization request as sent by the client.
@@ -190,7 +218,7 @@ func redirectWith(redirect string, params map[string]string) string {
 
 // Approve records the user's consent and returns the URL to send the browser back to. scopes are
 // what the user granted (they may be fewer than requested); libs restricts the grant (nil: all).
-func (s *Service) Approve(ctx context.Context, userID uuid.UUID, r Request, scopes []string, libs []uuid.UUID) (string, error) {
+func (s *Service) Approve(ctx context.Context, userID uuid.UUID, sessionToken string, r Request, scopes []string, libs []uuid.UUID) (string, error) {
 	_, requested, err := s.Validate(ctx, r)
 	if err != nil {
 		return "", err
@@ -209,9 +237,38 @@ func (s *Service) Approve(ctx context.Context, userID uuid.UUID, r Request, scop
 	if err != nil {
 		return "", err
 	}
-	if err := s.q.CreateOAuthCode(ctx, dbsqlc.CreateOAuthCodeParams{CodeHash: hash(code), ClientID: r.ClientID, UserID: userID,
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	if _, err := q.LockOAuthUser(ctx, userID); err != nil {
+		return "", err
+	}
+	u, err := q.GetUser(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if u.DisabledAt != nil || sessionToken == "" {
+		return "", ErrInvalidGrant
+	}
+	sessionUser, err := q.LockSession(ctx, hash(sessionToken))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrInvalidGrant
+	}
+	if err != nil {
+		return "", err
+	}
+	if sessionUser != userID {
+		return "", ErrInvalidGrant
+	}
+	if err := q.CreateOAuthCode(ctx, dbsqlc.CreateOAuthCodeParams{CodeHash: hash(code), ClientID: r.ClientID, UserID: userID,
 		RedirectUri: r.RedirectURI, CodeChallenge: r.CodeChallenge, Scopes: granted, LibraryIds: libs, Resource: s.resource,
 		ExpiresAt: s.now().Add(codeTTL)}); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return "", err
 	}
 	return redirectWith(r.RedirectURI, map[string]string{"code": code, "state": r.State, "iss": s.base}), nil
@@ -254,7 +311,23 @@ func (s *Service) issue(ctx context.Context, q *dbsqlc.Queries, family uuid.UUID
 
 // ExchangeCode trades an authorization code (with its PKCE verifier) for tokens.
 func (s *Service) ExchangeCode(ctx context.Context, clientID, code, redirectURI, verifier, resource string) (TokenResponse, error) {
-	row, err := s.q.ConsumeOAuthCode(ctx, hash(code)) // single use, even when the rest fails
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	uid, err := q.OAuthCodeUser(ctx, hash(code))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return TokenResponse{}, ErrInvalidGrant
+	}
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	if _, err := q.LockOAuthUser(ctx, uid); err != nil {
+		return TokenResponse{}, err
+	}
+	row, err := q.ConsumeOAuthCode(ctx, hash(code))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TokenResponse{}, ErrInvalidGrant
 	}
@@ -262,13 +335,27 @@ func (s *Service) ExchangeCode(ctx context.Context, clientID, code, redirectURI,
 		return TokenResponse{}, err
 	}
 	if row.ClientID != clientID || row.RedirectUri != redirectURI || (resource != "" && resource != row.Resource) {
+		if err := tx.Commit(ctx); err != nil {
+			return TokenResponse{}, err
+		}
 		return TokenResponse{}, ErrInvalidGrant
 	}
 	want := base64.RawURLEncoding.EncodeToString(hash(verifier))
 	if len(verifier) < 43 || len(verifier) > 128 || subtle.ConstantTimeCompare([]byte(want), []byte(row.CodeChallenge)) != 1 {
+		if err := tx.Commit(ctx); err != nil {
+			return TokenResponse{}, err
+		}
 		return TokenResponse{}, ErrInvalidGrant
 	}
-	return s.issue(ctx, s.q, uuid.New(), clientID, row.UserID, row.Scopes, row.LibraryIds) // a new authorization starts a new family
+	u, err := q.GetUser(ctx, row.UserID)
+	if err != nil || u.DisabledAt != nil {
+		return TokenResponse{}, ErrInvalidGrant
+	}
+	tr, err := s.issue(ctx, q, uuid.New(), clientID, row.UserID, row.Scopes, row.LibraryIds)
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	return tr, tx.Commit(ctx)
 }
 
 // Refresh rotates a refresh token. A refresh token works once. Presenting one that was already used
@@ -282,6 +369,16 @@ func (s *Service) Refresh(ctx context.Context, clientID, refresh string) (TokenR
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
+	uid, err := q.OAuthRefreshUser(ctx, hash(refresh))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return TokenResponse{}, ErrInvalidGrant
+	}
+	if err != nil {
+		return TokenResponse{}, err
+	}
+	if _, err := q.LockOAuthUser(ctx, uid); err != nil {
+		return TokenResponse{}, err
+	}
 	row, err := q.LockOAuthRefresh(ctx, hash(refresh))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TokenResponse{}, ErrInvalidGrant
@@ -361,11 +458,26 @@ func (s *Service) Grants(ctx context.Context, userID uuid.UUID) ([]Grant, error)
 
 // RevokeGrant removes an application's access: its refresh tokens and its live access tokens.
 func (s *Service) RevokeGrant(ctx context.Context, userID uuid.UUID, clientID string) error {
-	n, err := s.q.RevokeOAuthRefreshForClient(ctx, dbsqlc.RevokeOAuthRefreshForClientParams{UserID: userID, ClientID: clientID})
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if err := s.q.RevokeOAuthAccessForClient(ctx, dbsqlc.RevokeOAuthAccessForClientParams{UserID: userID, ClientID: clientID}); err != nil {
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	if _, err := q.LockOAuthUser(ctx, userID); err != nil {
+		return err
+	}
+	n, err := q.RevokeOAuthRefreshForClient(ctx, dbsqlc.RevokeOAuthRefreshForClientParams{UserID: userID, ClientID: clientID})
+	if err != nil {
+		return err
+	}
+	if err := q.RevokeOAuthAccessForClient(ctx, dbsqlc.RevokeOAuthAccessForClientParams{UserID: userID, ClientID: clientID}); err != nil {
+		return err
+	}
+	if err := q.RevokeOAuthCodesForClient(ctx, dbsqlc.RevokeOAuthCodesForClientParams{UserID: userID, ClientID: clientID}); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 	if n == 0 {
@@ -376,8 +488,23 @@ func (s *Service) RevokeGrant(ctx context.Context, userID uuid.UUID, clientID st
 
 // RevokeAll removes every OAuth grant of a user (administrator action, or account deletion).
 func (s *Service) RevokeAll(ctx context.Context, userID uuid.UUID) error {
-	if err := s.q.RevokeAllOAuthRefreshForUser(ctx, userID); err != nil {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
 		return err
 	}
-	return s.q.RevokeAllOAuthAccessForUser(ctx, userID)
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	if _, err := q.LockOAuthUser(ctx, userID); err != nil {
+		return err
+	}
+	if err := q.RevokeAllOAuthRefreshForUser(ctx, userID); err != nil {
+		return err
+	}
+	if err := q.RevokeAllOAuthAccessForUser(ctx, userID); err != nil {
+		return err
+	}
+	if err := q.RevokeAllOAuthCodesForUser(ctx, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

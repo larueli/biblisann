@@ -10,9 +10,34 @@ export function setCsrfToken(token: string) {
   csrfToken = token;
 }
 
+/** A backup is a streaming download outside the generated JSON API. */
+export async function requestBackup(): Promise<Response> {
+  const send = () =>
+    globalThis.fetch("/v1/admin/backup", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-CSRF-Token": csrfToken },
+    });
+  let response = await send();
+  if (response.status === 403) {
+    const body = (await response
+      .clone()
+      .json()
+      .catch(() => null)) as { detail?: unknown } | null;
+    if (body?.detail === stepUpRequiredDetail && (await requestStepUp())) response = await send();
+  }
+  if (!response.ok) throw new Error("backup request failed");
+  return response;
+}
+
 const csrf: Middleware = {
   onRequest({ request }) {
-    if (csrfToken && request.method !== "GET" && request.method !== "HEAD") {
+    if (
+      csrfToken &&
+      request.method !== "GET" &&
+      request.method !== "HEAD" &&
+      !request.headers.has("X-CSRF-Token")
+    ) {
       request.headers.set("X-CSRF-Token", csrfToken);
     }
     return request;

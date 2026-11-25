@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/larueli/biblisann/internal/authz"
+	"github.com/larueli/biblisann/internal/catalog"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
 )
 
@@ -27,12 +28,22 @@ var (
 
 // Service is the library service.
 type Service struct {
-	pool *pgxpool.Pool
-	q    *dbsqlc.Queries
+	pool interface {
+		Begin(context.Context) (pgx.Tx, error)
+		QueryRow(context.Context, string, ...any) pgx.Row
+	}
+	q *dbsqlc.Queries
 }
 
 // NewService creates the service.
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool, q: dbsqlc.New(pool)} }
+
+// WithTx returns a transaction-bound service. Internal transactions use savepoints.
+func (s *Service) WithTx(tx pgx.Tx) *Service {
+	copy := *s
+	copy.pool, copy.q = tx, s.q.WithTx(tx)
+	return &copy
+}
 
 // Require checks that the caller has at least need in the library and returns the principal.
 // A caller with no access gets ErrNotFound, so library IDs cannot be probed.
@@ -470,7 +481,7 @@ func (s *Service) withChange(ctx context.Context, libID, id uuid.UUID, op string
 // ReplayedInstance returns the copy created by an earlier AddInstance call that used the same
 // idempotency key, or nil when the key is unknown. It lets callers answer a replay without
 // re-evaluating state that the first call changed (for example the "already owned" check).
-func (s *Service) ReplayedInstance(ctx context.Context, idemKey string) (*dbsqlc.Instance, error) {
+func (s *Service) ReplayedInstance(ctx context.Context, libraryID uuid.UUID, isbn string, placeID *uuid.UUID, idemKey string) (*dbsqlc.Instance, error) {
 	p, err := authz.From(ctx)
 	if err != nil {
 		return nil, err
@@ -485,6 +496,34 @@ func (s *Service) ReplayedInstance(ctx context.Context, idemKey string) (*dbsqlc
 	var inst dbsqlc.Instance
 	if err := json.Unmarshal(prev.ResponseBody, &inst); err != nil {
 		return nil, fmt.Errorf("library: stored response: %w", err)
+	}
+	if inst.LibraryID != libraryID {
+		return nil, ErrIdempotencyConflict
+	}
+	if _, err := s.RequirePerm(ctx, nil, inst.LibraryID, authz.PermWrite); err != nil {
+		return nil, err
+	}
+	normalized, _, err := catalog.NormalizeISBN(isbn)
+	if err != nil {
+		return nil, err
+	}
+	edition, err := s.q.GetEdition(ctx, inst.EditionID)
+	if err != nil {
+		return nil, fmt.Errorf("library: replay edition: %w", err)
+	}
+	if edition.Isbn13 == nil || *edition.Isbn13 != normalized {
+		return nil, ErrIdempotencyConflict
+	}
+	// Verify the original AddInstance request, including the library and place. The stored
+	// response is not enough: the instance may have been moved since it was created.
+	in := InstanceInput{EditionID: inst.EditionID, PlaceID: placeID, Kind: "print"}
+	canon, err := json.Marshal(in)
+	if err != nil {
+		return nil, fmt.Errorf("library: hash replay: %w", err)
+	}
+	hash := sha256.Sum256(append([]byte("add|"+libraryID.String()+"|"), canon...))
+	if string(prev.RequestHash) != string(hash[:]) {
+		return nil, ErrIdempotencyConflict
 	}
 	return &inst, nil
 }

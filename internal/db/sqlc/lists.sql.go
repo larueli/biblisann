@@ -250,8 +250,8 @@ SELECT li.id, li.list_id, li.edition_id, li.title, li.authors, li.isbn13, li.ser
   EXISTS (
     SELECT 1 FROM instances i
     JOIN editions e ON e.id = i.edition_id
-    JOIN user_library_access a ON a.library_id = i.library_id AND a.user_id = $2
     WHERE i.deleted_at IS NULL
+      AND i.library_id = ANY($2::uuid[])
       AND ((li.isbn13 IS NOT NULL AND e.isbn13 = li.isbn13)
         OR (li.edition_id IS NOT NULL AND (e.id = li.edition_id
             OR e.work_id = (SELECT work_id FROM editions WHERE id = li.edition_id))))
@@ -260,8 +260,8 @@ FROM list_items li WHERE li.list_id = $1 ORDER BY li.added_at, li.id
 `
 
 type ListListItemsParams struct {
-	ListID uuid.UUID
-	UserID uuid.UUID
+	ListID            uuid.UUID
+	ReadableLibraries []uuid.UUID
 }
 
 type ListListItemsRow struct {
@@ -280,7 +280,7 @@ type ListListItemsRow struct {
 
 // in_library: I own this edition (or another edition of the same work) in a library I can read.
 func (q *Queries) ListListItems(ctx context.Context, arg ListListItemsParams) ([]ListListItemsRow, error) {
-	rows, err := q.db.Query(ctx, listListItems, arg.ListID, arg.UserID)
+	rows, err := q.db.Query(ctx, listListItems, arg.ListID, arg.ReadableLibraries)
 	if err != nil {
 		return nil, err
 	}

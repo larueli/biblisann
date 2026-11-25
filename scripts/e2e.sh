@@ -12,7 +12,7 @@ docker run -d --name "$name" -e POSTGRES_PASSWORD=e2e -e POSTGRES_DB=biblisann -
 # The image starts a temporary server for initialization, then restarts: wait for the second "ready".
 for _ in $(seq 1 60); do [ "$(docker logs "$name" 2>&1 | grep -c "ready to accept connections")" -ge 2 ] && break; sleep 1; done
 BIBLISANN_DATABASE_URL="postgres://postgres:e2e@127.0.0.1:${port}/biblisann?sslmode=disable" \
-BIBLISANN_COVERS_DIR="$tmp/covers" BIBLISANN_LISTEN_ADDR=127.0.0.1:18080 BIBLISANN_BASE_URL=http://127.0.0.1:18080 \
+BIBLISANN_DATA_DIR="$tmp" BIBLISANN_LISTEN_ADDR=127.0.0.1:18080 BIBLISANN_BASE_URL=http://127.0.0.1:18080 \
 BIBLISANN_PROVIDERS=static BIBLISANN_STATIC_PROVIDER_FILE="$PWD/web/e2e/fixtures/books.json" \
   ./bin/biblisann serve >"$tmp/app.log" 2>&1 &
 app_pid=$!

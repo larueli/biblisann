@@ -52,11 +52,14 @@ Every authenticated API response carries the IETF rate-limit header fields (a dr
 
 **Settings > Import from another service** loads a **Goodreads**, **StoryGraph** or **LibraryThing** export (CSV; LibraryThing's tab-separated export works too): books you read or own get a copy, "to-read" books go to the wishlist, star ratings become grades (five stars is 10), reviews become comments. No metadata provider is queried; re-importing does not duplicate copies.
 
-Backups: `biblisann backup > backup.tar` and `biblisann restore < backup.tar` (into an empty instance) use a versioned logical format that restores across versions, covers included; administrators can also download one in Settings. The archive holds password hashes: store it like the database. Database-level disaster recovery (`pg_dump`, CloudNativePG/barman) is separate and recommended too.
+Backups: `biblisann backup > backup.tar` and `biblisann restore < backup.tar` (into an empty instance) use a versioned logical format, covers and authentication factors included; administrators can also download one in Settings. Set the original `BIBLISANN_SECRET_KEY` when restoring a backup containing TOTP factors. Restore refuses an incorrect or missing key. Legacy version 1 archives omitted authentication factors and are refused to prevent silently disabling MFA; use a database-level backup or make a new logical backup from the original instance. The archive holds password hashes and authentication data: store it like the database. Database-level disaster recovery (`pg_dump`, CloudNativePG/barman) is separate and recommended too.
+
+Imports commit their database changes together. Covers are stored afterward on a best-effort basis;
+an unavailable cover store can leave an imported edition without its cover.
 
 ## Cover storage
 
-Covers live in `BIBLISANN_COVERS_DIR`, or in an S3-compatible bucket with `BIBLISANN_STORAGE_BACKEND=s3`. To move: set the S3 variables, run `biblisann migrate-covers local s3`, then switch the backend. The reverse works the same way. Use S3 for several replicas.
+Covers live in the `covers` subdirectory of `BIBLISANN_DATA_DIR`, or in an S3-compatible bucket with `BIBLISANN_STORAGE_BACKEND=s3`. To move: set the S3 variables, run `biblisann migrate-covers local s3`, then switch the backend. The reverse works the same way. Use S3 for several replicas.
 
 ## Take your data with you, and leave
 

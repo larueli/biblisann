@@ -4,8 +4,10 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,9 +17,11 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
+	"github.com/larueli/biblisann/internal/authz"
 	"github.com/larueli/biblisann/internal/catalog"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
 	"github.com/larueli/biblisann/internal/i18n"
+	"github.com/larueli/biblisann/internal/library"
 	"github.com/larueli/biblisann/internal/notify"
 )
 
@@ -53,10 +57,11 @@ func (ReminderArgs) Kind() string { return "loan_reminders" }
 
 // NotifyArgs delivers one message to a user's channels.
 type NotifyArgs struct {
-	UserID uuid.UUID `json:"user_id"`
-	Event  string    `json:"event"`
-	Title  string    `json:"title"`
-	Body   string    `json:"body"`
+	UserID uuid.UUID  `json:"user_id"`
+	LoanID *uuid.UUID `json:"loan_id,omitempty"`
+	Event  string     `json:"event"`
+	Title  string     `json:"title"`
+	Body   string     `json:"body"`
 }
 
 // Kind implements river.JobArgs.
@@ -136,8 +141,9 @@ type Client struct {
 func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error, hc Syncer, us UserSyncer, mr MetadataRefresher) (*Client, error) {
 	workers := river.NewWorkers()
 	q := dbsqlc.New(pool)
-	river.AddWorker(workers, &reminderWorker{pool: pool, q: q})
-	river.AddWorker(workers, &notifyWorker{d: d})
+	access := library.NewService(pool)
+	river.AddWorker(workers, &reminderWorker{pool: pool, q: q, access: access})
+	river.AddWorker(workers, &notifyWorker{d: d, q: q, access: access})
 	river.AddWorker(workers, &maintenanceWorker{purge: purge, q: q})
 	periodic := []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(time.Hour), func() (river.JobArgs, *river.InsertOpts) {
@@ -200,12 +206,54 @@ func (c *Client) Notify(ctx context.Context, tx pgx.Tx, a NotifyArgs) error {
 
 type notifyWorker struct {
 	river.WorkerDefaults[NotifyArgs]
-	d *notify.Dispatcher
+	d      *notify.Dispatcher
+	q      *dbsqlc.Queries
+	access *library.Service
 }
 
 func (w *notifyWorker) Work(ctx context.Context, job *river.Job[NotifyArgs]) error {
 	a := job.Args
+	if strings.HasPrefix(a.Event, "loan.") {
+		// Old queued notifications have no loan ID and cannot be re-authorized safely.
+		if a.LoanID == nil {
+			return nil
+		}
+		allowed, err := reminderAllowed(ctx, w.q, w.access, a.UserID, *a.LoanID)
+		if err != nil || !allowed {
+			return err
+		}
+	}
 	return w.d.Deliver(ctx, a.UserID, notify.Message{Event: a.Event, Title: a.Title, Body: a.Body})
+}
+
+// reminderAllowed checks current account and loan permissions, including group/profile grants.
+func reminderAllowed(ctx context.Context, q *dbsqlc.Queries, access *library.Service, userID, loanID uuid.UUID) (bool, error) {
+	u, err := q.GetUser(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if u.DisabledAt != nil {
+		return false, nil
+	}
+	l, err := q.GetLoan(ctx, loanID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if l.OwnerID != userID || l.ReturnedOn != nil {
+		return false, nil
+	}
+	ctx = authz.With(ctx, &authz.Principal{UserID: userID})
+	_, err = access.RequirePerm(ctx, q, l.LibraryID, authz.PermLoan)
+	if errors.Is(err, authz.ErrForbidden) || errors.Is(err, authz.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 type maintenanceWorker struct {
@@ -226,8 +274,9 @@ func (w *maintenanceWorker) Work(ctx context.Context, _ *river.Job[MaintenanceAr
 
 type reminderWorker struct {
 	river.WorkerDefaults[ReminderArgs]
-	pool *pgxpool.Pool
-	q    *dbsqlc.Queries
+	pool   *pgxpool.Pool
+	q      *dbsqlc.Queries
+	access *library.Service
 }
 
 func (w *reminderWorker) Work(ctx context.Context, _ *river.Job[ReminderArgs]) error {
@@ -265,6 +314,10 @@ func (w *reminderWorker) notifyOnce(ctx context.Context, client *river.Client[pg
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := w.q.WithTx(tx)
+	allowed, err := reminderAllowed(ctx, q, w.access, l.OwnerID, l.ID)
+	if err != nil || !allowed {
+		return err
+	}
 	sent, err := q.LoanNotificationSent(ctx, dbsqlc.LoanNotificationSentParams{LoanID: l.ID, Kind: r.Kind, Bucket: int32(r.Bucket)})
 	if err != nil || sent {
 		return err
@@ -288,6 +341,7 @@ func Compose(l dbsqlc.OpenLoansDueByRow, r Reminder) NotifyArgs {
 	due := l.DueOn.Format("2006-01-02")
 	return NotifyArgs{
 		UserID: l.OwnerID,
+		LoanID: &l.ID,
 		Event:  "loan." + r.Kind,
 		Title:  i18n.T(l.OwnerLocale, "loan."+r.Kind+".title", l.Title),
 		Body:   i18n.T(l.OwnerLocale, bodyKey, l.Title, who, due),

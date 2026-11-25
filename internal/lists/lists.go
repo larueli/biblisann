@@ -41,6 +41,13 @@ func NewService(pool *pgxpool.Pool, a Access) *Service {
 	return &Service{pool: pool, q: dbsqlc.New(pool), access: a}
 }
 
+// WithTx returns a transaction-bound service using the provided access checker.
+func (s *Service) WithTx(tx pgx.Tx, access Access) *Service {
+	copy := *s
+	copy.q, copy.access = s.q.WithTx(tx), access
+	return &copy
+}
+
 // authorize loads a list and checks the caller may read (or write) it.
 func (s *Service) authorize(ctx context.Context, id uuid.UUID, write bool) (dbsqlc.List, *authz.Principal, error) {
 	l, err := s.q.GetList(ctx, id)
@@ -120,12 +127,26 @@ func (s *Service) All(ctx context.Context) ([]dbsqlc.List, error) {
 		return nil, err
 	}
 	rows, err := s.q.ListListsForUser(ctx, &p.UserID)
-	if err != nil || p.LibraryIDs == nil {
+	if err != nil {
 		return rows, err
 	}
 	out := rows[:0]
+	readable := make(map[uuid.UUID]bool)
+	checked := make(map[uuid.UUID]bool)
 	for _, l := range rows {
-		if l.LibraryID == nil || p.AllowsLibrary(*l.LibraryID) {
+		if l.LibraryID == nil {
+			out = append(out, l)
+			continue
+		}
+		id := *l.LibraryID
+		if !checked[id] {
+			_, accessErr := s.access.RequirePerm(ctx, nil, id, authz.PermRead)
+			if accessErr != nil && !errors.Is(accessErr, authz.ErrForbidden) && !errors.Is(accessErr, authz.ErrNotFound) {
+				return nil, accessErr
+			}
+			readable[id], checked[id] = accessErr == nil, true
+		}
+		if readable[id] {
 			out = append(out, l)
 		}
 	}
@@ -194,7 +215,22 @@ func (s *Service) Items(ctx context.Context, listID uuid.UUID) ([]dbsqlc.ListLis
 	if err != nil {
 		return nil, err
 	}
-	return s.q.ListListItems(ctx, dbsqlc.ListListItemsParams{ListID: listID, UserID: p.UserID})
+	libs, err := s.q.ListLibrariesForUser(ctx, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	readable := make([]uuid.UUID, 0, len(libs))
+	for _, lib := range libs {
+		_, accessErr := s.access.RequirePerm(ctx, nil, lib.ID, authz.PermRead)
+		if errors.Is(accessErr, authz.ErrForbidden) || errors.Is(accessErr, authz.ErrNotFound) {
+			continue
+		}
+		if accessErr != nil {
+			return nil, accessErr
+		}
+		readable = append(readable, lib.ID)
+	}
+	return s.q.ListListItems(ctx, dbsqlc.ListListItemsParams{ListID: listID, ReadableLibraries: readable})
 }
 
 // RemoveItem deletes an item.
@@ -260,7 +296,7 @@ func (s *Service) AddMissingToList(ctx context.Context, libraryID uuid.UUID, ser
 	if _, _, err := s.authorize(ctx, listID, true); err != nil {
 		return 0, err
 	}
-	existing, err := s.q.ListListItems(ctx, dbsqlc.ListListItemsParams{ListID: listID, UserID: uuid.Nil})
+	existing, err := s.q.ListListItems(ctx, dbsqlc.ListListItemsParams{ListID: listID, ReadableLibraries: []uuid.UUID{}})
 	if err != nil {
 		return 0, err
 	}

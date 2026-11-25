@@ -5,10 +5,10 @@ SELECT user_id FROM identities WHERE issuer = $1 AND subject = $2;
 INSERT INTO identities (issuer, subject, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;
 
 -- name: CreateOIDCFlow :exec
-INSERT INTO oidc_flows (state_hash, nonce, verifier, purpose, expires_at) VALUES ($1, $2, $3, $4, $5);
+INSERT INTO oidc_flows (state_hash, nonce, verifier, purpose, expires_at, link_user_id, link_session_hash) VALUES ($1, $2, $3, $4, $5, $6, $7);
 
 -- name: ConsumeOIDCFlow :one
-DELETE FROM oidc_flows WHERE state_hash = $1 AND expires_at > now() RETURNING nonce, verifier, purpose;
+DELETE FROM oidc_flows WHERE state_hash = $1 AND expires_at > now() RETURNING nonce, verifier, purpose, link_user_id, link_session_hash;
 
 -- name: PurgeOIDCFlows :exec
 DELETE FROM oidc_flows WHERE expires_at <= now();

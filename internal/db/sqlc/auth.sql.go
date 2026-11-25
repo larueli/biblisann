@@ -75,7 +75,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, display_name, password_hash, is_admin, locale)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at
+RETURNING id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at, email_verified, scim_bootstrap
 `
 
 type CreateUserParams struct {
@@ -105,6 +105,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Settings,
 		&i.CreatedAt,
 		&i.DisabledAt,
+		&i.EmailVerified,
+		&i.ScimBootstrap,
 	)
 	return i, err
 }
@@ -223,7 +225,7 @@ func (q *Queries) GetSession(ctx context.Context, tokenHash []byte) (GetSessionR
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at FROM users WHERE id = $1
+SELECT id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at, email_verified, scim_bootstrap FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
@@ -239,12 +241,14 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.Settings,
 		&i.CreatedAt,
 		&i.DisabledAt,
+		&i.EmailVerified,
+		&i.ScimBootstrap,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at FROM users WHERE lower(email) = lower($1)
+SELECT id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at, email_verified, scim_bootstrap FROM users WHERE lower(email) = lower($1)
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
@@ -260,6 +264,8 @@ func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error
 		&i.Settings,
 		&i.CreatedAt,
 		&i.DisabledAt,
+		&i.EmailVerified,
+		&i.ScimBootstrap,
 	)
 	return i, err
 }
@@ -350,6 +356,19 @@ func (q *Queries) ListUsersAdmin(ctx context.Context, arg ListUsersAdminParams) 
 	return items, nil
 }
 
+const lockSession = `-- name: LockSession :one
+SELECT user_id FROM sessions WHERE token_hash = $1 AND expires_at > now() FOR UPDATE
+`
+
+// Called after locking the user: a concurrent session revocation must serialize with a
+// sensitive action using that session.
+func (q *Queries) LockSession(ctx context.Context, tokenHash []byte) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockSession, tokenHash)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const markSessionStepUp = `-- name: MarkSessionStepUp :exec
 UPDATE sessions SET stepup_until = $2, stepup_single_use = $3 WHERE token_hash = $1
 `
@@ -400,4 +419,21 @@ type UpdateUserPasswordParams struct {
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
 	_, err := q.db.Exec(ctx, updateUserPassword, arg.ID, arg.PasswordHash)
 	return err
+}
+
+const verifyUserEmail = `-- name: VerifyUserEmail :execrows
+UPDATE users SET email_verified = true WHERE id = $1 AND lower(email) = lower($2::text)
+`
+
+type VerifyUserEmailParams struct {
+	ID    uuid.UUID
+	Email string
+}
+
+func (q *Queries) VerifyUserEmail(ctx context.Context, arg VerifyUserEmailParams) (int64, error) {
+	result, err := q.db.Exec(ctx, verifyUserEmail, arg.ID, arg.Email)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

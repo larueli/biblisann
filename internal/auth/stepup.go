@@ -64,7 +64,11 @@ func (s *Service) StepUpWithPassword(ctx context.Context, token string, userID u
 	if ok, _ := VerifyPassword(password, *u.PasswordHash); !ok {
 		return ErrInvalidCredentials
 	}
-	if s.hasMFA(ctx, userID) {
+	enabled, err := s.hasMFA(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if enabled {
 		ok, err := s.checkTOTP(ctx, s.q, userID, code)
 		if err != nil {
 			return err

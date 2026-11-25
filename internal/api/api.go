@@ -179,6 +179,21 @@ func New(d Deps) (http.Handler, huma.API) {
 		}
 		d.OAuth.Routes(mux, limiter, clientKey)
 	}
+	// The archive is streamed by a plain handler; describe its contract alongside Huma operations.
+	a.OpenAPI().AddOperation(&huma.Operation{
+		Method: http.MethodPost, Path: "/v1/admin/backup", OperationID: "download-backup",
+		Summary: "Download a logical backup", Tags: []string{"admin"},
+		Description: "Requires an administrator browser session, CSRF token, and recent authentication.",
+		Parameters:  []*huma.Param{{Name: "X-CSRF-Token", In: "header", Required: true, Schema: &huma.Schema{Type: "string"}}},
+		Responses: map[string]*huma.Response{
+			"200": {Description: "Backup archive", Content: map[string]*huma.MediaType{"application/x-tar": {Schema: &huma.Schema{Type: "string", Format: "binary"}}}},
+			"401": {Description: "Authentication required"},
+			"403": {Description: "CSRF or recent authentication required"},
+			"404": {Description: "Not available"},
+			"500": {Description: "Backup failed"},
+		},
+		Extensions: map[string]any{"x-permission": string(PermInstanceAdmin)},
+	})
 	mux.HandleFunc("/v1/admin/backup", srv.serveBackup)
 	mux.HandleFunc("GET /v1/feeds/loans.ics", srv.serveLoansFeed)
 	if d.Extra != nil {
@@ -205,6 +220,7 @@ func New(d Deps) (http.Handler, huma.API) {
 	if d.Metrics != nil {
 		h = d.Metrics.Wrap(mux) // innermost: the route pattern is known after the mux matched
 	}
+	h = guardImports(h)
 	if d.Quota != nil {
 		h = quotaMiddleware(d.Quota, h)
 	}

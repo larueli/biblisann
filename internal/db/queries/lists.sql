@@ -35,8 +35,8 @@ SELECT li.*,
   EXISTS (
     SELECT 1 FROM instances i
     JOIN editions e ON e.id = i.edition_id
-    JOIN user_library_access a ON a.library_id = i.library_id AND a.user_id = $2
     WHERE i.deleted_at IS NULL
+      AND i.library_id = ANY(sqlc.arg(readable_libraries)::uuid[])
       AND ((li.isbn13 IS NOT NULL AND e.isbn13 = li.isbn13)
         OR (li.edition_id IS NOT NULL AND (e.id = li.edition_id
             OR e.work_id = (SELECT work_id FROM editions WHERE id = li.edition_id))))

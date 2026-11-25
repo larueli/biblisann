@@ -1,17 +1,25 @@
 import { api, type Schemas } from "../api/client";
-import { type BiblisannDB, db as defaultDb, type OutboxItem } from "./db";
+import type { BiblisannDB, OutboxItem } from "./db";
 import { waitBeforeNext } from "./pacing";
 
 /** Downloads index changes for a library until caught up. Returns how many entries were applied. */
-export async function syncIndex(libraryId: string, db: BiblisannDB = defaultDb): Promise<number> {
+export async function syncIndex(libraryId: string, db: BiblisannDB): Promise<number> {
+  const session = await api.GET("/v1/auth/session");
+  if (!session.data || session.data.user.id !== db.userId) throw new Error("session changed");
+  const csrf = session.data.csrf_token;
   const meta = await db.meta.get(libraryId);
   let cursor = meta?.cursor ?? 0;
   let applied = 0;
   for (;;) {
     const { data, error } = await api.GET("/v1/libraries/{id}/sync", {
       params: { path: { id: libraryId }, query: { cursor, limit: 200 } },
+      headers: { "X-CSRF-Token": csrf },
     });
     if (error || !data) throw new Error("sync failed");
+    const current = await api.GET("/v1/auth/session");
+    if (current.data?.user.id !== db.userId || current.data.csrf_token !== csrf) {
+      throw new Error("session changed");
+    }
     await db.transaction("rw", db.index, db.meta, async () => {
       if (data.reset) await db.index.where("libraryId").equals(libraryId).delete(); // history was compacted past our cursor
       for (const e of data.entries) {
@@ -38,8 +46,39 @@ export async function syncIndex(libraryId: string, db: BiblisannDB = defaultDb):
   }
 }
 
+/** Remove cached books for libraries that the current account can no longer read.
+ * Pending scans remain in the outbox so the user can recover them if access is restored.
+ */
+export async function reconcileLibraries(db: BiblisannDB): Promise<void> {
+  const session = await api.GET("/v1/auth/session");
+  if (!session.data || session.data.user.id !== db.userId) throw new Error("session changed");
+  const csrf = session.data.csrf_token;
+  const cached = new Set([
+    ...(await db.meta.toArray()).map((row) => row.libraryId),
+    ...(await db.index.orderBy("libraryId").uniqueKeys()).map(String),
+  ]);
+  for (const libraryId of cached) {
+    const { response } = await api.GET("/v1/libraries/{id}", {
+      params: { path: { id: libraryId } },
+      headers: { "X-CSRF-Token": csrf },
+    });
+    if (response.status !== 403 && response.status !== 404) {
+      if (!response.ok) throw new Error("library check failed");
+      continue;
+    }
+    const current = await api.GET("/v1/auth/session");
+    if (current.data?.user.id !== db.userId || current.data.csrf_token !== csrf) {
+      throw new Error("session changed");
+    }
+    await db.transaction("rw", db.index, db.meta, async () => {
+      await db.index.where("libraryId").equals(libraryId).delete();
+      await db.meta.delete(libraryId);
+    });
+  }
+}
+
 /** Answers "do I own this?" from the local index (works offline). */
-export async function ownedLocally(isbn13: string, db: BiblisannDB = defaultDb) {
+export async function ownedLocally(isbn13: string, db: BiblisannDB) {
   const same = await db.index.where("isbn13").equals(isbn13).toArray();
   return same;
 }
@@ -49,7 +88,7 @@ export async function enqueueScan(
   libraryId: string,
   isbn13: string,
   allowDuplicate = false,
-  db: BiblisannDB = defaultDb,
+  db: BiblisannDB,
   placeId?: string,
 ): Promise<OutboxItem> {
   const item: OutboxItem = {
@@ -80,10 +119,12 @@ export interface FlushOptions {
 
 const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export async function flushOutbox(
-  db: BiblisannDB = defaultDb,
-  options: FlushOptions = {},
-): Promise<number> {
+export async function flushOutbox(db: BiblisannDB, options: FlushOptions = {}): Promise<number> {
+  // A cookie can change in another tab. Verify the account before replay and bind every
+  // write to this session's CSRF token so a later cookie switch cannot replay as another user.
+  const session = await api.GET("/v1/auth/session");
+  if (!session.data || session.data.user.id !== db.userId) return 0;
+  const csrf = session.data.csrf_token;
   const sleep = options.sleep ?? realSleep;
   const pause = async (ms: number) => {
     if (ms <= 0) return;
@@ -97,12 +138,12 @@ export async function flushOutbox(
     await db.outbox.update(item.key, { status: "sending" });
     try {
       let attempt = 0;
-      let result = await sendScan(item);
+      let result = await sendScan(item, csrf);
       // A 429 is not a refusal: wait as told and send the same item again (same key).
       while (result.response.status === 429 && attempt < 5) {
         attempt++;
         await pause(waitBeforeNext(result.response));
-        result = await sendScan(item);
+        result = await sendScan(item, csrf);
       }
       const { data, error, response } = result;
       await pause(waitBeforeNext(response)); // slow down before the next one when the quota is nearly spent
@@ -117,7 +158,7 @@ export async function flushOutbox(
           ...(r.edition?.title ? { title: r.edition.title } : {}),
         });
         sent++;
-      } else if (response.status === 401 || response.status >= 500) {
+      } else if ([401, 403, 404].includes(response.status) || response.status >= 500) {
         await db.outbox.update(item.key, { status: "pending" }); // retry later
         return sent;
       } else {
@@ -137,8 +178,9 @@ export async function flushOutbox(
   return sent;
 }
 
-function sendScan(item: OutboxItem) {
+function sendScan(item: OutboxItem, csrf: string) {
   return api.POST("/v1/libraries/{id}/scan", {
+    headers: { "X-CSRF-Token": csrf },
     params: { path: { id: item.libraryId }, header: { "Idempotency-Key": item.key } },
     body: {
       isbn: item.isbn13,

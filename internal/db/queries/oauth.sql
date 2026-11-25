@@ -14,6 +14,21 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
 -- name: ConsumeOAuthCode :one
 DELETE FROM oauth_codes WHERE code_hash = $1 AND expires_at > now() RETURNING *;
 
+-- name: OAuthCodeUser :one
+SELECT user_id FROM oauth_codes WHERE code_hash = $1 AND expires_at > now();
+
+-- name: OAuthRefreshUser :one
+SELECT user_id FROM oauth_refresh_tokens WHERE token_hash = $1 AND expires_at > now();
+
+-- name: LockOAuthUser :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE;
+
+-- name: RevokeOAuthCodesForClient :exec
+DELETE FROM oauth_codes WHERE user_id = $1 AND client_id = $2;
+
+-- name: RevokeAllOAuthCodesForUser :exec
+DELETE FROM oauth_codes WHERE user_id = $1;
+
 -- name: CreateOAuthRefresh :exec
 INSERT INTO oauth_refresh_tokens (token_hash, client_id, user_id, scopes, library_ids, resource, expires_at, family_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);

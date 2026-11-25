@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -197,7 +198,14 @@ func restoreCmd(ctx context.Context, in io.Reader) error {
 	if err != nil {
 		return err
 	}
-	return backup.Restore(ctx, pool, covers, in)
+	var key []byte
+	if cfg.SecretKey != "" {
+		key, err = base64.StdEncoding.DecodeString(cfg.SecretKey.Reveal())
+		if err != nil {
+			return fmt.Errorf("restore: invalid secret key: %w", err)
+		}
+	}
+	return backup.Restore(ctx, pool, covers, in, key)
 }
 
 // migrateCovers copies every cover file from one backend to the other. Switch

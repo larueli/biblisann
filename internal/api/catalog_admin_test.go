@@ -1,6 +1,10 @@
 package api_test
 
-import "testing"
+import (
+	"testing"
+
+	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
+)
 
 func TestCatalogAdministration(t *testing.T) {
 	srv, authSvc := newServer(t)
@@ -86,7 +90,7 @@ func TestCatalogRefreshIsAdministratorOnly(t *testing.T) {
 }
 
 func TestMembersCanRefreshWhatTheirLibraryHolds(t *testing.T) {
-	srv, authSvc := newServer(t)
+	srv, authSvc, pool := newServerWithPool(t)
 	owner := &client{t: t, srv: srv}
 	owner.do("POST", "/v1/auth/register", map[string]string{"email": "owner@example.org", "password": "tulips in the garden"}, nil)
 	owner.login("owner@example.org", "tulips in the garden")
@@ -99,8 +103,12 @@ func TestMembersCanRefreshWhatTheirLibraryHolds(t *testing.T) {
 	people := map[string]*client{}
 	for name, role := range roles {
 		email := name + "@example.org"
-		if _, err := authSvc.CreateUser(t.Context(), email, "a long password here", name, false); err != nil {
+		user, err := authSvc.CreateUser(t.Context(), email, "a long password here", name, false)
+		if err != nil {
 			t.Fatal(err)
+		}
+		if n, err := dbsqlc.New(pool).VerifyUserEmail(t.Context(), dbsqlc.VerifyUserEmailParams{ID: user.ID, Email: email}); err != nil || n != 1 {
+			t.Fatalf("verify fixture address: %d %v", n, err)
 		}
 		if st, _ := owner.w("PUT", "/v1/libraries/"+libID+"/sharing/users", map[string]any{"email": email, "grant": map[string]any{"role": role}}); st != 200 {
 			t.Fatalf("share with %s: %d", name, st)

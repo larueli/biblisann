@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/larueli/biblisann/internal/account"
 	"github.com/larueli/biblisann/internal/api"
 	"github.com/larueli/biblisann/internal/auth"
@@ -118,6 +120,11 @@ func (c *client) stepUp() {
 }
 
 func newServer(t *testing.T) (*httptest.Server, *auth.Service) {
+	srv, authSvc, _ := newServerWithPool(t)
+	return srv, authSvc
+}
+
+func newServerWithPool(t *testing.T) (*httptest.Server, *auth.Service, *pgxpool.Pool) {
 	pool := dbtest.Pool(t)
 	authSvc, _ := auth.NewService(pool, auth.RegistrationFirstUser)
 	covers, _ := storage.NewLocal(t.TempDir())
@@ -136,7 +143,7 @@ func newServer(t *testing.T) (*httptest.Server, *auth.Service) {
 		Limiter: ratelimit.NewMemory(5, time.Hour)})
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	return srv, authSvc
+	return srv, authSvc, pool
 }
 
 func TestFullFlow(t *testing.T) {
@@ -158,6 +165,18 @@ func TestFullFlow(t *testing.T) {
 	c.login("me@example.org", "tulips in the garden")
 
 	// CSRF and origin protection
+	for _, tc := range []struct {
+		token string
+		want  int
+	}{{"", 200}, {c.csrf, 200}, {"stale-session-token", 403}} {
+		h := map[string]string{}
+		if tc.token != "" {
+			h["X-CSRF-Token"] = tc.token
+		}
+		if st, _, _ := c.do("GET", "/v1/libraries", nil, h); st != tc.want {
+			t.Errorf("GET with supplied token %t: %d, want %d", tc.token != "", st, tc.want)
+		}
+	}
 	if st, _, _ := c.do("POST", "/v1/libraries", map[string]string{"name": "x"}, nil); st != 403 {
 		t.Errorf("missing CSRF token: %d", st)
 	}
@@ -387,10 +406,20 @@ func TestImportInventoryBackup(t *testing.T) {
 	}
 
 	// backup: administrators only, and anonymous callers learn nothing
-	if st, _, _ := (&client{t: t, srv: srv}).do("GET", "/v1/admin/backup", nil, nil); st != 401 {
+	if st, _, _ := (&client{t: t, srv: srv}).do("POST", "/v1/admin/backup", nil, nil); st != 401 {
 		t.Errorf("anonymous backup: %d", st)
 	}
-	if st, _, _ := c.do("GET", "/v1/admin/backup", nil, nil); st != 200 {
+	if st, _, _ := c.do("GET", "/v1/admin/backup", nil, nil); st != 405 {
+		t.Errorf("GET backup: %d", st)
+	}
+	if st, _, _ := c.do("POST", "/v1/admin/backup", nil, nil); st != 403 {
+		t.Errorf("backup without CSRF: %d", st)
+	}
+	if st, out := c.w("POST", "/v1/admin/backup", nil); st != 403 || out["detail"] != "step_up_required" {
+		t.Errorf("backup without step-up: %d %v", st, out)
+	}
+	c.stepUp()
+	if st, _ := c.w("POST", "/v1/admin/backup", nil); st != 200 {
 		t.Errorf("admin backup: %d", st)
 	}
 	if _, err := authSvc.CreateUser(context.Background(), "plain@example.org", "tulips in the garden", "P", false); err != nil {
@@ -398,7 +427,7 @@ func TestImportInventoryBackup(t *testing.T) {
 	}
 	p := &client{t: t, srv: srv}
 	p.login("plain@example.org", "tulips in the garden")
-	if st, _, _ := p.do("GET", "/v1/admin/backup", nil, nil); st != 404 {
+	if st, _ := p.w("POST", "/v1/admin/backup", nil); st != 404 {
 		t.Errorf("non-admin backup: %d", st)
 	}
 }

@@ -69,6 +69,19 @@ func problemHTTP(w http.ResponseWriter, status int, detail string) {
 // Middleware authenticates the request and rejects cross-site state-changing requests.
 func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// These endpoints validate their own dedicated bearer tokens. Do not send them
+		// through the application-token resolver or cookie CSRF checks.
+		if r.URL.Path == "/metrics" || strings.HasPrefix(r.URL.Path, "/scim/v2/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// These OAuth endpoints do not use browser cookies: public clients authenticate with
+		// authorization codes or refresh tokens and may call them from another origin.
+		if (r.URL.Path == "/oauth/register" || r.URL.Path == "/oauth/token") &&
+			(r.Method == http.MethodPost || r.Method == http.MethodOptions) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		unsafe := r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions
 		bearer := ""
 		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
@@ -105,8 +118,8 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r) // expired or unknown cookie: anonymous
 			return
 		}
-		if unsafe {
-			got := r.Header.Get("X-CSRF-Token")
+		got := r.Header.Get("X-CSRF-Token")
+		if unsafe || got != "" {
 			if subtle.ConstantTimeCompare([]byte(got), []byte(sess.CSRFToken)) != 1 {
 				problemHTTP(w, http.StatusForbidden, "missing or invalid CSRF token")
 				return

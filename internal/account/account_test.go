@@ -1,6 +1,7 @@
 package account_test
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"errors"
@@ -9,16 +10,19 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/larueli/biblisann/internal/account"
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/authz"
 	"github.com/larueli/biblisann/internal/catalog"
+	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
 	"github.com/larueli/biblisann/internal/dbtest"
 	"github.com/larueli/biblisann/internal/library"
 	"github.com/larueli/biblisann/internal/lists"
@@ -27,30 +31,120 @@ import (
 	"github.com/larueli/biblisann/internal/storage"
 )
 
+func importArchive(t *testing.T, name, data string) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	tw := tar.NewWriter(&out)
+	if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: int64(len(data))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte(data)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
+}
+
+func TestImportRollsBackOnLaterError(t *testing.T) {
+	e := newEnv(t)
+	ctx, _ := e.user(t, "reader@example.org", false)
+	for _, tc := range []struct {
+		name, file, data string
+		importFn         func(context.Context, io.Reader) (account.ImportReport, error)
+	}{
+		{"library", "library.ndjson", `{"format":"biblisann-library","version":1}
+{"t":"library","r":{"name":"New library"}}
+{"t":"edition","r":{"key":"e1","title":"New book","authors":[]}}
+{"t":"instance","r":{"edition":"missing"}}
+`, e.acc.ImportLibrary},
+		{"account", "account.ndjson", `{"format":"biblisann-account","version":1}
+{"t":"contact","r":{"name":"Contact"}}
+{"t":"list","r":{"key":"l1","name":"New list"}}
+{"t":"reading","r":{"book":{"title":"New book","authors":[]},"status":"invalid"}}
+`, e.acc.ImportAccount},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rep, err := tc.importFn(ctx, bytes.NewReader(importArchive(t, tc.file, tc.data)))
+			if err == nil || rep.Libraries != 0 || rep.Editions != 0 || len(rep.LibraryIDs) != 0 {
+				t.Fatalf("failed import returned report %+v, error %v", rep, err)
+			}
+			var libraries, works, contacts, lists int
+			if err := e.pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM libraries), (SELECT count(*) FROM works),
+				(SELECT count(*) FROM contacts), (SELECT count(*) FROM lists)`).Scan(&libraries, &works, &contacts, &lists); err != nil {
+				t.Fatal(err)
+			}
+			if libraries != 0 || works != 0 || contacts != 0 || lists != 0 {
+				t.Fatalf("failed import persisted changes: libraries=%d works=%d contacts=%d lists=%d", libraries, works, contacts, lists)
+			}
+		})
+	}
+}
+
 type env struct {
-	acc   *account.Service
-	auth  *auth.Service
-	lib   *library.Service
-	cat   *catalog.Service
-	lists *lists.Service
-	loans *loans.Service
-	rd    *reading.Service
+	pool     *pgxpool.Pool
+	coverDir string
+	acc      *account.Service
+	auth     *auth.Service
+	lib      *library.Service
+	cat      *catalog.Service
+	lists    *lists.Service
+	loans    *loans.Service
+	rd       *reading.Service
 }
 
 func newEnv(t *testing.T) *env {
 	pool := dbtest.Pool(t)
-	covers, _ := storage.NewLocal(t.TempDir())
+	coverDir := t.TempDir()
+	covers, _ := storage.NewLocal(coverDir)
 	a, _ := auth.NewService(pool, auth.RegistrationOpen)
 	lib := library.NewService(pool)
 	cat := catalog.NewService(pool, catalog.Config{Covers: covers, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	ls, ln, rd := lists.NewService(pool, lib), loans.NewService(pool, lib), reading.NewService(pool)
-	return &env{acc: account.NewService(pool, lib, cat, ls, ln, rd), auth: a, lib: lib, cat: cat, lists: ls, loans: ln, rd: rd}
+	return &env{pool: pool, coverDir: coverDir, acc: account.NewService(pool, lib, cat, ls, ln, rd), auth: a, lib: lib, cat: cat, lists: ls, loans: ln, rd: rd}
+}
+
+func TestFailedImportDoesNotWriteCovers(t *testing.T) {
+	e := newEnv(t)
+	ctx, _ := e.user(t, "reader@example.org", false)
+	data := `{"format":"biblisann-library","version":1}
+{"t":"library","r":{"name":"New library"}}
+{"t":"edition","r":{"key":"e1","title":"New book","authors":[],"cover":"cover"}}
+{"t":"instance","r":{"edition":"missing"}}
+`
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for _, entry := range []struct {
+		name string
+		data []byte
+	}{{"library.ndjson", []byte(data)}, {"covers/cover", png8()}} {
+		if err := tw.WriteHeader(&tar.Header{Name: entry.name, Mode: 0o600, Size: int64(len(entry.data))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write(entry.data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.acc.ImportLibrary(ctx, &buf); err == nil {
+		t.Fatal("expected malformed import to fail")
+	}
+	entries, err := os.ReadDir(e.coverDir)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("failed import wrote covers: %v, %v", entries, err)
+	}
 }
 
 func (e *env) user(t *testing.T, email string, admin bool) (context.Context, uuid.UUID) {
 	u, err := e.auth.CreateUser(context.Background(), email, "tulips in the garden", email, admin)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if n, err := dbsqlc.New(e.pool).VerifyUserEmail(context.Background(), dbsqlc.VerifyUserEmailParams{ID: u.ID, Email: email}); err != nil || n != 1 {
+		t.Fatalf("verify fixture address: %d %v", n, err)
 	}
 	return authz.With(context.Background(), &authz.Principal{UserID: u.ID, Email: email, IsAdmin: admin, Via: "session"}), u.ID
 }

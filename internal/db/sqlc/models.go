@@ -322,11 +322,13 @@ type OauthRefreshToken struct {
 }
 
 type OidcFlow struct {
-	StateHash []byte
-	Nonce     string
-	Verifier  string
-	ExpiresAt time.Time
-	Purpose   string
+	StateHash       []byte
+	Nonce           string
+	Verifier        string
+	ExpiresAt       time.Time
+	Purpose         string
+	LinkUserID      *uuid.UUID
+	LinkSessionHash []byte
 }
 
 type PasswordReset struct {
@@ -390,15 +392,17 @@ type Session struct {
 }
 
 type User struct {
-	ID           uuid.UUID
-	Email        string
-	DisplayName  string
-	PasswordHash *string
-	IsAdmin      bool
-	Locale       string
-	Settings     []byte
-	CreatedAt    time.Time
-	DisabledAt   *time.Time
+	ID            uuid.UUID
+	Email         string
+	DisplayName   string
+	PasswordHash  *string
+	IsAdmin       bool
+	Locale        string
+	Settings      []byte
+	CreatedAt     time.Time
+	DisabledAt    *time.Time
+	EmailVerified bool
+	ScimBootstrap bool
 }
 
 type UserLibraryAccess struct {

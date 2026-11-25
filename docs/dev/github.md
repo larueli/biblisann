@@ -29,4 +29,4 @@ Until this is done the `release` workflow falls back to `GITHUB_TOKEN`: it works
 
 ## First release
 
-Merge the first feature PRs, wait for the release PR (`chore(main): release 0.1.0`), check its changelog, merge it. The `release` workflow tags, creates the GitHub Release and calls `publish.yml`. Verify with `cosign verify` and `docker buildx imagetools inspect ghcr.io/larueli/biblisann:0.1.0`. Versions stay `0.x` until Slice 3 is delivered.
+Merge the first feature PRs, wait for the release PR (`chore(main): release 0.1.0`), check its changelog, merge it. The `release` workflow tags, creates the GitHub Release and calls `publish.yml`. Check the signed image by digest against the exact trusted publishing workflow identity and issuer, as described in [Install](../user/install.md), and run `docker buildx imagetools inspect ghcr.io/larueli/biblisann:0.1.0`. Verify the actual identity for both the automatic reusable-workflow release and a manual republish before relying on the instructions: neither path has run on GitHub yet. The Helm chart is not currently signed. Versions stay `0.x` until Slice 3 is delivered.

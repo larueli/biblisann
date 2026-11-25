@@ -3,7 +3,12 @@ import { safeNext } from "./LoginPage";
 
 describe("safeNext", () => {
   it("keeps same-origin paths", () => {
-    expect(safeNext("/loans?x=1#a")).toBe("/loans?x=1#a");
+    expect(safeNext("/loans?x=1#a")).toBe(`${window.location.origin}/loans?x=1#a`);
+  });
+  it("keeps a normalized double-slash path on the original origin", () => {
+    const next = safeNext("/a/..//example.org/path");
+    expect(next).toBe(`${window.location.origin}//example.org/path`);
+    expect(new URL(next ?? "").origin).toBe(window.location.origin);
   });
   it.each([
     "//evil.example",

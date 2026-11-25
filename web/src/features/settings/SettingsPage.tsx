@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, problemMessage, type Schemas } from "../../api/client";
+import { api, problemMessage, requestBackup, type Schemas } from "../../api/client";
 import { field, muted, primary, secondary } from "../../app/ui";
 import { useSession } from "../auth/session";
 import { useLibraries } from "../library/useLibraries";
@@ -12,10 +12,45 @@ import { AdminUsers } from "./AdminUsers";
 import { ChannelConfirm } from "./ChannelConfirm";
 import { Hardcover } from "./Hardcover";
 import { LibrarySharing } from "./LibrarySharing";
+import { OidcLink } from "./OidcLink";
 import { pushSupported, subscribePush } from "./push";
 import { Security } from "./Security";
 
 type ChannelKind = Schemas["ChannelBody"]["kind"];
+
+function Backup() {
+  const { t } = useTranslation();
+  const backup = useMutation({
+    mutationFn: async () => {
+      const response = await requestBackup();
+      const url = URL.createObjectURL(await response.blob());
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "biblisann-backup.tar";
+        link.click();
+      } finally {
+        // Let the browser begin the download before releasing the object URL.
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+    },
+  });
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-lg font-semibold">{t("settings.backup")}</h2>
+      <p className={muted}>{t("settings.backupHelp")}</p>
+      <button
+        type="button"
+        className={`${secondary} self-start`}
+        onClick={() => backup.mutate()}
+        disabled={backup.isPending}
+      >
+        {t("settings.downloadBackup")}
+      </button>
+      {backup.isError && <p role="alert">{t("settings.backupError")}</p>}
+    </section>
+  );
+}
 
 function Tokens({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation();
@@ -317,11 +352,11 @@ function AdminLibraries() {
 }
 
 export function SettingsPage() {
-  const { t } = useTranslation();
   const session = useSession();
   return (
     <main className="flex flex-col gap-8">
       <Security />
+      <OidcLink />
       <AdminLibraries />
       <Tokens isAdmin={session.data?.user.is_admin === true} />
       <Channels />
@@ -331,15 +366,7 @@ export function SettingsPage() {
       {session.data?.user.is_admin && <AdminUsers />}
       {session.data?.user.is_admin && <AdminGroups />}
       {session.data?.user.is_admin && <AdminCatalog />}
-      {session.data?.user.is_admin && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold">{t("settings.backup")}</h2>
-          <p className={muted}>{t("settings.backupHelp")}</p>
-          <a className={`${secondary} self-start`} href="/v1/admin/backup" download>
-            {t("settings.downloadBackup")}
-          </a>
-        </section>
-      )}
+      {session.data?.user.is_admin && <Backup />}
     </main>
   );
 }

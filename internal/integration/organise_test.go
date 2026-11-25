@@ -45,6 +45,9 @@ func (e *env) user(t *testing.T, email string) (context.Context, uuid.UUID) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if n, err := dbsqlc.New(e.pool).VerifyUserEmail(context.Background(), dbsqlc.VerifyUserEmailParams{ID: u.ID, Email: email}); err != nil || n != 1 {
+		t.Fatalf("verify fixture address: %d %v", n, err)
+	}
 	return authz.With(context.Background(), &authz.Principal{UserID: u.ID, Email: email, Via: "session"}), u.ID
 }
 
@@ -146,6 +149,16 @@ func TestListsWishlistAndSeries(t *testing.T) {
 	items, _ = e.lists.Items(ctx, wl.ID)
 	if !items[len(items)-1].InLibrary {
 		t.Error("owned item should be flagged")
+	}
+	// A token restricted to a different library must not infer ownership in this one.
+	otherLib, err := e.lib.CreateLibrary(ctx, "Other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	limited := authz.With(context.Background(), &authz.Principal{UserID: uid, Via: "token", Scopes: []string{"read"}, LibraryIDs: []uuid.UUID{otherLib.ID}})
+	items, err = e.lists.Items(limited, wl.ID)
+	if err != nil || items[len(items)-1].InLibrary {
+		t.Fatalf("restricted token inferred ownership: %+v %v", items, err)
 	}
 	// Bob cannot see or modify Alice's wishlist; deleting the wishlist is refused.
 	if _, err := e.lists.Items(bob, wl.ID); !errors.Is(err, authz.ErrNotFound) {

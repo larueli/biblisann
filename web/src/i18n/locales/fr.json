@@ -155,6 +155,7 @@
     "backup": "Sauvegarde",
     "backupHelp": "L'archive contient des empreintes de mots de passe : conservez-la en lieu sûr.",
     "downloadBackup": "Télécharger une sauvegarde",
+    "backupError": "La sauvegarde n’a pas pu être téléchargée.",
     "importTitle": "Importer depuis un autre service",
     "importSource": "Source",
     "createScim": "Créer un jeton de provisionnement (SCIM)",
@@ -195,6 +196,14 @@
     "passkeys": "Passkeys",
     "passkeyName": "Nom (par exemple Mon téléphone)",
     "addPasskey": "Ajouter une passkey"
+  },
+  "oidcLink": {
+    "title": "Authentification unique",
+    "help": "Associez votre compte à votre identité de connexion unique. Vous devrez vous authentifier sur les deux comptes.",
+    "provider": "connexion unique",
+    "link": "Associer {{provider}}",
+    "success": "La connexion unique a été associée.",
+    "failed": "La connexion unique n’a pas pu être associée."
   },
   "oauth": {
     "title": "Autoriser {{client}} à utiliser votre bibliothèque ?",
@@ -348,7 +357,8 @@
     "status": {
       "updated": "Actualisé depuis les fournisseurs.",
       "not_found": "Aucun fournisseur ne connaît ce livre. Ses données sont conservées telles quelles ; excluez-le des actualisations pour ne plus le vérifier.",
-      "no_isbn": "Pas d'ISBN, donc rien à chercher. Ses données sont conservées telles quelles."
+      "no_isbn": "Pas d'ISBN, donc rien à chercher. Ses données sont conservées telles quelles.",
+      "skipped": "Actualisation ignorée : aucun fournisseur n’est autorisé par toutes les bibliothèques qui possèdent ce livre."
     }
   },
   "bulk": {

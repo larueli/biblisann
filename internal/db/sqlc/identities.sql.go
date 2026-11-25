@@ -13,24 +13,32 @@ import (
 )
 
 const consumeOIDCFlow = `-- name: ConsumeOIDCFlow :one
-DELETE FROM oidc_flows WHERE state_hash = $1 AND expires_at > now() RETURNING nonce, verifier, purpose
+DELETE FROM oidc_flows WHERE state_hash = $1 AND expires_at > now() RETURNING nonce, verifier, purpose, link_user_id, link_session_hash
 `
 
 type ConsumeOIDCFlowRow struct {
-	Nonce    string
-	Verifier string
-	Purpose  string
+	Nonce           string
+	Verifier        string
+	Purpose         string
+	LinkUserID      *uuid.UUID
+	LinkSessionHash []byte
 }
 
 func (q *Queries) ConsumeOIDCFlow(ctx context.Context, stateHash []byte) (ConsumeOIDCFlowRow, error) {
 	row := q.db.QueryRow(ctx, consumeOIDCFlow, stateHash)
 	var i ConsumeOIDCFlowRow
-	err := row.Scan(&i.Nonce, &i.Verifier, &i.Purpose)
+	err := row.Scan(
+		&i.Nonce,
+		&i.Verifier,
+		&i.Purpose,
+		&i.LinkUserID,
+		&i.LinkSessionHash,
+	)
 	return i, err
 }
 
 const createExternalUser = `-- name: CreateExternalUser :one
-INSERT INTO users (email, display_name, password_hash, is_admin) VALUES ($1, $2, NULL, $3) RETURNING id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at
+INSERT INTO users (email, display_name, password_hash, is_admin) VALUES ($1, $2, NULL, $3) RETURNING id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at, email_verified, scim_bootstrap
 `
 
 type CreateExternalUserParams struct {
@@ -52,6 +60,8 @@ func (q *Queries) CreateExternalUser(ctx context.Context, arg CreateExternalUser
 		&i.Settings,
 		&i.CreatedAt,
 		&i.DisabledAt,
+		&i.EmailVerified,
+		&i.ScimBootstrap,
 	)
 	return i, err
 }
@@ -72,15 +82,17 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 }
 
 const createOIDCFlow = `-- name: CreateOIDCFlow :exec
-INSERT INTO oidc_flows (state_hash, nonce, verifier, purpose, expires_at) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO oidc_flows (state_hash, nonce, verifier, purpose, expires_at, link_user_id, link_session_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type CreateOIDCFlowParams struct {
-	StateHash []byte
-	Nonce     string
-	Verifier  string
-	Purpose   string
-	ExpiresAt time.Time
+	StateHash       []byte
+	Nonce           string
+	Verifier        string
+	Purpose         string
+	ExpiresAt       time.Time
+	LinkUserID      *uuid.UUID
+	LinkSessionHash []byte
 }
 
 func (q *Queries) CreateOIDCFlow(ctx context.Context, arg CreateOIDCFlowParams) error {
@@ -90,6 +102,8 @@ func (q *Queries) CreateOIDCFlow(ctx context.Context, arg CreateOIDCFlowParams) 
 		arg.Verifier,
 		arg.Purpose,
 		arg.ExpiresAt,
+		arg.LinkUserID,
+		arg.LinkSessionHash,
 	)
 	return err
 }

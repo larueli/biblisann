@@ -103,6 +103,9 @@ func (s *Service) AcceptInvitation(ctx context.Context, token string, userID uui
 	if err != nil {
 		return uuid.Nil, err
 	}
+	if _, err := s.q.VerifyUserEmail(ctx, dbsqlc.VerifyUserEmailParams{ID: userID, Email: inv.Email}); err != nil {
+		return uuid.Nil, err
+	}
 	err = s.q.GrantIfNoAccess(ctx, dbsqlc.GrantIfNoAccessParams{LibraryID: inv.LibraryID, UserID: userID, Role: inv.Role, ProfileID: inv.ProfileID})
 	return inv.LibraryID, err
 }

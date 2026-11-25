@@ -301,3 +301,69 @@ func each(data []byte, format string, fn func(t string, raw json.RawMessage) err
 	}
 	return nil
 }
+
+// validateLibraryEntry requires one library record, before any dependent records.
+// Validate before importing so a malformed archive cannot create multiple libraries.
+func validateLibraryEntry(data []byte) error {
+	count := 0
+	err := each(data, FormatLibrary, func(t string, _ json.RawMessage) error {
+		if t == "library" {
+			count++
+			if count > 1 {
+				return fmt.Errorf("%w: multiple library records", ErrArchive)
+			}
+		} else if count == 0 {
+			return fmt.Errorf("%w: library record must come first", ErrArchive)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return fmt.Errorf("%w: missing library record", ErrArchive)
+	}
+	return nil
+}
+
+// validateAccountArchive checks all referenced library entries before any rows are applied.
+func validateAccountArchive(a *archive, data []byte) error {
+	files := map[string]bool{}
+	rows := 0
+	err := each(data, FormatAccount, func(t string, raw json.RawMessage) error {
+		rows++
+		if t == "library" {
+			var ref libraryRefRow
+			if json.Unmarshal(raw, &ref) != nil || !strings.HasPrefix(ref.File, "libraries/") {
+				return ErrArchive
+			}
+			files[ref.File] = true
+			if len(files) > maxImportLibraries {
+				return fmt.Errorf("%w: too many libraries", ErrArchive)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for file := range files {
+		entry, ok := a.entries[file]
+		if !ok {
+			return fmt.Errorf("%w: missing library entry", ErrArchive)
+		}
+		if err := validateLibraryEntry(entry); err != nil {
+			return err
+		}
+		if err := each(entry, FormatLibrary, func(_ string, _ json.RawMessage) error {
+			rows++
+			if rows > maxRows {
+				return fmt.Errorf("%w: too many rows", ErrArchive)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}

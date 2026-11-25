@@ -47,7 +47,9 @@ type Config struct {
 
 // Service is the catalog service.
 type Service struct {
-	pool     *pgxpool.Pool
+	pool interface {
+		Begin(context.Context) (pgx.Tx, error)
+	}
 	q        *dbsqlc.Queries
 	byName   map[string]providers.Provider
 	known    []string
@@ -58,6 +60,13 @@ type Service struct {
 	log      *slog.Logger
 	now      func() time.Time
 	access   Access
+}
+
+// WithTx returns a transaction-bound catalog service. Internal transactions use savepoints.
+func (s *Service) WithTx(tx pgx.Tx) *Service {
+	copy := *s
+	copy.pool, copy.q = tx, s.q.WithTx(tx)
+	return &copy
 }
 
 // NewService creates a Service.

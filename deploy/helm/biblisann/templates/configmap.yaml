@@ -12,5 +12,5 @@ data:
   BIBLISANN_REGISTRATION: {{ .Values.registration | quote }}
   BIBLISANN_PROVIDERS: {{ join "," .Values.providers | quote }}
   BIBLISANN_DISABLED_PROVIDERS: {{ join "," .Values.disabledProviders | quote }}
-  BIBLISANN_COVERS_DIR: /data/covers
+  BIBLISANN_DATA_DIR: /data
   BIBLISANN_METRICS_PUBLIC: {{ .Values.metrics.public | quote }}

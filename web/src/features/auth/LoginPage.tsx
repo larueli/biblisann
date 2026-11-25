@@ -30,7 +30,7 @@ export function safeNext(next: string | undefined): string | null {
     return null;
   try {
     const u = new URL(next, window.location.origin);
-    return u.origin === window.location.origin ? u.pathname + u.search + u.hash : null;
+    return u.origin === window.location.origin ? u.href : null;
   } catch {
     return null;
   }

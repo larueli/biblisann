@@ -1,14 +1,27 @@
 import { Link, useParams, useSearch } from "@tanstack/react-router";
 import { useLiveQuery } from "dexie-react-hooks";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { normalizeIsbn } from "../../lib/isbn";
-import { db } from "../../offline/db";
-import { enqueueScan, flushOutbox, ownedLocally, syncIndex } from "../../offline/sync";
+import { dbForUser } from "../../offline/db";
+import {
+  enqueueScan,
+  flushOutbox,
+  ownedLocally,
+  reconcileLibraries,
+  syncIndex,
+} from "../../offline/sync";
+import { useSession } from "../auth/session";
 import { BulkIsbns } from "./BulkIsbns";
 import { createDetector } from "./scanner";
 
 export function ScanPage() {
+  const userId = useSession().data?.user.id;
+  return userId ? <UserScanPage key={userId} userId={userId} /> : null;
+}
+
+function UserScanPage({ userId }: { userId: string }) {
+  const db = useMemo(() => dbForUser(userId), [userId]);
   const { t } = useTranslation();
   const { libraryId } = useParams({ strict: false }) as { libraryId: string };
   const search = useSearch({ strict: false }) as { place?: string };
@@ -20,17 +33,18 @@ export function ScanPage() {
   const lastSeen = useRef<{ code: string; at: number }>({ code: "", at: 0 });
   const outbox = useLiveQuery(
     () => db.outbox.orderBy("createdAt").reverse().limit(30).toArray(),
-    [],
+    [db],
   );
 
   const sync = useCallback(async () => {
     try {
-      await flushOutbox();
-      await syncIndex(libraryId);
+      await reconcileLibraries(db);
+      await flushOutbox(db);
+      await syncIndex(libraryId, db);
     } catch {
       /* offline: retried on the next trigger */
     }
-  }, [libraryId]);
+  }, [db, libraryId]);
 
   const handleCode = useCallback(
     async (raw: string) => {
@@ -46,7 +60,7 @@ export function ScanPage() {
         setMessage(t("scan.notIsbn"));
         return;
       }
-      const owned = await ownedLocally(isbn);
+      const owned = await ownedLocally(isbn, db);
       if (owned.length > 0) {
         setMessage(t("scan.alreadyOwned", { title: owned[0]?.title ?? isbn }));
         return;
@@ -55,7 +69,7 @@ export function ScanPage() {
       setMessage(t("scan.queued", { isbn }));
       void sync();
     },
-    [libraryId, placeId, sync, t],
+    [db, libraryId, placeId, sync, t],
   );
 
   useEffect(() => {
@@ -152,7 +166,7 @@ export function ScanPage() {
           {message}
         </p>
       )}
-      <BulkIsbns libraryId={libraryId} {...(placeId ? { placeId } : {})} />
+      <BulkIsbns db={db} libraryId={libraryId} {...(placeId ? { placeId } : {})} />
       <section>
         <h2 className="font-semibold">{t("scan.outbox")}</h2>
         <ul className="mt-2 flex flex-col gap-1 text-sm">

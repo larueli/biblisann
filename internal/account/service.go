@@ -47,6 +47,18 @@ func NewService(pool *pgxpool.Pool, l *library.Service, c *catalog.Service, ls *
 	return &Service{pool: pool, q: dbsqlc.New(pool), library: l, catalog: c, lists: ls, loans: ln, reading: r, imports: make(chan struct{}, 2)}
 }
 
+// withImportTx binds all import operations and their permission checks to the same transaction.
+func (s *Service) withImportTx(tx pgx.Tx) *Service {
+	copy := *s
+	copy.q = s.q.WithTx(tx)
+	copy.library = s.library.WithTx(tx)
+	copy.catalog = s.catalog.WithTx(tx)
+	copy.lists = s.lists.WithTx(tx, copy.library)
+	copy.loans = s.loans.WithTx(tx, copy.library)
+	copy.reading = s.reading.WithTx(tx)
+	return &copy
+}
+
 // libraryEntry renders one library as NDJSON and returns the cover IDs it references.
 func (s *Service) libraryEntry(ctx context.Context, userID, libraryID uuid.UUID) ([]byte, map[string]uuid.UUID, error) {
 	lib, err := s.library.GetLibrary(ctx, libraryID)
@@ -306,11 +318,38 @@ type ImportReport struct {
 	LibraryIDs                                                                                 []uuid.UUID
 }
 
+type importCover struct {
+	editionID uuid.UUID
+	sha       string
+}
+
+// importCovers runs only after the database import commits, so a rejected archive cannot leave
+// permanent unreferenced files. Covers are best effort, as they were before transactional imports.
+func (s *Service) importCovers(ctx context.Context, a *archive, pending []importCover) {
+	stored := map[string]*uuid.UUID{}
+	for _, cover := range pending {
+		id, seen := stored[cover.sha]
+		if !seen {
+			if data, ok := a.cover(cover.sha); ok {
+				id = s.catalog.StoreCover(ctx, data)
+			}
+			stored[cover.sha] = id
+		}
+		if id != nil {
+			_ = s.catalog.AttachCover(ctx, cover.editionID, *id)
+		}
+	}
+}
+
 // ImportLibrary creates a new library, owned by the caller, from a library archive.
 func (s *Service) ImportLibrary(ctx context.Context, r io.Reader) (ImportReport, error) {
 	var rep ImportReport
-	if _, err := authz.From(ctx); err != nil {
+	p, err := authz.From(ctx)
+	if err != nil {
 		return rep, err
+	}
+	if !p.HasScope("write") {
+		return rep, authz.ErrForbidden
 	}
 	select {
 	case s.imports <- struct{}{}: // bounded memory: archives are held in RAM while they are imported
@@ -327,20 +366,32 @@ func (s *Service) ImportLibrary(ctx context.Context, r io.Reader) (ImportReport,
 	if !ok {
 		return rep, fmt.Errorf("%w: no library.ndjson", ErrArchive)
 	}
-	if err := s.importLibrary(ctx, a, data, &rep); err != nil {
+	if err := validateLibraryEntry(data); err != nil {
 		return rep, err
 	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return rep, fmt.Errorf("account: begin library import: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var covers []importCover
+	if err := s.withImportTx(tx).importLibrary(ctx, a, data, &rep, &covers); err != nil {
+		return ImportReport{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ImportReport{}, fmt.Errorf("account: commit library import: %w", err)
+	}
+	s.importCovers(ctx, a, covers)
 	return rep, nil
 }
 
-func (s *Service) importLibrary(ctx context.Context, a *archive, data []byte, rep *ImportReport) error {
+func (s *Service) importLibrary(ctx context.Context, a *archive, data []byte, rep *ImportReport, covers *[]importCover) error {
 	p, _ := authz.From(ctx)
 	var libID uuid.UUID
 	editions := map[string]dbsqlc.Edition{}
 	places := map[string]uuid.UUID{}
 	instances := map[string]uuid.UUID{}
 	listIDs := map[string]uuid.UUID{}
-	stored := map[string]*uuid.UUID{}
 
 	return each(data, FormatLibrary, func(t string, raw json.RawMessage) error {
 		switch t {
@@ -357,7 +408,9 @@ func (s *Service) importLibrary(ctx context.Context, a *archive, data []byte, re
 			rep.Libraries++
 			rep.LibraryIDs = append(rep.LibraryIDs, l.ID)
 			if len(r.Settings) > 0 && string(r.Settings) != "null" {
-				_, _ = s.library.UpdateLibrary(ctx, l.ID, l.Name, r.Settings) // best effort: settings are optional
+				if _, err := s.library.UpdateLibrary(ctx, l.ID, l.Name, r.Settings); err != nil {
+					return fmt.Errorf("%w: library settings: %w", ErrArchive, err)
+				}
 			}
 		case "edition":
 			var r editionRow
@@ -375,13 +428,8 @@ func (s *Service) importLibrary(ctx context.Context, a *archive, data []byte, re
 			}
 			editions[r.Key] = e
 			if r.CoverSHA != "" && created && e.CoverID == nil { // never fill covers of editions other users already share
-				if data, ok := a.cover(r.CoverSHA); ok {
-					if _, done := stored[r.CoverSHA]; !done {
-						stored[r.CoverSHA] = s.catalog.StoreCover(ctx, data) // re-encoded: never trust archive images
-					}
-					if id := stored[r.CoverSHA]; id != nil {
-						_ = s.catalog.AttachCover(ctx, e.ID, *id)
-					}
+				if _, ok := a.covers[r.CoverSHA]; ok {
+					*covers = append(*covers, importCover{editionID: e.ID, sha: r.CoverSHA})
 				}
 			}
 		case "place":
@@ -507,6 +555,15 @@ func (s *Service) ImportAccount(ctx context.Context, r io.Reader) (ImportReport,
 	if err != nil {
 		return rep, err
 	}
+	if !p.HasScope("write") {
+		return rep, authz.ErrForbidden
+	}
+	select {
+	case s.imports <- struct{}{}:
+		defer func() { <-s.imports }()
+	default:
+		return rep, ErrBusy
+	}
 	a, err := readArchive(r)
 	if err != nil {
 		return rep, err
@@ -516,6 +573,17 @@ func (s *Service) ImportAccount(ctx context.Context, r io.Reader) (ImportReport,
 	if !ok {
 		return rep, fmt.Errorf("%w: no account.ndjson", ErrArchive)
 	}
+	if err := validateAccountArchive(a, acc); err != nil {
+		return rep, err
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return rep, fmt.Errorf("account: begin account import: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	committedService := s
+	s = s.withImportTx(tx)
+	var covers []importCover
 	listIDs := map[string]uuid.UUID{}
 	var files []string
 	err = each(acc, FormatAccount, func(t string, raw json.RawMessage) error {
@@ -525,9 +593,10 @@ func (s *Service) ImportAccount(ctx context.Context, r io.Reader) (ImportReport,
 			if json.Unmarshal(raw, &c) != nil {
 				return ErrArchive
 			}
-			if _, err := s.loans.CreateContact(ctx, c.Name, c.Email, c.Notes); err == nil {
-				rep.Contacts++
+			if _, err := s.loans.CreateContact(ctx, c.Name, c.Email, c.Notes); err != nil {
+				return fmt.Errorf("%w: contact: %w", ErrArchive, err)
 			}
+			rep.Contacts++
 		case "list":
 			var l listRow
 			if json.Unmarshal(raw, &l) != nil {
@@ -552,21 +621,27 @@ func (s *Service) ImportAccount(ctx context.Context, r io.Reader) (ImportReport,
 			if json.Unmarshal(raw, &rr) != nil {
 				return ErrArchive
 			}
-			if e, err := s.bookFor(ctx, p.UserID, rr.Book); err == nil {
-				if _, err := s.reading.SetStatus(ctx, e.WorkID, rr.Status, parseDay(rr.StartedOn), parseDay(rr.FinishedOn)); err == nil {
-					rep.Reading++
-				}
+			e, err := s.bookFor(ctx, p.UserID, rr.Book)
+			if err != nil {
+				return fmt.Errorf("%w: reading book: %w", ErrArchive, err)
 			}
+			if _, err := s.reading.SetStatus(ctx, e.WorkID, rr.Status, parseDay(rr.StartedOn), parseDay(rr.FinishedOn)); err != nil {
+				return fmt.Errorf("%w: reading status: %w", ErrArchive, err)
+			}
+			rep.Reading++
 		case "grade":
 			var g gradeRow
 			if json.Unmarshal(raw, &g) != nil {
 				return ErrArchive
 			}
-			if e, err := s.bookFor(ctx, p.UserID, g.Book); err == nil {
-				if _, err := s.reading.SetGrade(ctx, e.WorkID, g.Grade, g.Comment); err == nil {
-					rep.Grades++
-				}
+			e, err := s.bookFor(ctx, p.UserID, g.Book)
+			if err != nil {
+				return fmt.Errorf("%w: grade book: %w", ErrArchive, err)
 			}
+			if _, err := s.reading.SetGrade(ctx, e.WorkID, g.Grade, g.Comment); err != nil {
+				return fmt.Errorf("%w: grade: %w", ErrArchive, err)
+			}
+			rep.Grades++
 		case "library":
 			var lr libraryRefRow
 			if json.Unmarshal(raw, &lr) != nil || !strings.HasPrefix(lr.File, "libraries/") {
@@ -580,19 +655,23 @@ func (s *Service) ImportAccount(ctx context.Context, r io.Reader) (ImportReport,
 		return nil
 	})
 	if err != nil {
-		return rep, err
+		return ImportReport{}, err
 	}
 	slices.Sort(files)
 	files = slices.Compact(files) // a file listed twice is imported once
 	for _, f := range files {
 		data, ok := a.entries[f]
 		if !ok {
-			return rep, fmt.Errorf("%w: missing %s", ErrArchive, f)
+			return ImportReport{}, fmt.Errorf("%w: missing %s", ErrArchive, f)
 		}
-		if err := s.importLibrary(ctx, a, data, &rep); err != nil {
-			return rep, err
+		if err := s.importLibrary(ctx, a, data, &rep, &covers); err != nil {
+			return ImportReport{}, err
 		}
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return ImportReport{}, fmt.Errorf("account: commit account import: %w", err)
+	}
+	committedService.importCovers(ctx, a, covers)
 	return rep, nil
 }
 

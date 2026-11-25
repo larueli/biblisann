@@ -250,7 +250,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		disabled = &now
 	}
-	u, err := h.q.CreateExternalUser(r.Context(), dbsqlc.CreateExternalUserParams{Email: email, DisplayName: in.display(), IsAdmin: false})
+	u, err := h.q.CreateScimUser(r.Context(), dbsqlc.CreateScimUserParams{Email: email, DisplayName: in.display(), DisabledAt: disabled})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		writeErr(w, 409, "uniqueness", "userName already exists")
@@ -259,9 +259,6 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, 500, "", "internal error")
 		return
-	}
-	if disabled != nil {
-		u, _ = h.q.ScimUpdateUser(r.Context(), dbsqlc.ScimUpdateUserParams{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, DisabledAt: disabled})
 	}
 	writeJSON(w, 201, h.userOut(u))
 }

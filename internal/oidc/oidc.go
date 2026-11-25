@@ -2,15 +2,17 @@
 // flow with PKCE and nonce). Discovery and token requests use the SSRF-safe HTTP client.
 //
 // Account rules: an existing identity (issuer + subject) signs in directly. Otherwise the ID
-// token must carry a verified email from the configured issuer; the account with that email is
-// then linked, or created when auto-creation is on. Groups from the token are mirrored into
-// externally managed groups, and a configured admin group grants instance administration.
+// token must carry a verified email from the configured issuer. A new account is created when
+// auto-creation is on. Only a newly provisioned SCIM account with no credentials can be linked
+// by email on first sign-in. Other existing accounts require explicit linking. Groups from the token
+// are mirrored into externally managed groups, and a configured admin group grants administration.
 package oidc
 
 import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -120,21 +122,30 @@ func hash(s string) []byte { h := sha256.Sum256([]byte(s)); return h[:] }
 
 // Begin returns the URL to send the browser to.
 func (s *Service) Begin(ctx context.Context) (authURL, state string, err error) {
-	return s.begin(ctx, purposeLogin)
+	return s.begin(ctx, purposeLogin, nil, "")
 }
 
 // BeginStepUp returns the URL that makes the identity provider authenticate the user again
 // (prompt=login, max_age=0) for a sensitive action.
 func (s *Service) BeginStepUp(ctx context.Context) (authURL, state string, err error) {
-	return s.begin(ctx, purposeStepUp, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+	return s.begin(ctx, purposeStepUp, nil, "", oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+}
+
+// BeginLink starts an explicit link bound to the currently authenticated account.
+func (s *Service) BeginLink(ctx context.Context, userID uuid.UUID, sessionToken string) (authURL, state string, err error) {
+	if sessionToken == "" {
+		return "", "", ErrBadFlow
+	}
+	return s.begin(ctx, purposeLink, &userID, sessionToken, oauth2.SetAuthURLParam("prompt", "login"))
 }
 
 const (
 	purposeLogin  = "login"
 	purposeStepUp = "step_up"
+	purposeLink   = "link"
 )
 
-func (s *Service) begin(ctx context.Context, purpose string, extra ...oauth2.AuthCodeOption) (authURL, state string, err error) {
+func (s *Service) begin(ctx context.Context, purpose string, linkUserID *uuid.UUID, sessionToken string, extra ...oauth2.AuthCodeOption) (authURL, state string, err error) {
 	p, err := s.discover(ctx)
 	if err != nil {
 		return "", "", err
@@ -148,8 +159,12 @@ func (s *Service) begin(ctx context.Context, purpose string, extra ...oauth2.Aut
 		return "", "", err
 	}
 	verifier := oauth2.GenerateVerifier()
+	var sessionHash []byte
+	if sessionToken != "" {
+		sessionHash = hash(sessionToken)
+	}
 	if err := s.q.CreateOIDCFlow(ctx, dbsqlc.CreateOIDCFlowParams{StateHash: hash(state), Nonce: nonce, Verifier: verifier,
-		Purpose: purpose, ExpiresAt: time.Now().Add(flowLife)}); err != nil {
+		Purpose: purpose, ExpiresAt: time.Now().Add(flowLife), LinkUserID: linkUserID, LinkSessionHash: sessionHash}); err != nil {
 		return "", "", err
 	}
 	_ = s.q.PurgeOIDCFlows(ctx)
@@ -168,7 +183,7 @@ type claims struct {
 
 // Complete finishes a sign-in flow and returns the local user ID.
 func (s *Service) Complete(ctx context.Context, code, state string) (uuid.UUID, error) {
-	uid, _, err := s.complete(ctx, code, state, purposeLogin)
+	uid, _, err := s.complete(ctx, code, state, purposeLogin, nil, "")
 	return uid, err
 }
 
@@ -177,11 +192,17 @@ func (s *Service) Complete(ctx context.Context, code, state string) (uuid.UUID, 
 // not send auth_time give a weaker proof (the ID token was just issued after prompt=login): the
 // caller then unlocks a single action instead of a window.
 func (s *Service) CompleteStepUp(ctx context.Context, code, state string) (uid uuid.UUID, strong bool, err error) {
-	uid, strong, err = s.complete(ctx, code, state, purposeStepUp)
+	uid, strong, err = s.complete(ctx, code, state, purposeStepUp, nil, "")
 	return uid, strong, err
 }
 
-func (s *Service) complete(ctx context.Context, code, state, purpose string) (_ uuid.UUID, strong bool, _ error) {
+// CompleteLink attaches the verified provider identity to the same account that initiated linking.
+func (s *Service) CompleteLink(ctx context.Context, code, state string, userID uuid.UUID, sessionToken string) error {
+	_, _, err := s.complete(ctx, code, state, purposeLink, &userID, sessionToken)
+	return err
+}
+
+func (s *Service) complete(ctx context.Context, code, state, purpose string, linkUserID *uuid.UUID, sessionToken string) (_ uuid.UUID, strong bool, _ error) {
 	flow, err := s.q.ConsumeOIDCFlow(ctx, hash(state))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, false, ErrBadFlow
@@ -190,6 +211,9 @@ func (s *Service) complete(ctx context.Context, code, state, purpose string) (_ 
 		return uuid.Nil, false, err
 	}
 	if flow.Purpose != purpose {
+		return uuid.Nil, false, ErrBadFlow
+	}
+	if purpose == purposeLink && (flow.LinkUserID == nil || linkUserID == nil || *flow.LinkUserID != *linkUserID || sessionToken == "" || subtle.ConstantTimeCompare(flow.LinkSessionHash, hash(sessionToken)) != 1) {
 		return uuid.Nil, false, ErrBadFlow
 	}
 	p, err := s.discover(ctx)
@@ -214,6 +238,12 @@ func (s *Service) complete(ctx context.Context, code, state, purpose string) (_ 
 	var c claims
 	if err := idt.Claims(&c); err != nil {
 		return uuid.Nil, false, err
+	}
+	if purpose == purposeLink {
+		if err := s.linkIdentity(ctx, *linkUserID, sessionToken, idt.Issuer, c); err != nil {
+			return uuid.Nil, false, err
+		}
+		return *linkUserID, false, nil
 	}
 	if purpose == purposeStepUp {
 		// With max_age=0 the provider must report when the user authenticated. No claim, or an old
@@ -243,6 +273,60 @@ func (s *Service) complete(ctx context.Context, code, state, purpose string) (_ 
 	return uid, strong, nil
 }
 
+func (s *Service) linkIdentity(ctx context.Context, userID uuid.UUID, sessionToken, issuer string, c claims) error {
+	if c.Subject == "" || !c.EmailVerified {
+		return ErrUnverifiedEmail
+	}
+	email, err := auth.NormalizeEmail(c.Email)
+	if err != nil {
+		return ErrUnverifiedEmail
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("oidc: begin link: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	if _, err := q.LockOAuthUser(ctx, userID); err != nil {
+		return fmt.Errorf("oidc: lock linking account: %w", err)
+	}
+	u, err := q.GetUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if u.DisabledAt != nil {
+		return ErrDisabled
+	}
+	sessionUser, err := q.LockSession(ctx, hash(sessionToken))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrBadFlow
+	}
+	if err != nil {
+		return fmt.Errorf("oidc: lock linking session: %w", err)
+	}
+	if sessionUser != userID {
+		return ErrBadFlow
+	}
+	if !strings.EqualFold(u.Email, email) {
+		return ErrNotAllowed
+	}
+	if err := q.CreateIdentity(ctx, dbsqlc.CreateIdentityParams{Issuer: issuer, Subject: c.Subject, UserID: userID}); err != nil {
+		return err
+	}
+	// CreateIdentity ignores conflicts; verify that a concurrent link did not belong to another user.
+	uid, err := q.GetIdentity(ctx, dbsqlc.GetIdentityParams{Issuer: issuer, Subject: c.Subject})
+	if err != nil {
+		return err
+	}
+	if uid != userID {
+		return ErrNotAllowed
+	}
+	if _, err := q.VerifyUserEmail(ctx, dbsqlc.VerifyUserEmailParams{ID: userID, Email: email}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *Service) resolveUser(ctx context.Context, issuer string, c claims) (uuid.UUID, error) {
 	if c.Subject == "" {
 		return uuid.Nil, errors.New("oidc: token without subject")
@@ -259,7 +343,8 @@ func (s *Service) resolveUser(ctx context.Context, issuer string, c claims) (uui
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, err
 	}
-	// First sign-in with this identity: only a verified email may attach it to an account.
+	// A verified provider email does not prove control of an existing local account. The sole
+	// exception is a freshly SCIM-provisioned account with no credentials or active sessions.
 	if !c.EmailVerified || strings.TrimSpace(c.Email) == "" {
 		return uuid.Nil, ErrUnverifiedEmail
 	}
@@ -267,25 +352,47 @@ func (s *Service) resolveUser(ctx context.Context, issuer string, c claims) (uui
 	if err != nil {
 		return uuid.Nil, ErrUnverifiedEmail
 	}
-	u, err := s.q.GetUserByEmail(ctx, email)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("oidc: begin identity resolution: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	u, err := q.GetUserByEmail(ctx, email)
 	switch {
 	case err == nil:
-		if u.DisabledAt != nil {
-			return uuid.Nil, ErrDisabled
+		if _, err := q.ClaimScimBootstrap(ctx, dbsqlc.ClaimScimBootstrapParams{UserID: u.ID, Email: email}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return uuid.Nil, ErrNotAllowed
+			}
+			return uuid.Nil, fmt.Errorf("oidc: claim SCIM account: %w", err)
 		}
 	case errors.Is(err, pgx.ErrNoRows):
 		if !s.cfg.AutoCreate {
 			return uuid.Nil, ErrNotAllowed
 		}
-		u, err = s.q.CreateExternalUser(ctx, dbsqlc.CreateExternalUserParams{Email: email, DisplayName: c.Name, IsAdmin: false})
+		u, err = q.CreateExternalUser(ctx, dbsqlc.CreateExternalUserParams{Email: email, DisplayName: c.Name, IsAdmin: false})
 		if err != nil {
+			return uuid.Nil, err
+		}
+		if _, err := q.VerifyUserEmail(ctx, dbsqlc.VerifyUserEmailParams{ID: u.ID, Email: email}); err != nil {
 			return uuid.Nil, err
 		}
 	default:
 		return uuid.Nil, err
 	}
-	if err := s.q.CreateIdentity(ctx, dbsqlc.CreateIdentityParams{Issuer: issuer, Subject: c.Subject, UserID: u.ID}); err != nil {
+	if err := q.CreateIdentity(ctx, dbsqlc.CreateIdentityParams{Issuer: issuer, Subject: c.Subject, UserID: u.ID}); err != nil {
 		return uuid.Nil, err
+	}
+	linked, err := q.GetIdentity(ctx, dbsqlc.GetIdentityParams{Issuer: issuer, Subject: c.Subject})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if linked != u.ID {
+		return uuid.Nil, ErrNotAllowed
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("oidc: commit identity resolution: %w", err)
 	}
 	return u.ID, nil
 }

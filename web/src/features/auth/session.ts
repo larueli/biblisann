@@ -1,6 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, problemMessage, setCsrfToken } from "../../api/client";
-import { db } from "../../offline/db";
+import { dbForUser } from "../../offline/db";
 import { getPasskey } from "./passkeys";
 
 export function useSession() {
@@ -78,12 +78,12 @@ export function useAuthActions() {
 
 /** Forgets everything stored for the signed-out user: query cache and the offline database (including the scan outbox). */
 export async function clearLocalData(qc: QueryClient): Promise<void> {
+  const session = qc.getQueryData<{ user: { id: string } } | null>(["session"]);
   qc.clear();
   qc.setQueryData(["session"], null);
   setCsrfToken("");
   try {
-    await db.delete();
-    await db.open();
+    if (session) await dbForUser(session.user.id).delete();
   } catch {
     // the offline database may be unavailable (private mode); nothing to clear then
   }

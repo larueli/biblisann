@@ -44,7 +44,10 @@ export class BiblisannDB extends Dexie {
   meta!: Table<SyncMeta, string>;
   outbox!: Table<OutboxItem, string>;
 
-  constructor(name = "biblisann") {
+  constructor(
+    name: string,
+    readonly userId: string,
+  ) {
     super(name);
     this.version(1).stores({
       index: "id, libraryId, isbn13, workId",
@@ -54,4 +57,7 @@ export class BiblisannDB extends Dexie {
   }
 }
 
-export const db = new BiblisannDB();
+/** Each account has its own index and outbox. The old unscoped database is never read. */
+export function dbForUser(userId: string): BiblisannDB {
+  return new BiblisannDB(`biblisann-user-${userId}`, userId);
+}

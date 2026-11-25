@@ -12,6 +12,9 @@ SELECT * FROM users WHERE lower(email) = lower($1);
 -- name: GetUser :one
 SELECT * FROM users WHERE id = $1;
 
+-- name: VerifyUserEmail :execrows
+UPDATE users SET email_verified = true WHERE id = $1 AND lower(email) = lower(sqlc.arg(email)::text);
+
 -- name: UpdateUserPassword :exec
 UPDATE users SET password_hash = $2 WHERE id = $1;
 
@@ -24,6 +27,11 @@ SELECT s.token_hash, s.user_id, s.csrf_token, s.expires_at, s.stepup_until, s.st
        u.email, u.display_name, u.is_admin, u.locale, u.disabled_at
 FROM sessions s JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1 AND s.expires_at > now();
+
+-- name: LockSession :one
+-- Called after locking the user: a concurrent session revocation must serialize with a
+-- sensitive action using that session.
+SELECT user_id FROM sessions WHERE token_hash = $1 AND expires_at > now() FOR UPDATE;
 
 -- name: MarkSessionStepUp :exec
 UPDATE sessions SET stepup_until = $2, stepup_single_use = $3 WHERE token_hash = $1;

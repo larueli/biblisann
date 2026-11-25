@@ -6,11 +6,39 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/larueli/biblisann/internal/config"
 )
+
+func TestLocalCoverDirectoryFromEnvironment(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "data")
+	cfg, err := config.Load(config.Sources{LookupEnv: func(key string) (string, bool) {
+		if key == "BIBLISANN_DATA_DIR" {
+			return dir, true
+		}
+		return "", false
+	}}, config.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenStorage(context.Background(), cfg, cfg.StorageBackend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := strings.Repeat("ab", 32)
+	if err := store.Put(context.Background(), key, []byte("cover")); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "covers", key[:2], key))
+	if err != nil || string(data) != "cover" {
+		t.Fatalf("configured cover directory: content %q, error %v", data, err)
+	}
+}
 
 func TestServeGracefulShutdown(t *testing.T) {
 	started := make(chan struct{})

@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download a logical backup
+         * @description Requires an administrator browser session, CSRF token, and recent authentication.
+         */
+        post: operations["download-backup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/catalog/refresh": {
         parameters: {
             query?: never;
@@ -194,6 +214,23 @@ export interface paths {
         get: operations["oidc-info"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/oidc/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link the signed-in account to a verified single sign-on identity */
+        post: operations["oidc-link"];
         delete?: never;
         options?: never;
         head?: never;
@@ -458,7 +495,7 @@ export interface paths {
         put?: never;
         /**
          * Ask the providers again about one book (administrators, and editors of a library that holds it)
-         * @description Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn, and can be excluded from future refreshes. 409 when the edition is excluded, 502 when every provider failed.
+         * @description Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn. If no provider is allowed by all holding libraries, sync_status is skipped. 409 when the edition is excluded, 502 when every provider failed.
          */
         post: operations["refresh-edition"];
         delete?: never;
@@ -1962,10 +1999,10 @@ export interface components {
             /** @description True: provider refreshes skip this edition. */
             sync_excluded: boolean;
             /**
-             * @description Result of the last provider refresh: updated, not_found (no provider knows the ISBN) or no_isbn (nothing to look up).
+             * @description Result of the last provider refresh: updated, not_found (no provider knows the ISBN), no_isbn (nothing to look up), or skipped (no providers permitted).
              * @enum {string}
              */
-            sync_status?: "updated" | "not_found" | "no_isbn";
+            sync_status?: "updated" | "not_found" | "no_isbn" | "skipped";
             /** Format: date-time */
             synced_at?: string;
             title: string;
@@ -2316,6 +2353,9 @@ export interface components {
         "Oidc-infoResponse": {
             enabled: boolean;
             label?: string;
+        };
+        "Oidc-linkResponse": {
+            url: string;
         };
         OwnedBody: {
             edition_id: string;
@@ -2698,6 +2738,56 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"];
                 };
+            };
+        };
+    };
+    "download-backup": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backup archive */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-tar": string;
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF or recent authentication required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not available */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Backup failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3249,6 +3339,45 @@ export interface operations {
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "oidc-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Oidc-linkResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

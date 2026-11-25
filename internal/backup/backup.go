@@ -25,13 +25,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/larueli/biblisann/internal/secretbox"
 	"github.com/larueli/biblisann/internal/storage"
 )
 
 // Format identifies the archive; Version is bumped for incompatible layout changes.
 const (
 	Format  = "biblisann-backup"
-	Version = 1
+	Version = 2
 
 	dataFile    = "data.ndjson"
 	coverPrefix = "covers/"
@@ -43,6 +44,8 @@ const (
 // change log is rebuilt on restore so offline clients resynchronize.
 var tables = []struct{ name, order string }{
 	{"users", "id"}, {"groups", "id"}, {"group_members", "group_id, user_id"}, {"libraries", "id"},
+	{"user_totp", "user_id"}, {"recovery_codes", "user_id, code_hash"}, {"identities", "issuer, subject"},
+	{"webauthn_credentials", "id"},
 	{"permission_profiles", "id"}, {"library_members", "library_id, user_id"}, {"library_group_shares", "library_id, group_id"},
 	{"works", "id"}, {"covers", "id"}, {"editions", "id"}, {"places", "created_at, id"}, {"instances", "id"},
 	{"reading_states", "user_id, work_id"}, {"grades", "user_id, work_id"}, {"external_grades", "work_id, source"},
@@ -153,7 +156,7 @@ var ErrFormat = errors.New("backup: unsupported or corrupt archive")
 
 // Restore loads a backup into an empty instance (no users). It is all or nothing for the
 // database; cover files are written first, and are harmless if the database load fails.
-func Restore(ctx context.Context, pool *pgxpool.Pool, covers storage.Store, r io.Reader) error {
+func Restore(ctx context.Context, pool *pgxpool.Pool, covers storage.Store, r io.Reader, secretKey []byte) error {
 	tr := tar.NewReader(r)
 	var data []byte
 	for {
@@ -186,17 +189,17 @@ func Restore(ctx context.Context, pool *pgxpool.Pool, covers storage.Store, r io
 	if data == nil {
 		return fmt.Errorf("%w: no data file", ErrFormat)
 	}
-	return restoreRows(ctx, pool, data)
+	return restoreRows(ctx, pool, data, secretKey)
 }
 
-func restoreRows(ctx context.Context, pool *pgxpool.Pool, data []byte) error {
+func restoreRows(ctx context.Context, pool *pgxpool.Pool, data, secretKey []byte) error {
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	sc.Buffer(make([]byte, 1<<20), maxLine)
 	if !sc.Scan() {
 		return ErrFormat
 	}
 	var h header
-	if err := json.Unmarshal(sc.Bytes(), &h); err != nil || h.Format != Format || h.Version < 1 || h.Version > Version {
+	if err := json.Unmarshal(sc.Bytes(), &h); err != nil || h.Format != Format || h.Version != Version {
 		return ErrFormat
 	}
 	allowed := map[string]bool{}
@@ -230,6 +233,28 @@ func restoreRows(ctx context.Context, pool *pgxpool.Pool, data []byte) error {
 	}
 	if err := sc.Err(); err != nil {
 		return fmt.Errorf("%w: %w", ErrFormat, err)
+	}
+	// Validate every restored authenticator before committing: otherwise a missing or wrong key
+	// can leave the restored instance unusable, or tempt an operator to discard its MFA records.
+	rows, err := tx.Query(ctx, "SELECT secret_enc FROM user_totp")
+	if err != nil {
+		return fmt.Errorf("backup: read restored factors: %w", err)
+	}
+	for rows.Next() {
+		var sealed []byte
+		if err := rows.Scan(&sealed); err != nil {
+			rows.Close()
+			return fmt.Errorf("backup: read restored factor: %w", err)
+		}
+		if _, err := secretbox.Open(secretKey, sealed); err != nil {
+			rows.Close()
+			return fmt.Errorf("backup: original secret key required to restore MFA: %w", err)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return fmt.Errorf("backup: read restored factors: %w", err)
 	}
 	// The change log is not backed up: rebuild it so every offline client does a full resync.
 	if _, err := tx.Exec(ctx, `INSERT INTO changes (library_id, entity, entity_id, op)

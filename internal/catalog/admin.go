@@ -28,6 +28,7 @@ const (
 	StatusUpdated  = "updated"
 	StatusNotFound = "not_found" // no provider knows the ISBN
 	StatusNoISBN   = "no_isbn"   // nothing to look up
+	StatusSkipped  = "skipped"   // no provider is permitted
 )
 
 // ManualProvider is the provenance of a field an administrator edited by hand.
@@ -270,10 +271,17 @@ func (s *Service) refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSe
 	if e.Isbn13 == nil {
 		return s.recordSync(ctx, e, StatusNoISBN)
 	}
+	settings, err := s.refreshSettings(ctx, id, layers...)
+	if err != nil {
+		return e, "", err
+	}
+	if len(settings.Providers) == 0 {
+		return s.recordSync(ctx, e, StatusSkipped)
+	}
 	if err := s.q.DeleteProviderCacheForKey(ctx, *e.Isbn13); err != nil { // an administrator wants fresh answers
 		return e, "", err
 	}
-	draft, failed := s.providerDraft(ctx, *e.Isbn13, layers...)
+	draft, failed := s.providerDraft(ctx, *e.Isbn13, settings)
 	if draft == nil {
 		if len(failed) > 0 {
 			return e, "", ErrProvidersUnavailable // we do not know: do not record "not found"
@@ -340,6 +348,35 @@ func (s *Service) refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSe
 		return stored, "", err
 	}
 	return s.recordSync(ctx, stored, StatusUpdated)
+}
+
+// refreshSettings intersects the requested providers with each holding library's settings. A
+// shared ISBN must not be sent to a provider that any of its libraries has opted out of.
+func (s *Service) refreshSettings(ctx context.Context, id uuid.UUID, layers ...*LookupSettings) (*LookupSettings, error) {
+	defaults := &LookupSettings{Providers: s.defaults}
+	requested := append(append([]*LookupSettings{}, layers...), defaults)
+	result := ResolveSettings(s.known, s.disabled, requested...)
+	// Preserve an explicit empty list: nil means "use defaults" in providerDraft.
+	result.Providers = append([]string{}, result.Providers...)
+	libs, err := s.q.ListEditionLibraries(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("catalog: refresh libraries: %w", err)
+	}
+	for _, id := range libs {
+		lib, err := s.q.GetLibrary(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("catalog: refresh library: %w", err)
+		}
+		var settings LookupSettings
+		if err := json.Unmarshal(lib.Settings, &settings); err != nil {
+			return nil, fmt.Errorf("catalog: refresh library settings: %w", err)
+		}
+		allowed := ResolveSettings(s.known, s.disabled, &settings, defaults).Providers
+		result.Providers = slices.DeleteFunc(result.Providers, func(name string) bool {
+			return !slices.Contains(allowed, name)
+		})
+	}
+	return &result, nil
 }
 
 func (s *Service) recordSync(ctx context.Context, e dbsqlc.Edition, status string) (dbsqlc.Edition, string, error) {

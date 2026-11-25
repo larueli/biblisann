@@ -86,6 +86,9 @@ func TestSCIMUsersAndGroups(t *testing.T) {
 	if st, _ := e.do("POST", "/scim/v2/Users", map[string]any{"userName": "not-an-email"}); st != 400 {
 		t.Errorf("bad userName: %d", st)
 	}
+	if st, inactive := e.do("POST", "/scim/v2/Users", map[string]any{"userName": "inactive@example.org", "active": false}); st != 201 || inactive["active"] != false {
+		t.Errorf("create inactive user: %d %v", st, inactive)
+	}
 	st, list := e.do("GET", `/scim/v2/Users?filter=userName%20eq%20%22marie%40example.org%22`, nil)
 	if st != 200 || list["totalResults"].(float64) != 1 {
 		t.Errorf("filter %d %v", st, list)

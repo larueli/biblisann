@@ -12,6 +12,63 @@ import (
 	"github.com/google/uuid"
 )
 
+const claimScimBootstrap = `-- name: ClaimScimBootstrap :one
+UPDATE users SET scim_bootstrap = false, email_verified = true
+WHERE users.id = $1 AND scim_bootstrap AND disabled_at IS NULL AND password_hash IS NULL
+  AND lower(email) = lower($2::text)
+  AND NOT EXISTS (SELECT 1 FROM sessions WHERE user_id = users.id)
+  AND NOT EXISTS (SELECT 1 FROM identities WHERE user_id = users.id)
+  AND NOT EXISTS (SELECT 1 FROM webauthn_credentials WHERE user_id = users.id)
+  AND NOT EXISTS (SELECT 1 FROM user_totp WHERE user_id = users.id)
+  AND NOT EXISTS (SELECT 1 FROM access_tokens WHERE user_id = users.id)
+  AND NOT EXISTS (SELECT 1 FROM oauth_codes WHERE user_id = users.id)
+  AND NOT EXISTS (SELECT 1 FROM oauth_refresh_tokens WHERE user_id = users.id)
+  AND NOT EXISTS (SELECT 1 FROM oauth_access_tokens WHERE user_id = users.id)
+RETURNING users.id
+`
+
+type ClaimScimBootstrapParams struct {
+	UserID uuid.UUID
+	Email  string
+}
+
+func (q *Queries) ClaimScimBootstrap(ctx context.Context, arg ClaimScimBootstrapParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, claimScimBootstrap, arg.UserID, arg.Email)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createScimUser = `-- name: CreateScimUser :one
+INSERT INTO users (email, display_name, password_hash, is_admin, scim_bootstrap, disabled_at)
+VALUES ($1, $2, NULL, false, true, $3) RETURNING id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at, email_verified, scim_bootstrap
+`
+
+type CreateScimUserParams struct {
+	Email       string
+	DisplayName string
+	DisabledAt  *time.Time
+}
+
+func (q *Queries) CreateScimUser(ctx context.Context, arg CreateScimUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createScimUser, arg.Email, arg.DisplayName, arg.DisabledAt)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.IsAdmin,
+		&i.Locale,
+		&i.Settings,
+		&i.CreatedAt,
+		&i.DisabledAt,
+		&i.EmailVerified,
+		&i.ScimBootstrap,
+	)
+	return i, err
+}
+
 const scimCountGroups = `-- name: ScimCountGroups :one
 SELECT count(*) FROM groups WHERE ($1::text = '' OR lower(name) = lower($1::text))
 `
@@ -70,7 +127,7 @@ func (q *Queries) ScimListGroups(ctx context.Context, arg ScimListGroupsParams) 
 }
 
 const scimListUsers = `-- name: ScimListUsers :many
-SELECT id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at FROM users WHERE ($1::text = '' OR lower(email) = lower($1::text)) ORDER BY created_at, id LIMIT $2 OFFSET $3
+SELECT id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at, email_verified, scim_bootstrap FROM users WHERE ($1::text = '' OR lower(email) = lower($1::text)) ORDER BY created_at, id LIMIT $2 OFFSET $3
 `
 
 type ScimListUsersParams struct {
@@ -98,6 +155,8 @@ func (q *Queries) ScimListUsers(ctx context.Context, arg ScimListUsersParams) ([
 			&i.Settings,
 			&i.CreatedAt,
 			&i.DisabledAt,
+			&i.EmailVerified,
+			&i.ScimBootstrap,
 		); err != nil {
 			return nil, err
 		}
@@ -145,7 +204,8 @@ func (q *Queries) ScimSetGroupExternal(ctx context.Context, arg ScimSetGroupExte
 }
 
 const scimUpdateUser = `-- name: ScimUpdateUser :one
-UPDATE users SET email = $2, display_name = $3, disabled_at = $4 WHERE id = $1 RETURNING id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at
+UPDATE users SET email_verified = CASE WHEN lower(email) = lower($2) THEN email_verified ELSE false END,
+  email = $2, display_name = $3, disabled_at = $4 WHERE id = $1 RETURNING id, email, display_name, password_hash, is_admin, locale, settings, created_at, disabled_at, email_verified, scim_bootstrap
 `
 
 type ScimUpdateUserParams struct {
@@ -173,6 +233,8 @@ func (q *Queries) ScimUpdateUser(ctx context.Context, arg ScimUpdateUserParams) 
 		&i.Settings,
 		&i.CreatedAt,
 		&i.DisabledAt,
+		&i.EmailVerified,
+		&i.ScimBootstrap,
 	)
 	return i, err
 }

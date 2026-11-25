@@ -258,6 +258,17 @@ func (q *Queries) LockOAuthRefresh(ctx context.Context, tokenHash []byte) (Oauth
 	return i, err
 }
 
+const lockOAuthUser = `-- name: LockOAuthUser :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockOAuthUser(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOAuthUser, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const markOAuthRefreshUsed = `-- name: MarkOAuthRefreshUsed :exec
 UPDATE oauth_refresh_tokens SET used_at = now() WHERE token_hash = $1
 `
@@ -265,6 +276,28 @@ UPDATE oauth_refresh_tokens SET used_at = now() WHERE token_hash = $1
 func (q *Queries) MarkOAuthRefreshUsed(ctx context.Context, tokenHash []byte) error {
 	_, err := q.db.Exec(ctx, markOAuthRefreshUsed, tokenHash)
 	return err
+}
+
+const oAuthCodeUser = `-- name: OAuthCodeUser :one
+SELECT user_id FROM oauth_codes WHERE code_hash = $1 AND expires_at > now()
+`
+
+func (q *Queries) OAuthCodeUser(ctx context.Context, codeHash []byte) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, oAuthCodeUser, codeHash)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
+const oAuthRefreshUser = `-- name: OAuthRefreshUser :one
+SELECT user_id FROM oauth_refresh_tokens WHERE token_hash = $1 AND expires_at > now()
+`
+
+func (q *Queries) OAuthRefreshUser(ctx context.Context, tokenHash []byte) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, oAuthRefreshUser, tokenHash)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const purgeOAuth = `-- name: PurgeOAuth :exec
@@ -282,6 +315,15 @@ DELETE FROM oauth_access_tokens WHERE user_id = $1
 
 func (q *Queries) RevokeAllOAuthAccessForUser(ctx context.Context, userID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, revokeAllOAuthAccessForUser, userID)
+	return err
+}
+
+const revokeAllOAuthCodesForUser = `-- name: RevokeAllOAuthCodesForUser :exec
+DELETE FROM oauth_codes WHERE user_id = $1
+`
+
+func (q *Queries) RevokeAllOAuthCodesForUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeAllOAuthCodesForUser, userID)
 	return err
 }
 
@@ -305,6 +347,20 @@ type RevokeOAuthAccessForClientParams struct {
 
 func (q *Queries) RevokeOAuthAccessForClient(ctx context.Context, arg RevokeOAuthAccessForClientParams) error {
 	_, err := q.db.Exec(ctx, revokeOAuthAccessForClient, arg.UserID, arg.ClientID)
+	return err
+}
+
+const revokeOAuthCodesForClient = `-- name: RevokeOAuthCodesForClient :exec
+DELETE FROM oauth_codes WHERE user_id = $1 AND client_id = $2
+`
+
+type RevokeOAuthCodesForClientParams struct {
+	UserID   uuid.UUID
+	ClientID string
+}
+
+func (q *Queries) RevokeOAuthCodesForClient(ctx context.Context, arg RevokeOAuthCodesForClientParams) error {
+	_, err := q.db.Exec(ctx, revokeOAuthCodesForClient, arg.UserID, arg.ClientID)
 	return err
 }
 

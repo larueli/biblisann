@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/larueli/biblisann/internal/auth"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
@@ -128,11 +129,78 @@ func TestOIDC(t *testing.T) {
 		t.Errorf("after sync: admin=%v groups=%+v", u.IsAdmin, gs)
 	}
 
-	// linking: a local account with that verified email gets the identity attached
+	// A verified provider email cannot silently attach to an existing local account.
 	local, _ := a.CreateUser(ctx, "local@example.org", "tulips in the garden", "Local", false)
 	idp.claims = map[string]any{"sub": "u2", "email": "LOCAL@example.org", "email_verified": true}
+	if id, err := idp.login(t, svc); !errors.Is(err, oidc.ErrNotAllowed) {
+		t.Errorf("existing account linked: %v %s", err, id)
+	}
+	if _, err := q.GetIdentity(ctx, dbsqlc.GetIdentityParams{Issuer: idp.srv.URL, Subject: "u2"}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("identity was created for existing account: %v", err)
+	}
+	// Explicit linking binds the flow to the signed-in account and requires the same verified email.
+	linkSession, err := a.OpenSessionFor(ctx, local.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	linkURL, _, err := svc.BeginLink(ctx, local.ID, linkSession.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _ := url.Parse(linkURL)
+	idp.nonce = parsed.Query().Get("nonce")
+	if err := svc.CompleteLink(ctx, "code", parsed.Query().Get("state"), local.ID, linkSession.Token); err != nil {
+		t.Fatalf("explicit link: %v", err)
+	}
 	if id, err := idp.login(t, svc); err != nil || id != local.ID.String() {
-		t.Errorf("link: %v %s", err, id)
+		t.Errorf("linked login: %v %s", err, id)
+	}
+	// A session revoked after the flow started cannot link another identity.
+	idp.claims = map[string]any{"sub": "u2-revoked", "email": "local@example.org", "email_verified": true}
+	revokedURL, _, err := svc.BeginLink(ctx, local.ID, linkSession.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoked, _ := url.Parse(revokedURL)
+	idp.nonce = revoked.Query().Get("nonce")
+	if err := a.Logout(ctx, linkSession.Token); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CompleteLink(ctx, "code", revoked.Query().Get("state"), local.ID, linkSession.Token); !errors.Is(err, oidc.ErrBadFlow) {
+		t.Fatalf("revoked session linked identity: %v", err)
+	}
+	if _, err := q.GetIdentity(ctx, dbsqlc.GetIdentityParams{Issuer: idp.srv.URL, Subject: "u2-revoked"}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("identity created after session revocation: %v", err)
+	}
+
+	// Freshly SCIM-provisioned users can sign in with a matching verified identity, even when
+	// automatic creation is disabled. The bootstrap marker is consumed by the same transaction.
+	scimUser, err := q.CreateScimUser(ctx, dbsqlc.CreateScimUserParams{Email: "scim@example.org", DisplayName: "SCIM"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scimSvc := oidc.New(oidc.Config{Issuer: idp.srv.URL, ClientID: "client1", RedirectURL: "http://x/cb", AutoCreate: false}, pool, a, http.DefaultClient)
+	idp.claims = map[string]any{"sub": "scim-subject", "email": "scim@example.org", "email_verified": true}
+	if id, err := idp.login(t, scimSvc); err != nil || id != scimUser.ID.String() {
+		t.Fatalf("SCIM bootstrap: %v %s", err, id)
+	}
+	bootstrapped, err := q.GetUser(ctx, scimUser.ID)
+	if err != nil || bootstrapped.ScimBootstrap || !bootstrapped.EmailVerified {
+		t.Fatalf("SCIM bootstrap state: %+v %v", bootstrapped, err)
+	}
+
+	// A SCIM-created account with a password must not be attached by email.
+	used, err := q.CreateScimUser(ctx, dbsqlc.CreateScimUserParams{Email: "used@example.org", DisplayName: "Used"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := "test-hash"
+	if err := q.UpdateUserPassword(ctx, dbsqlc.UpdateUserPasswordParams{ID: used.ID, PasswordHash: &hash}); err != nil {
+		t.Fatal(err)
+	}
+	idp.claims = map[string]any{"sub": "used-subject", "email": "used@example.org", "email_verified": true}
+	if _, err := idp.login(t, scimSvc); !errors.Is(err, oidc.ErrNotAllowed) {
+		t.Fatalf("SCIM account with existing credential: %v", err)
 	}
 
 	// a different issuer with the same subject is a different identity: no auto-linking without verified email

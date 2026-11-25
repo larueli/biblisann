@@ -23,20 +23,47 @@ Then open <http://localhost:8080>. The compose file publishes the port on the lo
 ```bash
 docker run --rm \
   --read-only --cap-drop ALL \
+  --tmpfs /tmp:rw,nosuid,nodev,noexec,size=256m \
   -e BIBLISANN_BASE_URL=https://books.example.org \
   -e BIBLISANN_DATABASE_URL_FILE=/run/secrets/database_url \
   -v ./database_url:/run/secrets/database_url:ro \
-  -p 8080:8080 \
+  -v biblisann-data:/data \
+  -p 127.0.0.1:8080:8080 \
   ghcr.io/larueli/biblisann:<version>
 ```
 
-Images are published for `linux/amd64` and `linux/arm64`, signed with cosign, with SBOM and provenance. There is no `latest` tag: pin a version, ideally by digest.
+On a fresh instance the first person to register becomes an administrator. Keep the service
+accessible only to the operator until that account is created; then expose it through a TLS reverse
+proxy with the desired registration policy.
+
+With local storage, the image sets `BIBLISANN_DATA_DIR=/data` and stores covers under `/data/covers`. The named volume keeps
+original covers and thumbnails across container removal; library records live in PostgreSQL, which
+needs its own persistent storage and backup. Mount an existing writable directory instead if
+preferred, and ensure it is writable by UID 65532. `/tmp` is temporary workspace for imports and
+does not replace the data volume. For S3 storage, configure `BIBLISANN_STORAGE_BACKEND=s3` and the
+S3 settings in [Configuration](configuration.md).
+
+The publishing workflow is intended to build `linux/amd64` and `linux/arm64` images with SBOM and
+provenance and sign the image digest with cosign. Pin a version, ideally by digest; the `latest`
+tag can move. The chart is published separately and is not signed by this workflow.
+
+Verify an image using the expected publishing workflow and ref, and GitHub's OIDC issuer. For a
+manual `publish.yml` run from `main`, the expected identity is:
 
 ```bash
-cosign verify ghcr.io/larueli/biblisann:<version> \
-  --certificate-identity-regexp 'https://github.com/larueli/biblisann/' \
+cosign verify ghcr.io/larueli/biblisann@sha256:<digest> \
+  --certificate-identity 'https://github.com/larueli/biblisann/.github/workflows/publish.yml@refs/heads/main' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
+
+For a release that calls the local reusable workflow, use the exact workflow ref from the trusted
+release run instead of assuming it is `refs/heads/main`. Establish the expected ref independently
+from a trusted release or workflow record; do not accept an identity merely because it is in the
+certificate. [Fulcio uses `job_workflow_ref` as the certificate identity](https://github.com/sigstore/fulcio/blob/main/docs/oidc.md), and
+[GitHub resolves a local reusable workflow from the caller's commit](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
+The repository and release pipeline have not yet been exercised on GitHub, so confirm the exact
+identity and successful verification for both automatic release and manual republish before relying
+on this command. Image signature verification alone does not verify the SBOM or provenance.
 
 ## Kubernetes (Helm)
 

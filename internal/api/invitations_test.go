@@ -3,10 +3,12 @@ package api_test
 import (
 	"strings"
 	"testing"
+
+	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
 )
 
 func TestInvitationFlow(t *testing.T) {
-	srv, authSvc := newServer(t)
+	srv, authSvc, pool := newServerWithPool(t)
 	admin := &client{t: t, srv: srv}
 	admin.do("POST", "/v1/auth/register", map[string]string{"email": "admin@example.org", "password": "tulips in the garden"}, nil)
 	admin.login("admin@example.org", "tulips in the garden")
@@ -31,8 +33,12 @@ func TestInvitationFlow(t *testing.T) {
 	token := link[strings.Index(link, "token=")+len("token="):]
 
 	// a library administrator who is not an instance administrator learns nothing
-	if _, err := authSvc.CreateUser(t.Context(), "bob@example.org", "bobs long password", "Bob", false); err != nil {
+	bobUser, err := authSvc.CreateUser(t.Context(), "bob@example.org", "bobs long password", "Bob", false)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if n, err := dbsqlc.New(pool).VerifyUserEmail(t.Context(), dbsqlc.VerifyUserEmailParams{ID: bobUser.ID, Email: bobUser.Email}); err != nil || n != 1 {
+		t.Fatalf("verify fixture address: %d %v", n, err)
 	}
 	if st, _ := admin.w("PUT", share, map[string]any{"email": "bob@example.org", "grant": map[string]any{"role": "admin"}}); st != 200 {
 		t.Fatalf("share with bob: %d", st)

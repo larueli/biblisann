@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -102,14 +103,41 @@ func (s *Server) serveBackup(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusNotFound, "not found") // never confirm the endpoint to others
 		return
 	}
-	if r.Method != http.MethodGet {
-		writeProblem(w, http.StatusMethodNotAllowed, "use GET")
+	if r.Method != http.MethodPost {
+		writeProblem(w, http.StatusMethodNotAllowed, "use POST")
+		return
+	}
+	if err := s.requireStepUp(r.Context()); err != nil {
+		var status huma.StatusError
+		if errors.As(err, &status) {
+			writeProblem(w, status.GetStatus(), status.Error())
+		} else {
+			writeProblem(w, http.StatusInternalServerError, "internal error")
+		}
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-tar")
 	w.Header().Set("Content-Disposition", `attachment; filename="biblisann-backup-`+time.Now().UTC().Format("20060102-150405")+`.tar"`)
 	w.Header().Set("Cache-Control", "no-store")
-	if err := s.Backup(r.Context(), w); err != nil {
-		s.Log.Error("backup failed", "error", err) // headers are sent: the client sees a truncated archive
+	counted := &backupWriter{ResponseWriter: w}
+	if err := s.Backup(r.Context(), counted); err != nil {
+		s.Log.Error("backup failed", "error", err)
+		if counted.wrote {
+			panic(http.ErrAbortHandler) // terminate the response so a partial archive is not accepted
+		}
+		w.Header().Del("Content-Disposition")
+		writeProblem(w, http.StatusInternalServerError, "backup failed")
 	}
+}
+
+type backupWriter struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (w *backupWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		w.wrote = true
+	}
+	return w.ResponseWriter.Write(p)
 }

@@ -120,6 +120,12 @@ func (s *Service) ShareWithUser(ctx context.Context, libraryID uuid.UUID, email 
 	if err != nil {
 		return err
 	}
+	if !u.EmailVerified {
+		if p.IsAdmin {
+			return ErrNoAccount
+		}
+		return nil
+	}
 	if !isAdmin {
 		el, err := s.elevated(ctx, libraryID, u.ID)
 		if err != nil {
@@ -346,6 +352,9 @@ func (s *Service) SetGroupMember(ctx context.Context, groupID uuid.UUID, email s
 		return err
 	}
 	if member {
+		if !u.EmailVerified {
+			return ErrInvalid
+		}
 		return s.q.AddGroupMember(ctx, dbsqlc.AddGroupMemberParams{GroupID: groupID, UserID: u.ID})
 	}
 	return s.q.RemoveGroupMember(ctx, dbsqlc.RemoveGroupMemberParams{GroupID: groupID, UserID: u.ID})

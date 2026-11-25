@@ -3,7 +3,7 @@ import { type FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { field, muted, primary } from "../../app/ui";
 import { normalizeIsbn } from "../../lib/isbn";
-import { db } from "../../offline/db";
+import type { BiblisannDB } from "../../offline/db";
 import { enqueueScan, flushOutbox, ownedLocally } from "../../offline/sync";
 
 /** Splits pasted text into candidate ISBNs: whitespace, commas and semicolons separate them. */
@@ -26,7 +26,15 @@ export function parseIsbnList(text: string): { valid: string[]; invalid: string[
  * Adds many ISBNs at once. They go through the offline outbox like scans: sent one by one, safe
  * to replay, and paced by the server's request quota (the loader says when it slows down).
  */
-export function BulkIsbns({ libraryId, placeId }: { libraryId: string; placeId?: string }) {
+export function BulkIsbns({
+  db,
+  libraryId,
+  placeId,
+}: {
+  db: BiblisannDB;
+  libraryId: string;
+  placeId?: string;
+}) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
   const [summary, setSummary] = useState<{ queued: number; owned: number; invalid: number } | null>(
@@ -36,7 +44,7 @@ export function BulkIsbns({ libraryId, placeId }: { libraryId: string; placeId?:
   const [running, setRunning] = useState(false);
   const pending = useLiveQuery(
     () => db.outbox.where("status").anyOf("pending", "sending").count(),
-    [],
+    [db],
     0,
   );
 
@@ -46,7 +54,7 @@ export function BulkIsbns({ libraryId, placeId }: { libraryId: string; placeId?:
     let owned = 0;
     let queued = 0;
     for (const isbn of valid) {
-      if ((await ownedLocally(isbn)).length > 0) {
+      if ((await ownedLocally(isbn, db)).length > 0) {
         owned++;
         continue;
       }

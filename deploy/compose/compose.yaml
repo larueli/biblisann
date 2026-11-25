@@ -21,6 +21,8 @@ services:
     volumes:
       - appdata:/data
     read_only: true
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid,nodev
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true

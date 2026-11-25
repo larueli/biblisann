@@ -57,13 +57,19 @@ func (s *Service) MFAAvailable() bool { return s.secretKey != nil }
 // ResetAvailable reports whether password reset by email can be used.
 func (s *Service) ResetAvailable() bool { return s.mailer != nil }
 
-func (s *Service) hasMFA(ctx context.Context, userID uuid.UUID) bool {
+func (s *Service) hasMFA(ctx context.Context, userID uuid.UUID) (bool, error) {
 	t, err := s.q.GetTOTP(ctx, userID)
-	return err == nil && t.ConfirmedAt != nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("auth: lookup totp: %w", err)
+	}
+	return t.ConfirmedAt != nil, nil
 }
 
 // IsMFAEnabled reports whether the user has a confirmed second factor.
-func (s *Service) IsMFAEnabled(ctx context.Context, userID uuid.UUID) bool {
+func (s *Service) IsMFAEnabled(ctx context.Context, userID uuid.UUID) (bool, error) {
 	return s.hasMFA(ctx, userID)
 }
 
@@ -73,7 +79,11 @@ func (s *Service) EnrollTOTP(ctx context.Context, userID uuid.UUID, issuer strin
 	if s.secretKey == nil {
 		return "", "", ErrMFADisabled
 	}
-	if s.hasMFA(ctx, userID) {
+	enabled, err := s.hasMFA(ctx, userID)
+	if err != nil {
+		return "", "", err
+	}
+	if enabled {
 		return "", "", ErrMFAActive // replacing a confirmed factor would silently switch it off
 	}
 	u, err := s.q.GetUser(ctx, userID)
@@ -278,19 +288,34 @@ func (s *Service) Reset(ctx context.Context, token, newPassword string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.q.UpdateUserPassword(ctx, dbsqlc.UpdateUserPasswordParams{ID: uid, PasswordHash: &hash}); err != nil {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+	if _, err := q.LockOAuthUser(ctx, uid); err != nil {
+		return err
+	}
+	if err := q.UpdateUserPassword(ctx, dbsqlc.UpdateUserPasswordParams{ID: uid, PasswordHash: &hash}); err != nil {
 		return err
 	}
 	// A reset means the account may have been compromised: forget every credential an intruder
 	// could have added besides the password.
-	if err := s.q.DeleteUserTokens(ctx, uid); err != nil {
+	if err := q.DeleteUserTokens(ctx, uid); err != nil {
 		return err
 	}
-	if err := s.q.RevokeAllOAuthRefreshForUser(ctx, uid); err != nil {
+	if err := q.RevokeAllOAuthRefreshForUser(ctx, uid); err != nil {
 		return err
 	}
-	if err := s.q.RevokeAllOAuthAccessForUser(ctx, uid); err != nil {
+	if err := q.RevokeAllOAuthAccessForUser(ctx, uid); err != nil {
 		return err
 	}
-	return s.q.DeleteUserSessions(ctx, uid)
+	if err := q.RevokeAllOAuthCodesForUser(ctx, uid); err != nil {
+		return err
+	}
+	if err := q.DeleteUserSessions(ctx, uid); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

@@ -43,6 +43,13 @@ func NewService(pool *pgxpool.Pool, a Access) *Service {
 	return &Service{pool: pool, q: dbsqlc.New(pool), access: a}
 }
 
+// WithTx returns a transaction-bound service using the provided access checker.
+func (s *Service) WithTx(tx pgx.Tx, access Access) *Service {
+	copy := *s
+	copy.q, copy.access = s.q.WithTx(tx), access
+	return &copy
+}
+
 func principal(ctx context.Context, write bool) (*authz.Principal, error) {
 	p, err := authz.From(ctx)
 	if err != nil {

@@ -35,7 +35,7 @@ COPY --from=build /out/biblisann /biblisann
 # Writable data directory (covers). Mount a volume here; everything else is read-only.
 COPY --from=build --chown=65532:65532 /out/data /data
 VOLUME /data
-ENV BIBLISANN_COVERS_DIR=/data/covers
+ENV BIBLISANN_DATA_DIR=/data
 # Non-root (65532 "nonroot"), no shell, no package manager. Run with a read-only root filesystem.
 USER 65532:65532
 EXPOSE 8080

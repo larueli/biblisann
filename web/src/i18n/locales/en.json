@@ -155,6 +155,7 @@
     "backup": "Backup",
     "backupHelp": "The archive contains password hashes: store it safely.",
     "downloadBackup": "Download a backup",
+    "backupError": "The backup could not be downloaded.",
     "importTitle": "Import from another service",
     "importSource": "Source",
     "createScim": "Create provisioning token (SCIM)",
@@ -195,6 +196,14 @@
     "passkeys": "Passkeys",
     "passkeyName": "Name (for example My phone)",
     "addPasskey": "Add a passkey"
+  },
+  "oidcLink": {
+    "title": "Single sign-on",
+    "help": "Link your existing account to your single sign-on identity. You will be asked to authenticate both accounts.",
+    "provider": "single sign-on",
+    "link": "Link {{provider}}",
+    "success": "Single sign-on was linked.",
+    "failed": "Single sign-on could not be linked."
   },
   "oauth": {
     "title": "Allow {{client}} to use your library?",
@@ -348,7 +357,8 @@
     "status": {
       "updated": "Refreshed from providers.",
       "not_found": "No provider knows this book. Its data is kept as it is; exclude it from refreshes if you do not want it checked again.",
-      "no_isbn": "No ISBN, so there is nothing to look up. Its data is kept as it is."
+      "no_isbn": "No ISBN, so there is nothing to look up. Its data is kept as it is.",
+      "skipped": "Refresh skipped: no provider is allowed by every library that holds this book."
     }
   },
   "bulk": {

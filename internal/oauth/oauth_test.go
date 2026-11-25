@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/larueli/biblisann/internal/auth"
 	"github.com/larueli/biblisann/internal/dbtest"
@@ -26,6 +27,118 @@ const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk" // 43 chars
 func challenge(v string) string {
 	h := sha256.Sum256([]byte(v))
 	return base64.RawURLEncoding.EncodeToString(h[:])
+}
+
+func TestRevocationSerializesWithRefresh(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Pool(t)
+	a, _ := auth.NewService(pool, auth.RegistrationOpen)
+	u, err := a.Register(ctx, "user@example.org", "tulips in the garden", "Reader")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := a.OpenSessionFor(ctx, u.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := oauth.New(pool, "https://books.example.org")
+	cid, err := svc.RegisterClient(ctx, "client", []string{"https://client.example.org/cb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := oauth.Request{ClientID: cid, RedirectURI: "https://client.example.org/cb", CodeChallenge: challenge(verifier), CodeChallengeMethod: "S256", Scope: "read", Resource: "https://books.example.org/mcp"}
+	grant := func() oauth.TokenResponse {
+		t.Helper()
+		redirect, err := svc.Approve(ctx, u.ID, session.Token, req, []string{"read"}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed, _ := url.Parse(redirect)
+		tokens, err := svc.ExchangeCode(ctx, cid, parsed.Query().Get("code"), req.RedirectURI, verifier, req.Resource)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tokens
+	}
+	tokens := grant()
+	// Hold the refresh row so rotation can take the user lock but cannot issue a descendant yet.
+	blocker, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = blocker.Rollback(ctx) }()
+	hash := sha256.Sum256([]byte(tokens.RefreshToken))
+	if _, err := blocker.Exec(ctx, "SELECT token_hash FROM oauth_refresh_tokens WHERE token_hash = $1 FOR UPDATE", hash[:]); err != nil {
+		t.Fatal(err)
+	}
+	type refreshResult struct {
+		tokens oauth.TokenResponse
+		err    error
+	}
+	rotated := make(chan refreshResult, 1)
+	go func() { tr, err := svc.Refresh(ctx, cid, tokens.RefreshToken); rotated <- refreshResult{tr, err} }()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(ctx, "SELECT id FROM users WHERE id = $1 FOR UPDATE NOWAIT", u.ID)
+		_ = tx.Rollback(ctx)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "55P03" {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("refresh did not acquire the user lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	revoked := make(chan error, 1)
+	go func() { revoked <- svc.RevokeAll(ctx, u.ID) }()
+	select {
+	case err := <-revoked:
+		t.Fatalf("revocation finished before rotation: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if err := blocker.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	result := <-rotated
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if err := <-revoked; err != nil {
+		t.Fatal(err)
+	}
+	if p, err := svc.Resolve(ctx, result.tokens.AccessToken); err != nil || p != nil {
+		t.Errorf("rotated access token survived revocation: %v", err)
+	}
+	if _, err := svc.Refresh(ctx, cid, result.tokens.RefreshToken); !errors.Is(err, oauth.ErrInvalidGrant) {
+		t.Errorf("rotated refresh survived revocation: %v", err)
+	}
+
+	// Even when no refresh token exists, revocation consumes a pending authorization code.
+	redirect, err := svc.Approve(ctx, u.ID, session.Token, req, []string{"read"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _ := url.Parse(redirect)
+	if err := svc.RevokeGrant(ctx, u.ID, cid); !errors.Is(err, oauth.ErrInvalidClient) {
+		t.Errorf("empty grant: %v", err)
+	}
+	if _, err := svc.ExchangeCode(ctx, cid, parsed.Query().Get("code"), req.RedirectURI, verifier, req.Resource); !errors.Is(err, oauth.ErrInvalidGrant) {
+		t.Errorf("pending code survived revocation: %v", err)
+	}
+	if err := a.Logout(ctx, session.Token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, u.ID, session.Token, req, []string{"read"}, nil); !errors.Is(err, oauth.ErrInvalidGrant) {
+		t.Errorf("revoked session approved consent: %v", err)
+	}
 }
 
 func post(t *testing.T, srv *httptest.Server, path string, form url.Values) (int, map[string]any) {
@@ -45,6 +158,10 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 	pool := dbtest.Pool(t)
 	a, _ := auth.NewService(pool, auth.RegistrationOpen)
 	u, _ := a.Register(ctx, "me@example.org", "tulips in the garden", "Me")
+	session, err := a.OpenSessionFor(ctx, u.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	svc := oauth.New(pool, "https://books.example.org")
 	mux := http.NewServeMux()
 	svc.Routes(mux, ratelimit.NewMemory(100, time.Second), func(*http.Request) string { return "ip" })
@@ -98,7 +215,7 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 
 	// consent: the user grants read only, although write was requested
 	lib := uuid.New()
-	redirect, err := svc.Approve(ctx, u.ID, req, []string{"read"}, []uuid.UUID{lib})
+	redirect, err := svc.Approve(ctx, u.ID, session.Token, req, []string{"read"}, []uuid.UUID{lib})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +239,7 @@ func TestAuthorizationCodeFlow(t *testing.T) {
 		t.Errorf("code reuse after failure: %d", st)
 	}
 
-	redirect, _ = svc.Approve(ctx, u.ID, req, []string{"read"}, []uuid.UUID{lib})
+	redirect, _ = svc.Approve(ctx, u.ID, session.Token, req, []string{"read"}, []uuid.UUID{lib})
 	ru, _ = url.Parse(redirect)
 	form.Set("code", ru.Query().Get("code"))
 	st, tok := post(t, srv, "/oauth/token", form)

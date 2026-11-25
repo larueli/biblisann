@@ -88,6 +88,16 @@ func newClient(opts Options, allowed func(netip.Addr) bool) *Client {
 				if len(via) > maxRedirects {
 					return fmt.Errorf("safehttp: stopped after %d redirects", maxRedirects)
 				}
+				previous := via[len(via)-1]
+				if previous.URL.Scheme == "https" && req.URL.Scheme != "https" {
+					return errors.New("safehttp: HTTPS downgrade refused")
+				}
+				original := via[0]
+				if (req.URL.Scheme != original.URL.Scheme || req.URL.Host != original.URL.Host) &&
+					(original.Header.Get("Authorization") != "" || original.Header.Get("Cookie") != "" ||
+						original.Header.Get("X-Api-Key") != "" || original.Body != nil && original.Body != http.NoBody) {
+					return errors.New("safehttp: redirect of credentials or request body to another origin refused")
+				}
 				return checkURL(req.URL)
 			},
 		},
@@ -145,18 +155,18 @@ func (c *Client) Do(req *http.Request) (*Response, error) {
 func (c *Client) Get(ctx context.Context, rawURL string) (*Response, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, fmt.Errorf("safehttp: invalid URL: %w", err)
+		return nil, errors.New("safehttp: invalid URL")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("safehttp: %w", err)
+		return nil, errors.New("safehttp: invalid URL")
 	}
 	return c.Do(req)
 }
 
-// safeURL drops credentials, query and fragment: query strings often carry API keys.
+// safeURL omits paths too: capability URLs can carry secrets in any path segment.
 func safeURL(u *url.URL) string {
-	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 }
 
 // unwrapURLError drops the *url.Error wrapper, which repeats the URL (possibly with a token).
@@ -197,11 +207,11 @@ func (b *limitedBody) Close() error { return b.rc.Close() }
 func (c *Client) GetWithAuth(ctx context.Context, rawURL, bearer string) (*Response, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, fmt.Errorf("safehttp: invalid URL: %w", err)
+		return nil, errors.New("safehttp: invalid URL")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("safehttp: %w", err)
+		return nil, errors.New("safehttp: invalid URL")
 	}
 	req.Header.Set("Authorization", "Bearer "+bearer)
 	return c.Do(req)

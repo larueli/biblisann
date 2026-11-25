@@ -210,7 +210,11 @@ func (s *Server) registerAuth(a huma.API) {
 			if err != nil {
 				return nil, mapError(s.Log, err)
 			}
-			return &struct{ Body securityBody }{securityBody{s.Auth.MFAAvailable(), s.Auth.IsMFAEnabled(ctx, p.UserID), s.Auth.ResetAvailable(),
+			enabled, err := s.Auth.IsMFAEnabled(ctx, p.UserID)
+			if err != nil {
+				return nil, mapError(s.Log, err)
+			}
+			return &struct{ Body securityBody }{securityBody{s.Auth.MFAAvailable(), enabled, s.Auth.ResetAvailable(),
 				s.Passkeys != nil, s.Auth.HasPassword(ctx, p.UserID), s.OIDC != nil}}, nil
 		})
 	Register(a, huma.Operation{OperationID: "enroll-totp", Method: http.MethodPost, Path: "/v1/me/mfa/totp",

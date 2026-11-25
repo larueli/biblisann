@@ -58,7 +58,7 @@ func (s *Service) Scan(ctx context.Context, in Input) (Result, error) {
 		return out, err
 	}
 	if in.IdempotencyKey != "" {
-		prev, err := s.lib.ReplayedInstance(ctx, in.IdempotencyKey)
+		prev, err := s.lib.ReplayedInstance(ctx, in.LibraryID, in.ISBN, in.PlaceID, in.IdempotencyKey)
 		if err != nil {
 			return out, err
 		}

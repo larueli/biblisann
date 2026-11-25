@@ -61,8 +61,15 @@ func (m *Metrics) Wrap(next http.Handler) http.Handler {
 		if _, p, ok := strings.Cut(route, " "); ok {
 			route = p // "GET /v1/x" -> "/v1/x": the method has its own label
 		}
-		m.requests.WithLabelValues(r.Method, route, strconv.Itoa(sw.status)).Inc()
-		m.duration.WithLabelValues(r.Method, route).Observe(time.Since(start).Seconds())
+		method := r.Method
+		switch method {
+		case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+			http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace:
+		default:
+			method = "_OTHER"
+		}
+		m.requests.WithLabelValues(method, route, strconv.Itoa(sw.status)).Inc()
+		m.duration.WithLabelValues(method, route).Observe(time.Since(start).Seconds())
 	})
 }
 

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -344,7 +345,7 @@ func Serve(ctx context.Context, ln net.Listener, h http.Handler, shutdownTimeout
 func OpenStorage(ctx context.Context, cfg config.Config, kind string) (storage.Store, error) {
 	switch kind {
 	case "local":
-		return storage.NewLocal(cfg.CoversDir)
+		return storage.NewLocal(filepath.Join(cfg.DataDir, "covers"))
 	case "s3":
 		return storage.NewS3(ctx, storage.S3Config{Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
 			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey.Reveal(), UseSSL: cfg.S3UseSSL, Prefix: cfg.S3Prefix})

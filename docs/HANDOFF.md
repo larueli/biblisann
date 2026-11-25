@@ -20,11 +20,14 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 
 ## In progress
 
-- Nothing.
+- Security-audit fixes were made in the primary checkout at the owner's explicit request (ADR 0027). Imports use a shared transaction, backup downloads use step-up, traces omit request details, and release verification guidance is narrowed. Independent review and `make check` passed.
+- Remaining limits: imported covers are stored best-effort after the database commit; registration capacity can be unavailable for the 24-hour client grace period. The exact image-signature identity must be confirmed on the first real release and republish.
+- `BIBLISANN_DATA_DIR` replaces `BIBLISANN_COVERS_DIR`: local covers live under its `covers` subdirectory. Startup rejects the old setting; migration is in `docs/user/configuration.md`.
+- Logical backup v1 restore is refused; v2 preserves identity factors and requires the original key for TOTP. Existing email addresses default unverified, existing shares remain and need review; old SCIM accounts may need administrator-assisted recovery. Unscoped offline queues remain on disk but are not automatically replayed.
 
 ## Next
 
-0. A security review of the follow-up range was started (`security-reviewer`); apply or triage its findings first.
+0. Review the remaining operational limits above.
 
 1. Human: create the GitHub repository, releaser App and settings (`docs/dev/github.md`); push `main`; check CI (`e2e` job runs `scripts/e2e.sh`).
 2. Real-world validation list in `docs/roadmap.md` (open decisions): phone scanning first.

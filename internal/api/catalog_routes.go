@@ -40,7 +40,7 @@ type editionBody struct {
 	Provenance    map[string]catalog.Provenance `json:"provenance"`
 	LockedFields  []string                      `json:"locked_fields" nullable:"false" doc:"Fields edited by hand: provider refreshes never overwrite them."`
 	SyncExcluded  bool                          `json:"sync_excluded" doc:"True: provider refreshes skip this edition."`
-	SyncStatus    string                        `json:"sync_status,omitempty" enum:"updated,not_found,no_isbn" doc:"Result of the last provider refresh: updated, not_found (no provider knows the ISBN) or no_isbn (nothing to look up)."`
+	SyncStatus    string                        `json:"sync_status,omitempty" enum:"updated,not_found,no_isbn,skipped" doc:"Result of the last provider refresh: updated, not_found (no provider knows the ISBN), no_isbn (nothing to look up), or skipped (no providers permitted)."`
 	SyncedAt      *time.Time                    `json:"synced_at,omitempty"`
 }
 
@@ -267,7 +267,7 @@ func (s *Server) registerCatalog(a huma.API) {
 		})
 	Register(a, huma.Operation{OperationID: "refresh-edition", Method: http.MethodPost, Path: "/v1/editions/{id}/refresh",
 		Summary:     "Ask the providers again about one book (administrators, and editors of a library that holds it)",
-		Description: "Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn, and can be excluded from future refreshes. 409 when the edition is excluded, 502 when every provider failed.",
+		Description: "Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn. If no provider is allowed by all holding libraries, sync_status is skipped. 409 when the edition is excluded, 502 when every provider failed.",
 		Tags:        []string{"catalog"}, Errors: []int{404, 409, 429, 502}}, PermAuthenticated,
 		func(ctx context.Context, in *struct {
 			ID uuid.UUID `path:"id"`

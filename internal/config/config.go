@@ -23,7 +23,7 @@ type Config struct {
 	MigrateOnStart  bool
 	// Registration is "first-user", "open" or "closed".
 	Registration string
-	CoversDir    string
+	DataDir      string
 	// Providers is the default ordered list of metadata providers; DisabledProviders are off
 	// for everyone (ADR 0013).
 	Providers         []string
@@ -69,7 +69,7 @@ type Config struct {
 	// Generate with: openssl rand -base64 32
 	SecretKey Secret
 
-	// Cover storage: "local" (CoversDir) or "s3".
+	// Cover storage: "local" (under DataDir) or "s3".
 	StorageBackend string
 	S3Endpoint     string
 	S3Bucket       string
@@ -116,7 +116,7 @@ func Load(src Sources, opts Options) (Config, error) {
 		ShutdownTimeout:      r.duration("SHUTDOWN_TIMEOUT", 20*time.Second),
 		MigrateOnStart:       r.boolean("MIGRATE_ON_START", true),
 		Registration:         r.oneOf("REGISTRATION", "first-user", "first-user", "open", "closed"),
-		CoversDir:            r.str("COVERS_DIR", "data/covers"),
+		DataDir:              r.str("DATA_DIR", "data"),
 		Providers:            r.list("PROVIDERS", []string{"bnf", "openlibrary"}),
 		DisabledProviders:    r.list("DISABLED_PROVIDERS", nil),
 		StaticProviderFile:   r.str("STATIC_PROVIDER_FILE", ""),
@@ -150,6 +150,12 @@ func Load(src Sources, opts Options) (Config, error) {
 		SMTPMode:             r.oneOf("SMTP_MODE", "starttls", "starttls", "tls", "none"),
 		VAPIDPublicKey:       r.str("VAPID_PUBLIC_KEY", ""),
 		VAPIDSubject:         r.str("VAPID_SUBJECT", ""),
+	}
+	if _, ok := r.lookup("COVERS_DIR", false); ok {
+		r.fail("%sCOVERS_DIR was replaced by %sDATA_DIR; set it to the parent directory containing covers", prefix, prefix)
+	}
+	if c.DataDir == "" {
+		r.fail("%sDATA_DIR must not be empty", prefix)
 	}
 	if v, ok := r.lookup("DATABASE_URL", true); ok {
 		c.DatabaseURL = Secret(v)
@@ -222,7 +228,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Duration("shutdown_timeout", c.ShutdownTimeout),
 		slog.Bool("migrate_on_start", c.MigrateOnStart),
 		slog.String("registration", c.Registration),
-		slog.String("covers_dir", c.CoversDir),
+		slog.String("data_dir", c.DataDir),
 		slog.Any("providers", c.Providers),
 	)
 }

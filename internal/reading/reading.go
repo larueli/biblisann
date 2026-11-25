@@ -25,12 +25,21 @@ var ErrNotFound = authz.ErrNotFound
 
 // Service is the reading service.
 type Service struct {
-	pool *pgxpool.Pool
-	q    *dbsqlc.Queries
+	pool interface {
+		QueryRow(context.Context, string, ...any) pgx.Row
+	}
+	q *dbsqlc.Queries
 }
 
 // NewService creates the service.
 func NewService(pool *pgxpool.Pool) *Service { return &Service{pool: pool, q: dbsqlc.New(pool)} }
+
+// WithTx returns a transaction-bound reading service.
+func (s *Service) WithTx(tx pgx.Tx) *Service {
+	copy := *s
+	copy.pool, copy.q = tx, s.q.WithTx(tx)
+	return &copy
+}
 
 var statuses = map[string]bool{"to_read": true, "reading": true, "read": true, "abandoned": true}
 

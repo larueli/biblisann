@@ -34,7 +34,7 @@ func TestDefaults(t *testing.T) {
 	}
 	if c.ListenAddr != ":8080" || c.BaseURL.String() != "http://localhost:8080" ||
 		c.LogLevel != slog.LevelInfo || c.LogFormat != "json" ||
-		c.ShutdownTimeout != 20*time.Second || !c.MigrateOnStart {
+		c.ShutdownTimeout != 20*time.Second || !c.MigrateOnStart || c.DataDir != "data" {
 		t.Errorf("unexpected defaults: %+v", c)
 	}
 }
@@ -118,6 +118,8 @@ func TestInvalidValues(t *testing.T) {
 		{"negative duration", "BIBLISANN_SHUTDOWN_TIMEOUT", "-1s"},
 		{"bad bool", "BIBLISANN_MIGRATE_ON_START", "maybe"},
 		{"bad proxy", "BIBLISANN_TRUSTED_PROXIES", "10.0.0.0/8, nope"},
+		{"empty data directory", "BIBLISANN_DATA_DIR", ""},
+		{"old cover directory", "BIBLISANN_COVERS_DIR", "/path/to/covers"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

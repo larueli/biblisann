@@ -12,11 +12,45 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/larueli/biblisann/internal/auth"
+	"github.com/larueli/biblisann/internal/authz"
+	"github.com/larueli/biblisann/internal/scim"
 	"github.com/larueli/biblisann/internal/telemetry"
 	"github.com/larueli/biblisann/internal/webui"
 )
 
 type fakeDB struct{ err error }
+
+type rejectTokens struct{}
+
+func (rejectTokens) Resolve(context.Context, string) (*authz.Principal, error) { return nil, nil }
+
+type scimTokens struct{}
+
+func (scimTokens) ValidSCIM(_ context.Context, token string) bool { return token == "scim-secret" }
+
+func TestDedicatedBearerTokensReachTheirHandlers(t *testing.T) {
+	h, _ := New(Deps{Auth: &auth.Service{}, Tokens: rejectTokens{}, Metrics: telemetry.New("test", nil),
+		MetricsToken: "metrics-secret", SCIM: scim.New(nil, scimTokens{}, "https://example.org")})
+	for _, tc := range []struct {
+		path, token string
+		want        int
+	}{
+		{"/metrics", "metrics-secret", http.StatusOK},
+		{"/metrics", "wrong", http.StatusUnauthorized},
+		{"/scim/v2/ServiceProviderConfig", "scim-secret", http.StatusOK},
+		{"/scim/v2/ServiceProviderConfig", "wrong", http.StatusUnauthorized},
+		{"/v1/version", "scim-secret", http.StatusUnauthorized},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		req.Header.Set("Authorization", "Bearer "+tc.token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Errorf("%s token %q: got %d, want %d", tc.path, tc.token, rec.Code, tc.want)
+		}
+	}
+}
 
 func (f fakeDB) Ping(context.Context) error { return f.err }
 
@@ -99,6 +133,17 @@ func TestEveryOperationDeclaresPermission(t *testing.T) {
 	}
 }
 
+func TestBackupDocumentedInOpenAPI(t *testing.T) {
+	_, a := New(Deps{Version: "x"})
+	item := a.OpenAPI().Paths["/v1/admin/backup"]
+	if item == nil || item.Post == nil || item.Post.Extensions["x-permission"] != string(PermInstanceAdmin) {
+		t.Fatal("backup POST is not documented with administrator permission")
+	}
+	if r := item.Post.Responses["200"]; r == nil || r.Content["application/x-tar"] == nil {
+		t.Fatal("backup tar response is not documented")
+	}
+}
+
 func TestRegisterPanicsWithoutPermission(t *testing.T) {
 	defer func() {
 		if recover() == nil {
@@ -172,6 +217,7 @@ func TestMetricsAccessModes(t *testing.T) {
 		t.Error("a token-protected /metrics must refuse missing and wrong tokens")
 	}
 	do(withToken, "GET", "/v1/version") // produces a labelled request metric
+	do(withToken, "METHOD_RANDOM", "/v1/version")
 	rec := get(withToken, "s3cret-token")
 	if rec.Code != 200 {
 		t.Fatalf("with the token: %d", rec.Code)
@@ -183,6 +229,9 @@ func TestMetricsAccessModes(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `route="/v1/version"`) {
 		t.Error("requests are labelled by route pattern")
+	}
+	if strings.Contains(rec.Body.String(), `method="METHOD_RANDOM"`) || !strings.Contains(rec.Body.String(), `method="_OTHER"`) {
+		t.Error("unknown methods must use the bounded _OTHER label")
 	}
 	if get(public, "").Code != 200 {
 		t.Error("the public flag removes authentication")

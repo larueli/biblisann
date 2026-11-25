@@ -39,7 +39,7 @@ func post(ctx context.Context, d Doer, target string, body []byte, headers map[s
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
 	if err != nil {
-		return err
+		return errors.New("invalid target URL")
 	}
 	for k, v := range headers {
 		req.Header.Set(k, clean(v))
@@ -135,7 +135,7 @@ func (w WebPush) Send(ctx context.Context, ch dbsqlc.NotificationChannel, m Mess
 		&webpush.Options{HTTPClient: w.HTTP, Subscriber: w.Subject, VAPIDPublicKey: w.PublicKey,
 			VAPIDPrivateKey: w.PrivateKey, TTL: 24 * 3600, Urgency: webpush.UrgencyNormal})
 	if err != nil {
-		return err
+		return errors.New("push delivery failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {

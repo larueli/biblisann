@@ -153,7 +153,11 @@ func TestMCPEndToEnd(t *testing.T) {
 	sum := sha256.Sum256([]byte(verifier))
 	oreq := oauth.Request{ClientID: cid, RedirectURI: "https://client.example/cb", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]),
 		CodeChallengeMethod: "S256", Scope: "read"}
-	redir, err := oauthSvc.Approve(ctx, u.ID, oreq, []string{"read"}, nil)
+	session, err := a.OpenSessionFor(ctx, u.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	redir, err := oauthSvc.Approve(ctx, u.ID, session.Token, oreq, []string{"read"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

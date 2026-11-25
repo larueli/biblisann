@@ -12,6 +12,7 @@ import (
 )
 
 const oidcCookie = "bb_oidc"
+const oidcLinkCookie = "bb_oidc_link"
 
 // registerOIDC adds the single sign-on endpoints when a provider is configured.
 func (s *Server) registerOIDC(a huma.API, mux *http.ServeMux) {
@@ -32,6 +33,41 @@ func (s *Server) registerOIDC(a huma.API, mux *http.ServeMux) {
 			if s.OIDC != nil {
 				out.Body.Enabled, out.Body.Label = true, s.OIDC.Label()
 			}
+			return out, nil
+		})
+	Register(a, huma.Operation{OperationID: "oidc-link", Method: http.MethodPost, Path: "/v1/auth/oidc/link",
+		Summary: "Link the signed-in account to a verified single sign-on identity", Tags: []string{"auth"}}, PermAuthenticated,
+		func(ctx context.Context, _ *struct{}) (*struct {
+			SetCookie http.Cookie `header:"Set-Cookie"`
+			Body      struct {
+				URL string `json:"url"`
+			}
+		}, error) {
+			if s.OIDC == nil {
+				return nil, huma.Error404NotFound("not found")
+			}
+			sess := SessionFrom(ctx)
+			if sess == nil {
+				return nil, huma.Error403Forbidden("a browser session is required")
+			}
+			if err := s.requireStepUp(ctx); err != nil {
+				return nil, err
+			}
+			if err := s.throttle(ctx, "oidc-link", sess.UserID.String()); err != nil {
+				return nil, err
+			}
+			url, state, err := s.OIDC.BeginLink(ctx, sess.UserID, sessionTokenFrom(ctx))
+			if err != nil {
+				return nil, huma.Error502BadGateway("the identity provider is unavailable")
+			}
+			out := &struct {
+				SetCookie http.Cookie `header:"Set-Cookie"`
+				Body      struct {
+					URL string `json:"url"`
+				}
+			}{}
+			out.SetCookie = http.Cookie{Name: oidcLinkCookie, Value: state, Path: "/v1/auth/oidc", MaxAge: 600, HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode}
+			out.Body.URL = url
 			return out, nil
 		})
 	if s.OIDC == nil {
@@ -58,6 +94,9 @@ func (s *Server) registerOIDC(a huma.API, mux *http.ServeMux) {
 	})
 	s.registerOIDCStepUp(mux)
 	mux.HandleFunc("GET /v1/auth/oidc/callback", func(w http.ResponseWriter, r *http.Request) {
+		if s.finishOIDCLink(w, r) {
+			return
+		}
 		if s.finishOIDCStepUp(w, r) {
 			return
 		}
@@ -90,4 +129,27 @@ func (s *Server) registerOIDC(a huma.API, mux *http.ServeMux) {
 		http.SetCookie(w, newSessionCookie(s.secure, sess.Token, sess.ExpiresAt))
 		http.Redirect(w, r, "/", http.StatusFound)
 	})
+}
+
+func (s *Server) finishOIDCLink(w http.ResponseWriter, r *http.Request) bool {
+	c, err := r.Cookie(oidcLinkCookie)
+	if err != nil {
+		return false
+	}
+	state := r.URL.Query().Get("state")
+	if state == "" || subtle.ConstantTimeCompare([]byte(c.Value), []byte(state)) != 1 {
+		return false
+	}
+	http.SetCookie(w, &http.Cookie{Name: oidcLinkCookie, Value: "", Path: "/v1/auth/oidc", MaxAge: -1, HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteLaxMode})
+	sess, token, ok := s.cookieSession(r)
+	if !ok || r.URL.Query().Get("error") != "" {
+		http.Redirect(w, r, "/settings?oidc_link=failed", http.StatusFound)
+		return true
+	}
+	if err := s.OIDC.CompleteLink(r.Context(), r.URL.Query().Get("code"), state, sess.UserID, token); err != nil {
+		http.Redirect(w, r, "/settings?oidc_link=failed", http.StatusFound)
+		return true
+	}
+	http.Redirect(w, r, "/settings?oidc_link=ok", http.StatusFound)
+	return true
 }

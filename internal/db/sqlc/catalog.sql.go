@@ -397,7 +397,7 @@ const listEditionsToRefresh = `-- name: ListEditionsToRefresh :many
 SELECT e.id FROM editions e
 WHERE NOT e.sync_excluded AND e.isbn13 IS NOT NULL
   AND ($1::uuid IS NULL OR EXISTS (SELECT 1 FROM instances i WHERE i.edition_id = e.id AND i.library_id = $1::uuid))
-  AND ($2::boolean OR e.sync_status = 'not_found' OR (e.sync_status = '' AND e.provenance = '{}'::jsonb))
+  AND ($2::boolean OR e.sync_status IN ('not_found', 'skipped') OR (e.sync_status = '' AND e.provenance = '{}'::jsonb))
   AND ($3::boolean OR e.synced_at IS NULL OR e.synced_at < now() - interval '7 days')
 ORDER BY e.synced_at NULLS FIRST, e.id LIMIT $4::int
 `

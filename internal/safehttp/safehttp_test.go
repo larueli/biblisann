@@ -142,6 +142,37 @@ func TestRedirectToBadSchemeIsRefused(t *testing.T) {
 	}
 }
 
+func TestRedirectProtectsCredentialsAndBodies(t *testing.T) {
+	c := newClient(Options{}, allowAll)
+	for _, tc := range []struct {
+		name, start, target string
+		body, auth          bool
+		allowed             bool
+	}{
+		{"downgrade", "https://example.org/start", "http://example.org/end", false, false, false},
+		{"credential to other origin", "https://example.org/start", "https://other.example.org/end", false, true, false},
+		{"body to other origin", "https://example.org/start", "https://other.example.org/end", true, false, false},
+		{"credential same origin", "https://example.org/start", "https://example.org/end", false, true, true},
+		{"public redirect", "https://example.org/start", "https://other.example.org/end", false, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var body io.Reader
+			if tc.body {
+				body = strings.NewReader("payload")
+			}
+			start, _ := http.NewRequest(http.MethodGet, tc.start, body)
+			if tc.auth {
+				start.Header.Set("Authorization", "Bearer secret")
+			}
+			target, _ := http.NewRequest(http.MethodGet, tc.target, nil)
+			err := c.http.CheckRedirect(target, []*http.Request{start})
+			if (err == nil) != tc.allowed {
+				t.Errorf("redirect error = %v", err)
+			}
+		})
+	}
+}
+
 func TestTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -178,6 +209,10 @@ func TestUserAgentAndErrorsDoNotLeakQuery(t *testing.T) {
 	_, err = New(Options{}).Get(context.Background(), "http://127.0.0.1:1/x?api_key=SECRET")
 	if err == nil || strings.Contains(err.Error(), "SECRET") {
 		t.Errorf("error must not leak the query string: %v", err)
+	}
+	_, err = New(Options{}).Get(context.Background(), "http://127.0.0.1:1/SECRET")
+	if err == nil || strings.Contains(err.Error(), "SECRET") {
+		t.Errorf("error must not leak capability paths: %v", err)
 	}
 }
 

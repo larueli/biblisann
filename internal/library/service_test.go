@@ -34,6 +34,9 @@ func (e *env) user(t *testing.T, email string) (context.Context, uuid.UUID) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if n, err := dbsqlc.New(e.pool).VerifyUserEmail(context.Background(), dbsqlc.VerifyUserEmailParams{ID: u.ID, Email: email}); err != nil || n != 1 {
+		t.Fatalf("verify fixture address: %d %v", n, err)
+	}
 	return authz.With(context.Background(), &authz.Principal{UserID: u.ID, Email: email, Via: "session"}), u.ID
 }
 
@@ -43,6 +46,34 @@ func (e *env) edition(t *testing.T, uid uuid.UUID, isbn, title string, authors .
 		t.Fatal(err)
 	}
 	return ed
+}
+
+func TestUnverifiedAddressCannotReceiveShareOrGroupMembership(t *testing.T) {
+	e := newEnv(t)
+	owner, _ := e.user(t, "owner@example.org")
+	u, err := e.auth.Register(context.Background(), "unverified@example.org", "tulips in the garden", "Reader")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib, err := e.lib.CreateLibrary(owner, "Home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.lib.ShareWithUser(owner, lib.ID, u.Email, library.Grant{Role: "read"}); err != nil {
+		t.Fatal(err)
+	}
+	recipient := authz.With(context.Background(), &authz.Principal{UserID: u.ID, Via: "session"})
+	if _, err := e.lib.GetLibrary(recipient, lib.ID); !errors.Is(err, authz.ErrNotFound) {
+		t.Fatalf("unverified account received access: %v", err)
+	}
+	admin := authz.With(context.Background(), &authz.Principal{UserID: u.ID, IsAdmin: true, Via: "session"})
+	group, err := e.lib.CreateGroup(admin, "Readers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.lib.SetGroupMember(admin, group.ID, u.Email, true); !errors.Is(err, library.ErrInvalid) {
+		t.Fatalf("unverified account added to group: %v", err)
+	}
 }
 
 func TestMembershipAndDenyByDefault(t *testing.T) {
@@ -134,6 +165,42 @@ func TestIdempotentAdd(t *testing.T) {
 	}
 	if _, err := e.lib.AddInstance(ctx, lib.ID, library.InstanceInput{EditionID: ed.ID}, "short"); !errors.Is(err, library.ErrInvalid) {
 		t.Errorf("short key: %v", err)
+	}
+}
+
+func TestScanReplayChecksLibraryAndInput(t *testing.T) {
+	e := newEnv(t)
+	ctx, uid := e.user(t, "reader@example.org")
+	lib, _ := e.lib.CreateLibrary(ctx, "First")
+	other, _ := e.lib.CreateLibrary(ctx, "Second")
+	ed := e.edition(t, uid, "9782070612758", "A book")
+	inst, err := e.lib.AddInstance(ctx, lib.ID, library.InstanceInput{EditionID: ed.ID}, "replay-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := e.lib.ReplayedInstance(ctx, lib.ID, "978-2-07-061275-8", nil, "replay-key")
+	if err != nil || replay == nil || replay.ID != inst.ID {
+		t.Fatalf("same request: %v %v", replay, err)
+	}
+	for _, tc := range []struct {
+		name      string
+		libraryID uuid.UUID
+		isbn      string
+		place     *uuid.UUID
+	}{
+		{"other library", other.ID, "9782070612758", nil},
+		{"other ISBN", lib.ID, "9780306406157", nil},
+		{"other place", lib.ID, "9782070612758", &other.ID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := e.lib.ReplayedInstance(ctx, tc.libraryID, tc.isbn, tc.place, "replay-key"); !errors.Is(err, library.ErrIdempotencyConflict) {
+				t.Errorf("got %v, want conflict", err)
+			}
+		})
+	}
+	restricted := authz.With(context.Background(), &authz.Principal{UserID: uid, Scopes: []string{"write"}, LibraryIDs: []uuid.UUID{other.ID}})
+	if _, err := e.lib.ReplayedInstance(restricted, lib.ID, "9782070612758", nil, "replay-key"); !errors.Is(err, authz.ErrNotFound) {
+		t.Errorf("restricted token: %v", err)
 	}
 }
 
