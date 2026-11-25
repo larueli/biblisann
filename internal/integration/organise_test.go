@@ -299,3 +299,28 @@ func TestSharedLoansAreManagedByEveryEditor(t *testing.T) {
 		t.Errorf("administrator returns it: %v", err)
 	}
 }
+
+func TestLoanFeedDropsLibrariesTheOwnerLeft(t *testing.T) {
+	e := newEnv(t)
+	ctx, uid := e.user(t, "a@example.org")
+	editor, editorID := e.user(t, "b@example.org")
+	lib, _ := e.lib.CreateLibrary(ctx, "Home")
+	if err := e.lib.ShareWithUser(ctx, lib.ID, "b@example.org", library.Grant{Role: "edit"}); err != nil {
+		t.Fatal(err)
+	}
+	ed := e.book(t, uid, "", "Dune", "", nil)
+	inst, _ := e.lib.AddInstance(ctx, lib.ID, library.InstanceInput{EditionID: ed.ID}, "")
+	due := time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(24 * time.Hour)
+	if _, err := e.loans.Lend(editor, loans.LendInput{InstanceID: inst.ID, Counterparty: "Paul", DueOn: &due}); err != nil {
+		t.Fatal(err)
+	}
+	if ev, err := e.loans.FeedEvents(context.Background(), editorID, "en"); err != nil || len(ev) != 1 {
+		t.Fatalf("feed before leaving: %d %v", len(ev), err)
+	}
+	if err := e.lib.UnshareUser(ctx, lib.ID, editorID); err != nil {
+		t.Fatal(err)
+	}
+	if ev, err := e.loans.FeedEvents(context.Background(), editorID, "en"); err != nil || len(ev) != 0 {
+		t.Errorf("feed after leaving: %d %v", len(ev), err)
+	}
+}

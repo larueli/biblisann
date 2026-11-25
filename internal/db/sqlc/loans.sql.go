@@ -634,8 +634,13 @@ func (q *Queries) OpenLoansDueBy(ctx context.Context, dueOn *time.Time) ([]OpenL
 const openLoansForFeed = `-- name: OpenLoansForFeed :many
 SELECT l.id, l.title, l.direction, l.due_on, l.counterparty, c.name AS contact_name
 FROM loans l LEFT JOIN contacts c ON c.id = l.contact_id
-WHERE l.owner_id = $1 AND l.returned_on IS NULL AND l.due_on IS NOT NULL ORDER BY l.due_on
+WHERE l.owner_id = $1 AND l.library_id = ANY($2::uuid[]) AND l.returned_on IS NULL AND l.due_on IS NOT NULL ORDER BY l.due_on
 `
+
+type OpenLoansForFeedParams struct {
+	OwnerID uuid.UUID
+	Column2 []uuid.UUID
+}
 
 type OpenLoansForFeedRow struct {
 	ID           uuid.UUID
@@ -646,8 +651,8 @@ type OpenLoansForFeedRow struct {
 	ContactName  *string
 }
 
-func (q *Queries) OpenLoansForFeed(ctx context.Context, ownerID uuid.UUID) ([]OpenLoansForFeedRow, error) {
-	rows, err := q.db.Query(ctx, openLoansForFeed, ownerID)
+func (q *Queries) OpenLoansForFeed(ctx context.Context, arg OpenLoansForFeedParams) ([]OpenLoansForFeedRow, error) {
+	rows, err := q.db.Query(ctx, openLoansForFeed, arg.OwnerID, arg.Column2)
 	if err != nil {
 		return nil, err
 	}

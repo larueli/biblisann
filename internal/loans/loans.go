@@ -254,7 +254,20 @@ func (s *Service) List(ctx context.Context, includeReturned bool) ([]dbsqlc.List
 // FeedEvents returns calendar events for the open loans of a user. It is used by the calendar
 // feed, which authenticates with a feed token instead of a session, so it takes the user ID.
 func (s *Service) FeedEvents(ctx context.Context, userID uuid.UUID, locale string) ([]ics.Event, error) {
-	rows, err := s.q.OpenLoansForFeed(ctx, userID)
+	// Only loans of libraries where the owner still holds loan.write: a feed token must not keep
+	// leaking titles and borrowers after someone left a library.
+	libs, err := s.q.ListLibrariesForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	as := authz.With(ctx, &authz.Principal{UserID: userID, Via: "session"})
+	ids := make([]uuid.UUID, 0, len(libs))
+	for _, l := range libs {
+		if _, err := s.access.RequirePerm(as, nil, l.ID, authz.PermLoan); err == nil {
+			ids = append(ids, l.ID)
+		}
+	}
+	rows, err := s.q.OpenLoansForFeed(ctx, dbsqlc.OpenLoansForFeedParams{OwnerID: userID, Column2: ids})
 	if err != nil {
 		return nil, err
 	}

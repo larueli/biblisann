@@ -44,7 +44,7 @@ INSERT INTO loan_notifications (loan_id, kind, bucket) VALUES ($1, $2, $3) ON CO
 -- name: OpenLoansForFeed :many
 SELECT l.id, l.title, l.direction, l.due_on, l.counterparty, c.name AS contact_name
 FROM loans l LEFT JOIN contacts c ON c.id = l.contact_id
-WHERE l.owner_id = $1 AND l.returned_on IS NULL AND l.due_on IS NOT NULL ORDER BY l.due_on;
+WHERE l.owner_id = $1 AND l.library_id = ANY($2::uuid[]) AND l.returned_on IS NULL AND l.due_on IS NOT NULL ORDER BY l.due_on;
 
 -- name: CreateChannel :one
 -- Only email channels wait for a confirmation code; every other kind is usable at once.
