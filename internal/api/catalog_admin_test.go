@@ -34,6 +34,22 @@ func TestCatalogAdministration(t *testing.T) {
 		t.Errorf("refresh of an excluded edition: %d", st)
 	}
 
+	// a book no provider knows is a normal outcome, and the exclusion still applies to it
+	_, unknown := admin.w("POST", "/v1/editions", map[string]any{"isbn": "9780306406157", "title": "Obscure pamphlet", "authors": []string{"Nobody"}})
+	unknownPath := "/v1/editions/" + unknown["id"].(string)
+	st, out = admin.w("POST", unknownPath+"/refresh", nil)
+	if st != 200 || out["sync_status"] != "not_found" || out["title"] != "Obscure pamphlet" || out["synced_at"] == nil {
+		t.Fatalf("refresh of an unknown ISBN: %d %v", st, out)
+	}
+	_, noisbn := admin.w("POST", "/v1/editions", map[string]any{"title": "Hand-written notebook"})
+	if st, out = admin.w("POST", "/v1/editions/"+noisbn["id"].(string)+"/refresh", nil); st != 200 || out["sync_status"] != "no_isbn" {
+		t.Fatalf("refresh without ISBN: %d %v", st, out)
+	}
+	admin.w("PUT", unknownPath+"/sync-excluded", map[string]any{"excluded": true})
+	if st, _ = admin.w("POST", unknownPath+"/refresh", nil); st != 409 {
+		t.Errorf("refresh of an excluded unknown book: %d", st)
+	}
+
 	// still held by a copy: cannot be deleted
 	if st, _ = admin.w("DELETE", path, nil); st != 409 {
 		t.Errorf("delete of a held edition: %d", st)

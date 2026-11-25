@@ -12,7 +12,7 @@ The **Shelves** page draws a shelf: a place is the shelf, the places inside it a
 
 ## Fixing the shared catalog (administrators)
 
-Book data is shared by every library on the server. Under a book's actions, instance administrators see a **Shared catalog** panel: edit the title or authors by hand (API: `PATCH /v1/editions/{id}`; edited fields are locked and never overwritten), **refresh from providers** (replaces only fields that were not edited by hand), and **exclude from provider refreshes** when a provider returns nonsense for a book. `DELETE /v1/editions/{id}` removes an edition no library holds any more.
+Book data is shared by every library on the server. Under a book's actions, instance administrators see a **Shared catalog** panel: edit the title or authors by hand (API: `PATCH /v1/editions/{id}`; edited fields are locked and never overwritten), **refresh from providers** (replaces only fields that were not edited by hand; a book no provider knows, or without ISBN, is not an error: it keeps its data and shows "no provider knows this book", and you can exclude it from further refreshes), and **exclude from provider refreshes** when a provider returns nonsense for a book. `DELETE /v1/editions/{id}` removes an edition no library holds any more.
 
 ## Places, labels and inventory
 

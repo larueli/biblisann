@@ -112,6 +112,11 @@ export function CatalogAdmin({ editionId }: { editionId: string }) {
           {t("catalogAdmin.exclude")}
         </label>
       </div>
+      {edition.data?.sync_status && (
+        <p role="status" className={muted}>
+          {t(`catalogAdmin.status.${edition.data.sync_status}`)}
+        </p>
+      )}
       {err && <p role="alert">{err.message}</p>}
     </fieldset>
   );

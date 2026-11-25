@@ -344,7 +344,12 @@
     "editAuthors": "Authors, separated by commas",
     "save": "Save by hand",
     "refresh": "Refresh from providers",
-    "exclude": "Exclude from provider refreshes"
+    "exclude": "Exclude from provider refreshes",
+    "status": {
+      "updated": "Refreshed from providers.",
+      "not_found": "No provider knows this book. Its data is kept as it is; exclude it from refreshes if you do not want it checked again.",
+      "no_isbn": "No ISBN, so there is nothing to look up. Its data is kept as it is."
+    }
   },
   "bulk": {
     "title": "Add a list of ISBNs",

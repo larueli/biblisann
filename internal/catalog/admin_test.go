@@ -25,7 +25,7 @@ func TestAdministrationIsDeniedByDefault(t *testing.T) {
 		if _, err := s.SetSyncExcluded(ctx, id, true); err == nil {
 			t.Errorf("%s: SetSyncExcluded allowed", name)
 		}
-		if _, err := s.Refresh(ctx, id); err == nil {
+		if _, _, err := s.Refresh(ctx, id); err == nil {
 			t.Errorf("%s: Refresh allowed", name)
 		}
 		if err := s.Delete(ctx, id); err == nil {

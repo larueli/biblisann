@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/moby/moby/api/types/container"
@@ -38,13 +39,17 @@ var (
 	counter atomic.Int64
 )
 
+// start launches the container. Rootless Docker occasionally hands out a host port another test
+// package just took ("address already in use"): that is transient, so it retries a few times.
 func start(ctx context.Context) {
-	ctr, err := postgres.Run(ctx, image(),
-		postgres.WithDatabase("postgres"), postgres.WithUsername("test"), postgres.WithPassword("test"),
-		// Small and fast: this host may have little RAM and no swap.
-		testcontainers.WithCmdArgs("-c", "shared_buffers=16MB", "-c", "max_connections=50", "-c", "fsync=off", "-c", "work_mem=2MB"),
-		testcontainers.WithHostConfigModifier(func(hc *container.HostConfig) { hc.Memory = 384 << 20; hc.MemorySwap = 384 << 20 }),
-		postgres.BasicWaitStrategies())
+	var ctr *postgres.PostgresContainer
+	var err error
+	for attempt := 0; attempt < 4; attempt++ {
+		if ctr, err = run(ctx); err == nil {
+			break
+		}
+		time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
+	}
 	if err != nil {
 		startEr = err
 		return
@@ -55,6 +60,15 @@ func start(ctx context.Context) {
 		return
 	}
 	admin, startEr = pgxpool.New(ctx, dsn)
+}
+
+func run(ctx context.Context) (*postgres.PostgresContainer, error) {
+	return postgres.Run(ctx, image(),
+		postgres.WithDatabase("postgres"), postgres.WithUsername("test"), postgres.WithPassword("test"),
+		// Small and fast: this host may have little RAM and no swap.
+		testcontainers.WithCmdArgs("-c", "shared_buffers=16MB", "-c", "max_connections=50", "-c", "fsync=off", "-c", "work_mem=2MB"),
+		testcontainers.WithHostConfigModifier(func(hc *container.HostConfig) { hc.Memory = 384 << 20; hc.MemorySwap = 384 << 20 }),
+		postgres.BasicWaitStrategies())
 }
 
 // Pool returns a pool on a new migrated database.

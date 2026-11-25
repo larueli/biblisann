@@ -438,7 +438,7 @@ export interface paths {
         put?: never;
         /**
          * Ask the providers again (administrators)
-         * @description Replaces the fields that were not edited by hand. 409 when the edition is excluded from refreshes, 422 without ISBN or when no provider knows it.
+         * @description Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn, and can be excluded from future refreshes. 409 when the edition is excluded, 502 when every provider failed.
          */
         post: operations["refresh-edition"];
         delete?: never;
@@ -1921,6 +1921,13 @@ export interface components {
             subtitle?: string;
             /** @description True: provider refreshes skip this edition. */
             sync_excluded: boolean;
+            /**
+             * @description Result of the last provider refresh: updated, not_found (no provider knows the ISBN) or no_isbn (nothing to look up).
+             * @enum {string}
+             */
+            sync_status?: "updated" | "not_found" | "no_isbn";
+            /** Format: date-time */
+            synced_at?: string;
             title: string;
             work_id: string;
         };
@@ -4157,6 +4164,15 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

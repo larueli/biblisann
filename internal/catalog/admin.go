@@ -17,10 +17,16 @@ import (
 
 // Errors of the administrator operations.
 var (
-	ErrSyncExcluded = errors.New("this edition is excluded from provider refreshes")
-	ErrNoISBN       = errors.New("this edition has no ISBN to look up")
-	ErrInUse        = errors.New("a library still holds copies of this edition")
-	ErrNothingFound = errors.New("no provider knows this ISBN")
+	ErrSyncExcluded         = errors.New("this edition is excluded from provider refreshes")
+	ErrProvidersUnavailable = errors.New("no provider answered, try again later")
+	ErrInUse                = errors.New("a library still holds copies of this edition")
+)
+
+// Results of a provider refresh.
+const (
+	StatusUpdated  = "updated"
+	StatusNotFound = "not_found" // no provider knows the ISBN
+	StatusNoISBN   = "no_isbn"   // nothing to look up
 )
 
 // ManualProvider is the provenance of a field an administrator edited by hand.
@@ -150,26 +156,31 @@ func (s *Service) SetSyncExcluded(ctx context.Context, id uuid.UUID, excluded bo
 
 // Refresh asks the providers again and replaces the fields that are not locked by a manual edit.
 // Fields no provider knows are kept. An edition excluded from refreshes is never touched.
-func (s *Service) Refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSettings) (dbsqlc.Edition, error) {
+func (s *Service) Refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSettings) (dbsqlc.Edition, string, error) {
 	if err := adminOnly(ctx); err != nil {
-		return dbsqlc.Edition{}, err
+		return dbsqlc.Edition{}, "", err
 	}
 	e, err := s.Get(ctx, id)
 	if err != nil {
-		return e, err
+		return e, "", err
 	}
 	if e.SyncExcluded {
-		return e, ErrSyncExcluded
+		return e, "", ErrSyncExcluded
 	}
+	// A book providers cannot know (no ISBN, or an ISBN nobody lists) is a normal outcome, not an
+	// error: the refresh records it, keeps the data as it is, and the administrator can exclude it.
 	if e.Isbn13 == nil {
-		return e, ErrNoISBN
+		return s.recordSync(ctx, e, StatusNoISBN)
 	}
 	if err := s.q.DeleteProviderCacheForKey(ctx, *e.Isbn13); err != nil { // an administrator wants fresh answers
-		return e, err
+		return e, "", err
 	}
-	draft, _ := s.providerDraft(ctx, *e.Isbn13, layers...)
+	draft, failed := s.providerDraft(ctx, *e.Isbn13, layers...)
 	if draft == nil {
-		return e, ErrNothingFound
+		if len(failed) > 0 {
+			return e, "", ErrProvidersUnavailable // we do not know: do not record "not found"
+		}
+		return s.recordSync(ctx, e, StatusNotFound)
 	}
 	prov := map[string]Provenance{}
 	_ = json.Unmarshal(e.Provenance, &prov)
@@ -224,9 +235,18 @@ func (s *Service) Refresh(ctx context.Context, id uuid.UUID, layers ...*LookupSe
 	}
 	if e.Title == "" || len(e.Title) > 1000 || len(e.Authors) > 50 ||
 		tooLong(EditionInput{Subtitle: e.Subtitle, Authors: e.Authors, Publisher: e.Publisher, Language: e.Language, Description: e.Description, Series: e.SeriesName}) {
-		return e, ErrInvalidEdition
+		return e, "", ErrInvalidEdition
 	}
-	return s.store(ctx, e, prov, locked)
+	stored, err := s.store(ctx, e, prov, locked)
+	if err != nil {
+		return stored, "", err
+	}
+	return s.recordSync(ctx, stored, StatusUpdated)
+}
+
+func (s *Service) recordSync(ctx context.Context, e dbsqlc.Edition, status string) (dbsqlc.Edition, string, error) {
+	out, err := s.q.SetEditionSyncResult(ctx, dbsqlc.SetEditionSyncResultParams{ID: e.ID, SyncStatus: status})
+	return out, status, err
 }
 
 // Delete removes an edition no library holds any more.

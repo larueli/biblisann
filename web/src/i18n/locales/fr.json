@@ -344,7 +344,12 @@
     "editAuthors": "Auteurs, séparés par des virgules",
     "save": "Enregistrer à la main",
     "refresh": "Actualiser depuis les fournisseurs",
-    "exclude": "Exclure des actualisations des fournisseurs"
+    "exclude": "Exclure des actualisations des fournisseurs",
+    "status": {
+      "updated": "Actualisé depuis les fournisseurs.",
+      "not_found": "Aucun fournisseur ne connaît ce livre. Ses données sont conservées telles quelles ; excluez-le des actualisations pour ne plus le vérifier.",
+      "no_isbn": "Pas d'ISBN, donc rien à chercher. Ses données sont conservées telles quelles."
+    }
   },
   "bulk": {
     "title": "Ajouter une liste d'ISBN",

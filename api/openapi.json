@@ -879,6 +879,19 @@
             "description": "True: provider refreshes skip this edition.",
             "type": "boolean"
           },
+          "sync_status": {
+            "description": "Result of the last provider refresh: updated, not_found (no provider knows the ISBN) or no_isbn (nothing to look up).",
+            "enum": [
+              "updated",
+              "not_found",
+              "no_isbn"
+            ],
+            "type": "string"
+          },
+          "synced_at": {
+            "format": "date-time",
+            "type": "string"
+          },
           "title": {
             "type": "string"
           },
@@ -4838,7 +4851,7 @@
     },
     "/v1/editions/{id}/refresh": {
       "post": {
-        "description": "Replaces the fields that were not edited by hand. 409 when the edition is excluded from refreshes, 422 without ISBN or when no provider knows it.",
+        "description": "Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn, and can be excluded from future refreshes. 409 when the edition is excluded, 502 when every provider failed.",
         "operationId": "refresh-edition",
         "parameters": [
           {
@@ -4920,6 +4933,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "502": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Bad Gateway"
           }
         },
         "summary": "Ask the providers again (administrators)",

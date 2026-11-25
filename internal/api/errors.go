@@ -49,8 +49,8 @@ func mapError(log *slog.Logger, err error) error {
 		return huma.Error422UnprocessableEntity(weak.Error())
 	case errors.Is(err, catalog.ErrSyncExcluded), errors.Is(err, catalog.ErrInUse):
 		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, catalog.ErrNoISBN), errors.Is(err, catalog.ErrNothingFound):
-		return huma.Error422UnprocessableEntity(err.Error())
+	case errors.Is(err, catalog.ErrProvidersUnavailable):
+		return huma.NewError(http.StatusBadGateway, err.Error())
 	case errors.Is(err, auth.ErrNoPassword):
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, auth.ErrInvalidCode), errors.Is(err, auth.ErrInvalidToken):

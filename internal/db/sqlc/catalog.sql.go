@@ -29,7 +29,7 @@ INSERT INTO editions (work_id, isbn13, isbn10, ean, title, subtitle, authors, pu
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
         lower(immutable_unaccent(concat_ws(' ', $5::text, $6::text, array_to_string($7::text[], ' '), $8::text, $2::text, $10::text))),
         $17)
-RETURNING id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded
+RETURNING id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded, sync_status, synced_at
 `
 
 type CreateEditionParams struct {
@@ -97,6 +97,8 @@ func (q *Queries) CreateEdition(ctx context.Context, arg CreateEditionParams) (E
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SyncExcluded,
+		&i.SyncStatus,
+		&i.SyncedAt,
 	)
 	return i, err
 }
@@ -144,7 +146,7 @@ func (q *Queries) DeleteProviderCacheForKey(ctx context.Context, key string) err
 }
 
 const findIsbnlessEdition = `-- name: FindIsbnlessEdition :one
-SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded FROM editions
+SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded, sync_status, synced_at FROM editions
 WHERE work_id = $1 AND isbn13 IS NULL AND publisher = $2 AND language = $3
   AND published_year IS NOT DISTINCT FROM $4::int
 ORDER BY created_at LIMIT 1
@@ -189,6 +191,8 @@ func (q *Queries) FindIsbnlessEdition(ctx context.Context, arg FindIsbnlessEditi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SyncExcluded,
+		&i.SyncStatus,
+		&i.SyncedAt,
 	)
 	return i, err
 }
@@ -245,7 +249,7 @@ func (q *Queries) GetCoverSHA(ctx context.Context, id uuid.UUID) ([]byte, error)
 }
 
 const getEdition = `-- name: GetEdition :one
-SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded FROM editions WHERE id = $1
+SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded, sync_status, synced_at FROM editions WHERE id = $1
 `
 
 func (q *Queries) GetEdition(ctx context.Context, id uuid.UUID) (Edition, error) {
@@ -275,12 +279,14 @@ func (q *Queries) GetEdition(ctx context.Context, id uuid.UUID) (Edition, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SyncExcluded,
+		&i.SyncStatus,
+		&i.SyncedAt,
 	)
 	return i, err
 }
 
 const getEditionByISBN13 = `-- name: GetEditionByISBN13 :one
-SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded FROM editions WHERE isbn13 = $1
+SELECT id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded, sync_status, synced_at FROM editions WHERE isbn13 = $1
 `
 
 func (q *Queries) GetEditionByISBN13(ctx context.Context, isbn13 *string) (Edition, error) {
@@ -310,6 +316,8 @@ func (q *Queries) GetEditionByISBN13(ctx context.Context, isbn13 *string) (Editi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SyncExcluded,
+		&i.SyncStatus,
+		&i.SyncedAt,
 	)
 	return i, err
 }
@@ -384,7 +392,7 @@ func (q *Queries) PutProviderCache(ctx context.Context, arg PutProviderCachePara
 }
 
 const searchEditions = `-- name: SearchEditions :many
-SELECT e.id, e.work_id, e.isbn13, e.isbn10, e.ean, e.title, e.subtitle, e.authors, e.publisher, e.published_year, e.language, e.pages, e.description, e.series_name, e.series_position, e.cover_id, e.provenance, e.locked_fields, e.search_text, e.created_by, e.created_at, e.updated_at, e.sync_excluded FROM editions e
+SELECT e.id, e.work_id, e.isbn13, e.isbn10, e.ean, e.title, e.subtitle, e.authors, e.publisher, e.published_year, e.language, e.pages, e.description, e.series_name, e.series_position, e.cover_id, e.provenance, e.locked_fields, e.search_text, e.created_by, e.created_at, e.updated_at, e.sync_excluded, e.sync_status, e.synced_at FROM editions e
 WHERE to_tsvector('simple', e.search_text) @@ websearch_to_tsquery('simple', lower(immutable_unaccent($1::text)))
    OR e.search_text ILIKE '%' || lower(immutable_unaccent($1::text)) || '%'
    OR word_similarity(lower(immutable_unaccent($1::text)), e.search_text) >= 0.4
@@ -430,6 +438,8 @@ func (q *Queries) SearchEditions(ctx context.Context, arg SearchEditionsParams) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.SyncExcluded,
+			&i.SyncStatus,
+			&i.SyncedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -456,7 +466,7 @@ func (q *Queries) SetEditionCoverIfMissing(ctx context.Context, arg SetEditionCo
 }
 
 const setEditionSyncExcluded = `-- name: SetEditionSyncExcluded :one
-UPDATE editions SET sync_excluded = $2, updated_at = now() WHERE id = $1 RETURNING id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded
+UPDATE editions SET sync_excluded = $2, updated_at = now() WHERE id = $1 RETURNING id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded, sync_status, synced_at
 `
 
 type SetEditionSyncExcludedParams struct {
@@ -491,6 +501,50 @@ func (q *Queries) SetEditionSyncExcluded(ctx context.Context, arg SetEditionSync
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SyncExcluded,
+		&i.SyncStatus,
+		&i.SyncedAt,
+	)
+	return i, err
+}
+
+const setEditionSyncResult = `-- name: SetEditionSyncResult :one
+UPDATE editions SET sync_status = $2, synced_at = now() WHERE id = $1 RETURNING id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded, sync_status, synced_at
+`
+
+type SetEditionSyncResultParams struct {
+	ID         uuid.UUID
+	SyncStatus string
+}
+
+func (q *Queries) SetEditionSyncResult(ctx context.Context, arg SetEditionSyncResultParams) (Edition, error) {
+	row := q.db.QueryRow(ctx, setEditionSyncResult, arg.ID, arg.SyncStatus)
+	var i Edition
+	err := row.Scan(
+		&i.ID,
+		&i.WorkID,
+		&i.Isbn13,
+		&i.Isbn10,
+		&i.Ean,
+		&i.Title,
+		&i.Subtitle,
+		&i.Authors,
+		&i.Publisher,
+		&i.PublishedYear,
+		&i.Language,
+		&i.Pages,
+		&i.Description,
+		&i.SeriesName,
+		&i.SeriesPosition,
+		&i.CoverID,
+		&i.Provenance,
+		&i.LockedFields,
+		&i.SearchText,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SyncExcluded,
+		&i.SyncStatus,
+		&i.SyncedAt,
 	)
 	return i, err
 }
@@ -502,7 +556,7 @@ UPDATE editions SET
     provenance = $13, locked_fields = $14,
     search_text = lower(immutable_unaccent(concat_ws(' ', $2::text, $3::text, array_to_string($4::text[], ' '), $5::text, isbn13, $7::text))),
     updated_at = now()
-WHERE id = $1 RETURNING id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded
+WHERE id = $1 RETURNING id, work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year, language, pages, description, series_name, series_position, cover_id, provenance, locked_fields, search_text, created_by, created_at, updated_at, sync_excluded, sync_status, synced_at
 `
 
 type UpdateEditionMetadataParams struct {
@@ -564,6 +618,8 @@ func (q *Queries) UpdateEditionMetadata(ctx context.Context, arg UpdateEditionMe
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SyncExcluded,
+		&i.SyncStatus,
+		&i.SyncedAt,
 	)
 	return i, err
 }

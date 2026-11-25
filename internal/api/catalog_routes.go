@@ -39,13 +39,15 @@ type editionBody struct {
 	Provenance    map[string]catalog.Provenance `json:"provenance"`
 	LockedFields  []string                      `json:"locked_fields" nullable:"false" doc:"Fields edited by hand: provider refreshes never overwrite them."`
 	SyncExcluded  bool                          `json:"sync_excluded" doc:"True: provider refreshes skip this edition."`
+	SyncStatus    string                        `json:"sync_status,omitempty" enum:"updated,not_found,no_isbn" doc:"Result of the last provider refresh: updated, not_found (no provider knows the ISBN) or no_isbn (nothing to look up)."`
+	SyncedAt      *time.Time                    `json:"synced_at,omitempty"`
 }
 
 func toEditionBody(e dbsqlc.Edition) editionBody {
 	b := editionBody{ID: e.ID, WorkID: e.WorkID, ISBN13: e.Isbn13, ISBN10: e.Isbn10, Title: e.Title, Subtitle: e.Subtitle,
 		Authors: nonNil(e.Authors), Publisher: e.Publisher, PublishedYear: e.PublishedYear, Language: e.Language, Pages: e.Pages,
 		Description: e.Description, SeriesName: e.SeriesName, SeriesPos: e.SeriesPosition, Provenance: map[string]catalog.Provenance{},
-		LockedFields: nonNil(e.LockedFields), SyncExcluded: e.SyncExcluded}
+		LockedFields: nonNil(e.LockedFields), SyncExcluded: e.SyncExcluded, SyncStatus: e.SyncStatus, SyncedAt: e.SyncedAt}
 	if e.CoverID != nil {
 		b.CoverURL = "/v1/covers/" + e.CoverID.String()
 	}
@@ -264,8 +266,8 @@ func (s *Server) registerCatalog(a huma.API) {
 		})
 	Register(a, huma.Operation{OperationID: "refresh-edition", Method: http.MethodPost, Path: "/v1/editions/{id}/refresh",
 		Summary:     "Ask the providers again (administrators)",
-		Description: "Replaces the fields that were not edited by hand. 409 when the edition is excluded from refreshes, 422 without ISBN or when no provider knows it.",
-		Tags:        []string{"catalog"}, Errors: []int{404, 409, 422, 429}}, PermInstanceAdmin,
+		Description: "Replaces the fields that were not edited by hand. A book no provider knows (or without ISBN) is not an error: the edition is returned unchanged with sync_status not_found or no_isbn, and can be excluded from future refreshes. 409 when the edition is excluded, 502 when every provider failed.",
+		Tags:        []string{"catalog"}, Errors: []int{404, 409, 429, 502}}, PermInstanceAdmin,
 		func(ctx context.Context, in *struct {
 			ID uuid.UUID `path:"id"`
 		}) (*struct{ Body editionBody }, error) {
@@ -275,7 +277,7 @@ func (s *Server) registerCatalog(a huma.API) {
 			if err := s.throttle(ctx, "refresh-edition", ""); err != nil {
 				return nil, err
 			}
-			e, err := s.Catalog.Refresh(ctx, in.ID)
+			e, _, err := s.Catalog.Refresh(ctx, in.ID)
 			if err != nil {
 				return nil, mapError(s.Log, err)
 			}

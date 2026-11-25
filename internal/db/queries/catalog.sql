@@ -76,3 +76,6 @@ DELETE FROM editions WHERE id = $1;
 
 -- name: DeleteProviderCacheForKey :exec
 DELETE FROM provider_cache WHERE key = $1;
+
+-- name: SetEditionSyncResult :one
+UPDATE editions SET sync_status = $2, synced_at = now() WHERE id = $1 RETURNING *;

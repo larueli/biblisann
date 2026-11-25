@@ -72,6 +72,8 @@ type Edition struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	SyncExcluded   bool
+	SyncStatus     string
+	SyncedAt       *time.Time
 }
 
 type EmailQuotum struct {
