@@ -3,7 +3,9 @@ name: publish
 # Builds and publishes the container image and Helm chart for an EXISTING version tag.
 # Called by release-please.yml after a release is created; can also be run by hand to
 # republish a tag (Actions > publish > Run workflow).
-# Every action is pinned by commit SHA.
+# Every action is pinned by commit SHA. The jobs that push or sign run in the `publish` environment,
+# which only the main branch may deploy to. That stops an accidental dispatch from another ref, not
+# a collaborator who edits this file: users rely on `cosign verify` with the main identity.
 
 on:
   workflow_call:
@@ -28,8 +30,9 @@ concurrency:
 
 jobs:
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
+    environment: publish # limited to main (docs/dev/github.md): stops a dispatch from another ref
     permissions:
       contents: read
       packages: write   # push to GHCR
@@ -46,7 +49,8 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }} # full ref: a branch named like the tag must never win
+          fetch-depth: 0 # all history and tags: a shallow fetch would only see this tag
           fetch-tags: true # needed to know whether this tag is the newest of its line
           persist-credentials: false
 
@@ -125,16 +129,17 @@ jobs:
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
 
   chart:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     needs: image
+    environment: publish
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
+          ref: refs/tags/${{ inputs.tag }} # full ref: a branch named like the tag must never win
           persist-credentials: false
 
       - name: Check for chart

@@ -5,11 +5,11 @@ name: release
 # Merging that PR creates the tag and the GitHub Release; this same run then builds and
 # publishes the image and chart by calling publish.yml. Nothing is published on a plain commit.
 #
-# Token: with the default GITHUB_TOKEN, GitHub does not start CI on the release PR. The
-# releaser therefore authenticates as a GitHub App (ADR 0009): set the repository variable
-# RELEASE_APP_ID and the secret RELEASE_APP_PRIVATE_KEY (see docs/dev/github.md). Without the App
-# the token falls back to GITHUB_TOKEN, which fails when Actions may not create pull requests (the
-# recommended repository setting), and would not start CI on the release PR anyway.
+# Token: the releaser authenticates as a GitHub App (ADR 0009), because GITHUB_TOKEN may not open
+# pull requests (the recommended repository setting) and GitHub does not start CI on a PR opened
+# with it. Set the repository variable RELEASE_APP_ID and the secret RELEASE_APP_PRIVATE_KEY, stored
+# in the `release` environment (see docs/dev/github.md). If either is missing the run fails at the
+# token step on purpose: there is no fallback to GITHUB_TOKEN.
 # Publishing is called from this workflow instead of a tag trigger, because a tag created with
 # GITHUB_TOKEN would not start another workflow.
 
@@ -26,8 +26,9 @@ concurrency:
 
 jobs:
   release-please:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
+    environment: release # holds RELEASE_APP_PRIVATE_KEY and is limited to main (docs/dev/github.md)
     permissions:
       contents: write
       pull-requests: write
@@ -36,7 +37,6 @@ jobs:
       tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
       - id: app
-        if: vars.RELEASE_APP_ID != ''
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ vars.RELEASE_APP_ID }}
@@ -46,7 +46,7 @@ jobs:
       - id: rp
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          token: ${{ steps.app.outputs.token || github.token }}
+          token: ${{ steps.app.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 

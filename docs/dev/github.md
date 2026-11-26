@@ -1,6 +1,6 @@
 # GitHub setup
 
-The repository is `larueli/biblisann`, public. This page records how it was created and configured, so it can be rebuilt or moved without guessing. Do the sections in order: repository, settings, releaser App, first CI run, branch protection, first release.
+The repository is `larueli/biblisann`, public. This page records how it was created and configured, so it can be rebuilt or moved without guessing. Do the sections in order: repository, settings, releaser App, environments, first CI run, protection of `main` and of the tags, first release. (The App needs the environments, so create them before storing its key.)
 
 ## 1. Create the repository
 
@@ -68,21 +68,34 @@ Then:
 1. Copy the **App ID** (the number, not the Client ID).
 2. *Private keys* > **Generate a private key**: a `.pem` file downloads.
 3. *Install App* > your account > **Only select repositories** > `biblisann`.
-4. Repository > Settings > Secrets and variables > Actions: add the **variable** `RELEASE_APP_ID` and the **secret** `RELEASE_APP_PRIVATE_KEY` (the whole `.pem`, BEGIN and END lines included).
+4. Create the two environments of section 4 first, **with their branch rule**. Then add the variable `RELEASE_APP_ID` (repository variable, or environment `release`) and the secret `RELEASE_APP_PRIVATE_KEY` as a secret of the **`release` environment** (the whole `.pem`, BEGIN and END lines included), never as a repository secret: a repository secret can be read by a workflow run from any branch, an environment secret only by runs on `main`. If the key was ever stored as a *repository* secret, delete that secret, generate a new key (step 2), store the new key in the environment and delete the old key on the App page: the old one was readable from every branch.
 5. Delete the local `.pem`. Never paste it in a chat, an issue or a commit.
 6. Re-run the failed `release` run, or push to `main`: a release PR `chore(main): release 0.x` appears.
 
 To rotate the key: generate a new one, update the secret, delete the old key on the App page.
 
-## 4. Check the first CI run
+## 4. Environments
+
+Settings > Environments > New environment, twice. For both, set *Deployment branches and tags* to **Selected branches and tags** and add the single rule `main` (ref type **Branch**). No reviewers or wait timer are needed.
+
+| Environment | Used by | Why |
+|---|---|---|
+| `release` | the `release-please` job | holds `RELEASE_APP_PRIVATE_KEY`; only runs on `main` can read it |
+| `publish` | the `image` and `chart` jobs of `publish.yml` | stops a dispatch from a ref other than `main` (an accident, or a tag selected in the *Use workflow from* box). It does **not** stop a collaborator with write access, who can edit the workflow. Against that, users rely on `cosign verify` with the `@refs/heads/main` identity (a run from another branch signs with another identity). Required reviewers on `publish` would add a real gate, at the price of a manual approval for every release |
+
+Without the branch rule an environment protects nothing: GitHub creates a missing environment on first use, unrestricted. If an environment already exists because a run created it, add the branch rule **before** storing any secret in it. Check both after creating them. Until `release` exists, the release job fails at the token step: that is the safe outcome, there is no fallback. To republish a version, run the `publish` workflow from `main` (*Use workflow from: main*) and type the tag in the input.
+
+## 5. Check the first CI run
 
 Push, then open the Actions tab. The `ci` workflow runs the jobs `check`, `pr-title`, `image`, `helm`, `e2e` and `api-compat`; `docs`, `release` and CodeQL run too. Fix what fails before protecting `main`. `e2e` can be reproduced locally with `make e2e`.
 
-## 5. Protect `main`
+## 6. Protect `main` and the version tags
 
 Settings > Rules > Rulesets (or Branch protection) on `main`: require a pull request, require the status checks `check` and `pr-title` (add `image`, `helm`, `e2e` and `api-compat` once green), block force pushes and deletions, require linear history, require up-to-date branches.
 
-## 6. First release
+Also add a second ruleset on the tags: target `refs/tags/v*` (Settings > Rules > Rulesets > New tag ruleset), restrict creations, updates and deletions, and put only the releaser App on the bypass list. Without it anyone with write access can create, move or delete a version tag, and a manual republish builds whatever the tag points to at that moment. `publish.yml` checks the tag out by its full ref (`refs/tags/...`) so a branch with the same name can never be built instead.
+
+## 7. First release
 
 Merge the first feature PRs, wait for the release PR (`chore(main): release 0.1.0`), check its changelog, merge it. The `release` workflow tags, creates the GitHub Release and calls `publish.yml`. Check the signed image by digest against the exact trusted publishing workflow identity and issuer, as described in [Install](../user/install.md), and run `docker buildx imagetools inspect ghcr.io/larueli/biblisann:0.1.0`. Verify the actual identity for both the automatic reusable-workflow release and a manual republish before relying on the instructions: neither path has run on GitHub yet. The Helm chart is not currently signed. Versions stay `0.x` until Slice 3 is delivered.
 
@@ -105,7 +118,7 @@ Renaming within the same account and transferring to another account or organiza
 |---|---|---|
 | Releaser App | An App installed "only on this account" cannot be installed elsewhere. A rename in the same account keeps the installation. | After a transfer to another owner: create a new App there (section 3), replace `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, delete the old App and key. |
 | Container image and chart (GHCR) | Packages stay under the old owner and the old name. | The next release publishes under the new owner (`ghcr.io/<owner>/biblisann`, `ghcr.io/<owner>/charts/biblisann`). Set the new packages to public and link them to the repository. Announce the change in the release notes and keep the old packages for a while. |
-| Signature identity | The certificate identity contains `github.com/<owner>/<repo>/.github/workflows/publish.yml`. Old images still verify with the old identity only. | Update the `cosign verify` commands in `docs/user/install.md`, and verify a new release again (section 6). |
+| Signature identity | The certificate identity contains `github.com/<owner>/<repo>/.github/workflows/publish.yml`. Old images still verify with the old identity only. | Update the `cosign verify` commands in `docs/user/install.md`, and verify a new release again (section 7). |
 | Pages | The site URL changes (`https://<owner>.github.io/<repo>/`). | Set Pages to *GitHub Actions* again if needed, update `site_url`, and re-check the environment rule. |
 | Actions OIDC, rulesets, required checks | Can reference the old name. | Re-check the Actions tab, then re-add the required checks if they were dropped. |
 | Dependabot, code scanning | Settings move, but check that they are still enabled. | Settings > Advanced Security. |
