@@ -25,7 +25,8 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 - `BIBLISANN_DATA_DIR` replaces `BIBLISANN_COVERS_DIR`: local covers live under its `covers` subdirectory. Startup rejects the old setting; migration is in `docs/user/configuration.md`.
 - Logical backup v1 restore is refused; v2 preserves identity factors and requires the original key for TOTP. Existing email addresses default unverified, existing shares remain and need review; old SCIM accounts may need administrator-assisted recovery. Unscoped offline queues remain on disk but are not automatically replayed.
 
-- Weekly cover-file check (`internal/covercheck`, job `cover_check`, `biblisann covers-check`), branch `feat/covers-missing-check`; report only, no repair.
+- Weekly cover-file check (`internal/covercheck`, job `cover_check`, `biblisann covers-check`, Prometheus gauges); report only, no repair.
+- `SECURITY.md` and `CONTRIBUTING.md` added; redoc.html lint warning fixed; `make check` is green with `PATH=/usr/bin:$PATH`.
 
 ## Next
 

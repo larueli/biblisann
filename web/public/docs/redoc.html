@@ -1,7 +1,11 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Biblisann API: Redoc</title>
-<style>a[href*="redocly.com"] { display: none !important; } /* its logo is a third-party image, blocked by our policy */</style></head><body>
+<style>
+/* Its logo is a third-party image, blocked by our policy. !important beats the inline-styled-component rule. */
+/* biome-ignore lint/complexity/noImportantStyles: must override Redoc runtime styles */
+a[href*="redocly.com"] { display: none !important; }
+</style></head><body>
 <redoc spec-url="/openapi.json"></redoc>
 <script type="module" src="vendor/redoc.standalone.js"></script>
 </body></html>
