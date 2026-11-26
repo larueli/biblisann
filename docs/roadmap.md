@@ -76,6 +76,7 @@ Added during Slices 1 to 3 (defaults taken):
 - [x] **Valkey-backed cache**: decided against (no measured bottleneck; revocation risk). Revisit only with measurements. Sessions and OAuth grants can be revoked by users and administrators; reusing a refresh token revokes its whole family (ADR 0024).
 - [x] **GDPR**: per-user export, per-library export/import and account deletion exist (ADR 0022). Orphaned cover files are not yet garbage-collected.
 - [x] **Version policy**: stay on `0.x.y` until you have tested most of the product. Do not cut `1.0.0` before then; when ready, use `Release-As: 1.0.0`.
+- [ ] **Remove `"release-as": "0.1.0"`** from `release-please-config.json` right after the `0.1.0` release is cut (`docs/dev/versioning.md`). While it stays, every release PR is pinned to `0.1.0`.
 
 Still open (Slice 0 questions that are not resolved yet; the others were answered or implemented):
 

@@ -50,6 +50,7 @@
   "packages": {
     ".": {
       "package-name": "biblisann",
+      "release-as": "0.1.0",
       "extra-files": [
         "deploy/helm/biblisann/Chart.yaml"
       ]
