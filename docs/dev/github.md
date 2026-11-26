@@ -93,7 +93,7 @@ Push, then open the Actions tab. The `ci` workflow runs the jobs `check`, `pr-ti
 
 Settings > Rules > Rulesets (or Branch protection) on `main`: require a pull request, require the status checks `check` and `pr-title` (add `image`, `helm`, `e2e` and `api-compat` once green), block force pushes and deletions, require linear history, require up-to-date branches.
 
-Also add a second ruleset on the tags: target `refs/tags/v*` (Settings > Rules > Rulesets > New tag ruleset), restrict creations, updates and deletions, and put only the releaser App on the bypass list. Without it anyone with write access can create, move or delete a version tag, and a manual republish builds whatever the tag points to at that moment. `publish.yml` checks the tag out by its full ref (`refs/tags/...`) so a branch with the same name can never be built instead.
+Also add a second ruleset on the tags: target `refs/tags/v*` (Settings > Rules > Rulesets > New tag ruleset), tick **Restrict creations**, **Restrict updates**, **Restrict deletions** and **Block force pushes** (leave the other rules off), set the enforcement status to **Active**, and put only the releaser App on the bypass list (without it release-please cannot create the release tag). Without it anyone with write access can create, move or delete a version tag, and a manual republish builds whatever the tag points to at that moment. `publish.yml` checks the tag out by its full ref (`refs/tags/...`) so a branch with the same name can never be built instead.
 
 ## 7. First release
 

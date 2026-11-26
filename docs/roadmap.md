@@ -15,9 +15,9 @@ Rule for every slice: demoable end to end, tested, documented, `make check` gree
 - [x] `web/`: Vite + React + TS strict, i18n (en, fr), PWA manifest and service worker, generated API client, embedded in the binary
 - [x] `Dockerfile` (multi-stage, distroless, non-root, read-only root fs), Compose file (app + PostgreSQL), Helm chart skeleton (external DB and CNPG values, restricted PSS defaults)
 - [x] Hooks with prek: hook revs frozen, `zizmor` enabled, `make commit-lint` confirmed (needs the config staged). Still to confirm: `make hooks` and `make check` on a clean clone (`make check` is green in the task worktree)
-- [ ] CI green on GitHub Actions: jobs `check` (runs `make check`, same as local), `pr-title`, `image`, `helm`, `e2e` (written and pinned, never run on GitHub: needs the repository)
+- [ ] CI green on GitHub Actions: jobs `check` (runs `make check`, same as local), `pr-title`, `image`, `helm`, `e2e`, `api-compat`. First run done: `e2e` failed on two regressions, fixed locally (`/docs/` index, exact selectors); confirm green on the first push after the fix
 - [x] **Releaser, code side**: version in the build (`VERSION` build arg, `-ldflags -X`, `/v1/version`, OpenAPI `info.version`), Helm chart version through release-please `extra-files`, GitHub App token step in `release-please.yml`
-- [ ] **Releaser, GitHub side** (human, `docs/dev/github.md`): create the repository, the GitHub App (`RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`), squash-merge with the PR title as message, protect `main` (required checks `check` and `pr-title`); make the first release PR and merge it to validate end to end
+- [ ] **Releaser, GitHub side** (human, `docs/dev/github.md`): repository created and pushed, App created. Still to do: the `release` and `publish` environments (main-only), the App key stored as an environment secret (rotate it: it was a repository secret), the tag ruleset, branch protection (required checks `check` and `pr-title`); then make the first release PR and merge it to validate end to end
 - [ ] **Publish** (`publish.yml`, written; `Dockerfile` accepts `VERSION`): verify the multi-arch image and Helm chart pushed to GHCR with cosign signature, SBOM and provenance; verify with `cosign verify` and `docker buildx imagetools inspect`; test manual republish through `workflow_dispatch`
 - [ ] Task worktrees: `make task` works on Linux (used for this slice); confirm `AGENT=claude|codex` and WSL on the target machine. With `AGENT` set the script starts that agent interactively, so it fails in a non-interactive shell (expected); without it, it only prints the path.
 - [x] `golangci-lint` and Biome configs, Playwright smoke test
@@ -79,7 +79,7 @@ Added during Slices 1 to 3 (defaults taken):
 
 Still open (Slice 0 questions that are not resolved yet; the others were answered or implemented):
 
-- [ ] **GitHub actions needed from you**: create the repository, the releaser App, the branch protection and Pages (`docs/dev/github.md`), then push and open the PR. Nothing has been pushed (no remote is configured).
+- [ ] **GitHub actions needed from you**: environments, key rotation, tag ruleset and branch protection (`docs/dev/github.md`). The repository, the App and the other settings are done; `main` is pushed up to the first CI run, the later local commits are not.
 - [x] **TypeScript 7** for the app; the generator runs on TypeScript 5.9 in `web/tools/openapi-gen` (ADR 0005).
 - [x] **shadcn/ui**: Button, Input and Dialog live in `web/src/components/ui`; the shared class names in `app/ui.ts` derive from them, so existing screens follow. More components are added when a screen needs them.
 - [x] **Helm Pod Security**: `make helm-check` (kubeconform + kube-linter, in prek and CI).

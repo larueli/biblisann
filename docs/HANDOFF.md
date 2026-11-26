@@ -32,7 +32,7 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 
 0. Review the remaining operational limits above.
 
-1. Human: create the GitHub repository, releaser App and settings (`docs/dev/github.md`); push `main`; check CI (`e2e` job runs `scripts/e2e.sh`).
+1. Human, in order (`docs/dev/github.md`): create the `release` and `publish` environments (branch rule `main`), store the new App key as a `release` environment secret and delete the old repository secret and key, create the tag ruleset, push `main`, check CI is green (the earlier `e2e` failures are fixed locally), protect `main`, then merge the release PR that release-please opens. Dependabot has opened 5 PRs (#1 to #5): after the push, ask Dependabot to rebase them, then merge the ones whose CI is green, one at a time.
 2. Real-world validation list in `docs/roadmap.md` (open decisions): phone scanning first.
 3. Decide `1.0.0` timing (roadmap, "Version policy").
 
