@@ -22,6 +22,40 @@ func (q *Queries) CountEditionInstances(ctx context.Context, editionID uuid.UUID
 	return count, err
 }
 
+const coversForFileCheck = `-- name: CoversForFileCheck :many
+SELECT c.id, c.sha256, (SELECT count(*) FROM editions e WHERE e.cover_id = c.id)::bigint AS editions
+FROM covers c
+WHERE c.created_at < now() - make_interval(hours => $1::int)
+ORDER BY c.created_at
+`
+
+type CoversForFileCheckRow struct {
+	ID       uuid.UUID
+	Sha256   []byte
+	Editions int64
+}
+
+// Covers old enough that their files must exist, with the number of editions that show them.
+func (q *Queries) CoversForFileCheck(ctx context.Context, dollar_1 int32) ([]CoversForFileCheckRow, error) {
+	rows, err := q.db.Query(ctx, coversForFileCheck, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoversForFileCheckRow{}
+	for rows.Next() {
+		var i CoversForFileCheckRow
+		if err := rows.Scan(&i.ID, &i.Sha256, &i.Editions); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createEdition = `-- name: CreateEdition :one
 INSERT INTO editions (work_id, isbn13, isbn10, ean, title, subtitle, authors, publisher, published_year,
                       language, pages, description, series_name, series_position, cover_id, provenance,

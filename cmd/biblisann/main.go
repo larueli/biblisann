@@ -22,6 +22,7 @@ import (
 	"github.com/larueli/biblisann/internal/app"
 	"github.com/larueli/biblisann/internal/backup"
 	"github.com/larueli/biblisann/internal/config"
+	"github.com/larueli/biblisann/internal/covercheck"
 	"github.com/larueli/biblisann/internal/db"
 	"github.com/larueli/biblisann/internal/gc"
 	"github.com/larueli/biblisann/internal/storage"
@@ -43,6 +44,7 @@ commands:
   restore      load a backup from stdin into an empty instance
   migrate-covers <from> <to>  copy cover files between local and s3
   gc           remove unreferenced data now (also runs daily in the server)
+  covers-check report covers whose files are missing from the storage (exit 1 when any)
   vapid        generate Web Push (VAPID) keys
   version      print the version
 `
@@ -80,6 +82,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = migrateCovers(ctx, args[1:])
 	case "gc":
 		err = gcCmd(ctx, stdout)
+	case "covers-check":
+		err = coversCheckCmd(ctx, stdout)
 	case "vapid":
 		var priv, pub string
 		if priv, pub, err = webpush.GenerateVAPIDKeys(); err == nil {
@@ -252,4 +256,27 @@ func gcCmd(ctx context.Context, out io.Writer) error {
 	}
 	_, err = fmt.Fprintln(out, rep.String())
 	return err
+}
+
+func coversCheckCmd(ctx context.Context, out io.Writer) error {
+	cfg, pool, err := openPool(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	covers, err := app.OpenStorage(ctx, cfg, cfg.StorageBackend)
+	if err != nil {
+		return err
+	}
+	rep, err := covercheck.Run(ctx, pool, covers, newLogger(cfg, os.Stderr))
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out, rep.String()); err != nil {
+		return err
+	}
+	if rep.Missing() {
+		return errors.New("some cover files are missing")
+	}
+	return nil
 }

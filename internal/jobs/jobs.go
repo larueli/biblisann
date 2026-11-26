@@ -112,6 +112,12 @@ type MaintenanceArgs struct{}
 // Kind implements river.JobArgs.
 func (MaintenanceArgs) Kind() string { return "maintenance" }
 
+// CoverCheckArgs looks for covers whose files are missing from the cover storage.
+type CoverCheckArgs struct{}
+
+// Kind implements river.JobArgs.
+func (CoverCheckArgs) Kind() string { return "cover_check" }
+
 // Reminder classifies an open loan against today's date.
 type Reminder struct {
 	Kind   string // due_soon, due_today, overdue
@@ -138,7 +144,7 @@ type Client struct {
 }
 
 // New builds the client with its workers and periodic jobs. Call Start to begin processing.
-func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error, hc Syncer, us UserSyncer, mr MetadataRefresher) (*Client, error) {
+func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(context.Context) error, hc Syncer, us UserSyncer, mr MetadataRefresher, coverCheck func(context.Context) error) (*Client, error) {
 	workers := river.NewWorkers()
 	q := dbsqlc.New(pool)
 	access := library.NewService(pool)
@@ -171,6 +177,13 @@ func New(pool *pgxpool.Pool, d *notify.Dispatcher, log *slog.Logger, purge func(
 		// Weekly: books no provider knew get another chance (a provider may have learned them since).
 		periodic = append(periodic, river.NewPeriodicJob(river.PeriodicInterval(7*24*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
 			return MetadataRefreshArgs{}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true, ByPeriod: 6 * 24 * time.Hour}}
+		}, nil))
+	}
+	if coverCheck != nil {
+		river.AddWorker(workers, &coverCheckWorker{check: coverCheck})
+		// Weekly: a missing file is not urgent, but it should not stay unnoticed.
+		periodic = append(periodic, river.NewPeriodicJob(river.PeriodicInterval(7*24*time.Hour), func() (river.JobArgs, *river.InsertOpts) {
+			return CoverCheckArgs{}, &river.InsertOpts{UniqueOpts: river.UniqueOpts{ByArgs: true, ByPeriod: 6 * 24 * time.Hour}}
 		}, nil))
 	}
 	c, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
@@ -415,4 +428,15 @@ func (w *metadataRefreshWorker) Work(ctx context.Context, job *river.Job[Metadat
 	}
 	w.log.InfoContext(ctx, "metadata refresh", "checked", rep.Checked, "updated", rep.Updated, "not_found", rep.NotFound, "providers_unavailable", rep.Stopped)
 	return nil
+}
+
+type coverCheckWorker struct {
+	river.WorkerDefaults[CoverCheckArgs]
+	check func(context.Context) error
+}
+
+func (w *coverCheckWorker) Timeout(*river.Job[CoverCheckArgs]) time.Duration { return 15 * time.Minute }
+
+func (w *coverCheckWorker) Work(ctx context.Context, _ *river.Job[CoverCheckArgs]) error {
+	return w.check(ctx)
 }

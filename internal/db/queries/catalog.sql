@@ -93,3 +93,10 @@ ORDER BY e.synced_at NULLS FIRST, e.id LIMIT sqlc.arg('max_rows')::int;
 
 -- name: ListEditionLibraries :many
 SELECT DISTINCT library_id FROM instances WHERE edition_id = $1 AND deleted_at IS NULL;
+
+-- name: CoversForFileCheck :many
+-- Covers old enough that their files must exist, with the number of editions that show them.
+SELECT c.id, c.sha256, (SELECT count(*) FROM editions e WHERE e.cover_id = c.id)::bigint AS editions
+FROM covers c
+WHERE c.created_at < now() - make_interval(hours => $1::int)
+ORDER BY c.created_at;

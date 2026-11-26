@@ -27,6 +27,7 @@ import (
 	"github.com/larueli/biblisann/internal/backup"
 	"github.com/larueli/biblisann/internal/catalog"
 	"github.com/larueli/biblisann/internal/config"
+	"github.com/larueli/biblisann/internal/covercheck"
 	"github.com/larueli/biblisann/internal/db"
 	dbsqlc "github.com/larueli/biblisann/internal/db/sqlc"
 	"github.com/larueli/biblisann/internal/gc"
@@ -229,7 +230,16 @@ func Build(cfg config.Config, log *slog.Logger, pool *pgxpool.Pool) (http.Handle
 			log.InfoContext(ctx, "garbage collection", "removed", rep.String())
 		}
 		return nil
-	}, hcSyncer, userSyncer, catSvc)
+	}, hcSyncer, userSyncer, catSvc, func(ctx context.Context) error {
+		rep, err := covercheck.Run(ctx, pool, covers, log)
+		if err != nil {
+			return err
+		}
+		if rep.Missing() {
+			log.WarnContext(ctx, "cover files are missing", "report", rep.String())
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, nil, err
 	}

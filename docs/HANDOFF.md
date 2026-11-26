@@ -25,6 +25,8 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 - `BIBLISANN_DATA_DIR` replaces `BIBLISANN_COVERS_DIR`: local covers live under its `covers` subdirectory. Startup rejects the old setting; migration is in `docs/user/configuration.md`.
 - Logical backup v1 restore is refused; v2 preserves identity factors and requires the original key for TOTP. Existing email addresses default unverified, existing shares remain and need review; old SCIM accounts may need administrator-assisted recovery. Unscoped offline queues remain on disk but are not automatically replayed.
 
+- Weekly cover-file check (`internal/covercheck`, job `cover_check`, `biblisann covers-check`), branch `feat/covers-missing-check`; report only, no repair.
+
 ## Next
 
 0. Review the remaining operational limits above.
@@ -44,7 +46,7 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 - Huma does not flatten embedded structs in schemas: inline fields in response types.
 - Migrations 00015 to 00019 (step-up, single-use step-up, invitations, edition sync flag, channel confirmation) are new since the last handoff and still editable until the first release.
 - Not verified against real services: OIDC step-up (`auth_time` handling) with a real provider, SMTP delivery of invitation and confirmation mails, the RateLimit header draft against real clients.
-- Request bodies of imports are still buffered by Huma (64 MiB); only covers are spooled to disk. True streaming needs a plain handler (spec impact).
+- Request bodies of imports are still buffered by Huma (64 MiB); only covers are spooled to disk. True streaming needs a plain handler (spec impact); tracked in the roadmap.
 - Decisions the owner did not spell out and that are my choices: catalog edits are administrators only; email confirmation uses a code, not a link; quotas are request-based only (no storage quota).
 
 ## Commands that matter right now

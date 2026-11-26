@@ -61,6 +61,8 @@ an unavailable cover store can leave an imported edition without its cover.
 
 Covers live in the `covers` subdirectory of `BIBLISANN_DATA_DIR`, or in an S3-compatible bucket with `BIBLISANN_STORAGE_BACKEND=s3`. To move: set the S3 variables, run `biblisann migrate-covers local s3`, then switch the backend. The reverse works the same way. Use S3 for several replicas.
 
+**Missing cover files.** A weekly background job compares the covers known to the database with the files in the storage (local directory or bucket) and logs a warning `cover files are missing` with the counts, plus one `cover file missing` line per cover (the first 50). Run it on demand with `biblisann covers-check`: it prints the counts and exits with status 1 when a file is missing. It never changes data. Covers created in the last hour are skipped, because imports write their files after the database commit. To fix a missing cover, restore the files from a backup of the storage, or edit the book and attach a new cover.
+
 ## Take your data with you, and leave
 
 - **Export**: *My data > Download all my data* gives one `.tar` with your profile, contacts, lists, reading status, grades and every library you administer (copies, places, loans, covers). A single library: `GET /v1/libraries/{id}/export`. Libraries shared with you belong to their owners and are not included. The file contains no passwords or tokens.
