@@ -25,6 +25,10 @@ type Metrics struct {
 	requests *prometheus.CounterVec
 	duration *prometheus.HistogramVec
 	inflight prometheus.Gauge
+
+	coverMissing  *prometheus.GaugeVec
+	coverEditions prometheus.Gauge
+	coverLastRun  prometheus.Gauge
 }
 
 // New builds the registry with Go runtime, process, HTTP and (when pool is set) database pool metrics.
@@ -34,15 +38,27 @@ func New(version string, pool *pgxpool.Pool) *Metrics {
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "biblisann_http_requests_total", Help: "HTTP requests by method, route pattern and status."}, []string{"method", "route", "status"}),
 		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "biblisann_http_request_duration_seconds", Help: "HTTP request duration by method and route pattern.",
 			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}}, []string{"method", "route"}),
-		inflight: prometheus.NewGauge(prometheus.GaugeOpts{Name: "biblisann_http_requests_in_flight", Help: "Requests being served."}),
+		inflight:      prometheus.NewGauge(prometheus.GaugeOpts{Name: "biblisann_http_requests_in_flight", Help: "Requests being served."}),
+		coverMissing:  prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "biblisann_cover_files_missing", Help: "Covers whose file is missing from the storage at the last check, by kind (full, thumb)."}, []string{"kind"}),
+		coverEditions: prometheus.NewGauge(prometheus.GaugeOpts{Name: "biblisann_cover_check_editions_affected", Help: "Editions showing a cover with a missing file at the last check."}),
+		coverLastRun:  prometheus.NewGauge(prometheus.GaugeOpts{Name: "biblisann_cover_check_last_run_timestamp_seconds", Help: "Unix time of the last cover file check run by this process (0: none yet)."}),
 	}
 	info := prometheus.NewGauge(prometheus.GaugeOpts{Name: "biblisann_build_info", Help: "Build information.", ConstLabels: prometheus.Labels{"version": version}})
 	info.Set(1)
-	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}), m.requests, m.duration, m.inflight, info)
+	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}), m.requests, m.duration, m.inflight, m.coverMissing, m.coverEditions, m.coverLastRun, info)
 	if pool != nil {
 		reg.MustRegister(poolCollector{pool})
 	}
 	return m
+}
+
+// RecordCoverCheck publishes the result of a cover file check (see internal/covercheck). Only the
+// process that ran the job has values: with several replicas, aggregate with max().
+func (m *Metrics) RecordCoverCheck(missingFull, missingThumb int, editions int64, at time.Time) {
+	m.coverMissing.WithLabelValues("full").Set(float64(missingFull))
+	m.coverMissing.WithLabelValues("thumb").Set(float64(missingThumb))
+	m.coverEditions.Set(float64(editions))
+	m.coverLastRun.Set(float64(at.Unix()))
 }
 
 // Wrap records request metrics. Place it directly around the mux: the route pattern is only known
