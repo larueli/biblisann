@@ -19,7 +19,7 @@ Rule for every slice: demoable end to end, tested, documented, `make check` gree
 - [x] **Releaser, code side**: version in the build (`VERSION` build arg, `-ldflags -X`, `/v1/version`, OpenAPI `info.version`), Helm chart version through release-please `extra-files`, GitHub App token step in `release-please.yml`
 - [ ] **Releaser, GitHub side** (human, `docs/dev/github.md`): create the repository, the GitHub App (`RELEASE_APP_ID`, `RELEASE_APP_PRIVATE_KEY`), squash-merge with the PR title as message, protect `main` (required checks `check` and `pr-title`); make the first release PR and merge it to validate end to end
 - [ ] **Publish** (`publish.yml`, written; `Dockerfile` accepts `VERSION`): verify the multi-arch image and Helm chart pushed to GHCR with cosign signature, SBOM and provenance; verify with `cosign verify` and `docker buildx imagetools inspect`; test manual republish through `workflow_dispatch`
-- [ ] Task worktrees: `make task` works on Linux (used for this slice); confirm `AGENT=claude|codex` and WSL on the target machine
+- [ ] Task worktrees: `make task` works on Linux (used for this slice); confirm `AGENT=claude|codex` and WSL on the target machine. With `AGENT` set the script starts that agent interactively, so it fails in a non-interactive shell (expected); without it, it only prints the path.
 - [x] `golangci-lint` and Biome configs, Playwright smoke test
 - [x] `docs/dev/architecture.md` stub and `docs/user/` skeleton
 
@@ -94,12 +94,13 @@ Decisions taken (to be written into an ADR with the first implementing PR):
 - [x] Email notification channels: confirmed by a code mailed to the address; daily cap per user (`BIBLISANN_EMAIL_DAILY_CAP`).
 - [x] Loans visible and returnable by every member with `loan.write`; permission re-checked on return and listing after a member loses access.
 - [x] Step-up authentication (valid 5 minutes, also for OIDC users; single-use when the provider sends no `auth_time`) before: password change, TOTP enrollment, passkey add/change, token creation, account deletion, admin password set. SSO-only accounts cannot self-set a password; an administrator can.
-- [ ] Quotas with standard rate-limit headers (`RateLimit` / `RateLimit-Policy`, `Retry-After`) for API and bulk imports; the web UI slows down and shows progress to respect them. New feature: bulk add from a list of ISBNs. Account imports are streamed to disk.
+- [x] Quotas with standard rate-limit headers (`RateLimit` / `RateLimit-Policy`, `Retry-After`) for API and bulk imports; the web UI slows down and shows progress to respect them. New feature: bulk add from a list of ISBNs.
+- [ ] Stream account imports to disk: Huma still buffers import request bodies (64 MiB limit); only covers are spooled. True streaming needs a plain handler (spec impact).
 - [x] Helm: mount the metrics token as a file, or reference an existing Secret and key (sops, sealed secrets); the binary accepts the env var and the `_FILE` variant.
 - [x] Sharing: library sharing requires library admin. Sharing with an unknown email does nothing for non-instance-administrators (same answer as a known one); instance administrators are asked to confirm before an invitation (7-day link, emailed when SMTP is set) is created; the link also lets the invitee register when registration is closed.
 - [x] CI: kube-linter and kubeconform on the Helm chart through prek.
 - [x] shadcn/ui added to the web UI.
 - [x] Generator on TypeScript 5.9 in an isolated tool directory, application on TypeScript 7.
-- [x] From the review of ADR 0026: calendar feed filtered by current `loan.write`, `/mcp` and `/opds` metered (MCP `add_book` weighs 5), catalog administrator check in `internal/catalog`, step-up for `admin-delete-user`. Left as is on purpose: private contact names visible to other loan managers, no step-up for disabling users (reversible, needed during incidents). Idea not done: step-up for the full backup download (a plain GET handler).
+- [x] From the review of ADR 0026: calendar feed filtered by current `loan.write`, `/mcp` and `/opds` metered (MCP `add_book` weighs 5), catalog administrator check in `internal/catalog`, step-up for `admin-delete-user`. Left as is on purpose: private contact names visible to other loan managers, no step-up for disabling users (reversible, needed during incidents). Step-up for the full backup download was added later (ADR 0027).
 - [x] Metadata refresh of unknown books: weekly job, administrator-triggered runs per library or for the whole instance, per-book refresh, per-book opt-out (`sync_excluded`), result recorded per edition (`sync_status`, `synced_at`).
 - [x] Metadata refresh can be started by editors (one book, unknown books of their library) and library administrators (also known books); the whole server and manual edits stay with instance administrators.
