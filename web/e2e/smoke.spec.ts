@@ -34,8 +34,8 @@ test("scan to list: register, create a library, add a book by ISBN, find it", as
   await expect(page.getByRole("link", { name: "Scan" })).toBeVisible();
 
   await page.getByRole("link", { name: "Scan" }).click();
-  await page.getByLabel("ISBN").fill("978-2-07-061275-8");
-  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("ISBN", { exact: true }).fill("978-2-07-061275-8");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Added", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Back to the library" }).click();
@@ -62,7 +62,7 @@ test("scan to list: register, create a library, add a book by ISBN, find it", as
   await page.getByLabel("New group name").fill("Family");
   await page.getByRole("button", { name: "Create group" }).click();
   await expect(page.getByRole("button", { name: "Family" })).toBeVisible();
-  await page.getByText("E2E home").click(); // opens the sharing panel of the library
+  await page.locator("summary", { hasText: "E2E home" }).click(); // opens the sharing panel of the library
   await page.getByLabel("Profile name").fill("Contributor");
   await page.getByRole("button", { name: "Create the profile" }).click();
   await expect(page.getByText("Contributor")).toBeVisible();
