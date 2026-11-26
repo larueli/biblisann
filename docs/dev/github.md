@@ -25,7 +25,7 @@ release-please needs a token that lets CI run on its release PR (ADR 0009). Crea
 4. Install the App on `larueli/biblisann` only.
 5. In the repository: add the variable `RELEASE_APP_ID` (the App ID) and the secret `RELEASE_APP_PRIVATE_KEY` (the whole `.pem`). Delete the local `.pem` afterwards.
 
-Until this is done the `release` workflow falls back to `GITHUB_TOKEN`: it works, but GitHub does not start CI on the release PR.
+Until this is done the `release` workflow cannot work: it falls back to `GITHUB_TOKEN`, and with the recommended setting (Actions may not create pull requests) release-please fails with "GitHub Actions is not permitted to create or approve pull requests". Even if you allowed that setting, GitHub would not start CI on a PR opened with `GITHUB_TOKEN`. Create the App before expecting the first release PR.
 
 ## First release
 
