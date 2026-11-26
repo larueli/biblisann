@@ -25,6 +25,8 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 - `BIBLISANN_DATA_DIR` replaces `BIBLISANN_COVERS_DIR`: local covers live under its `covers` subdirectory. Startup rejects the old setting; migration is in `docs/user/configuration.md`.
 - Logical backup v1 restore is refused; v2 preserves identity factors and requires the original key for TOTP. Existing email addresses default unverified, existing shares remain and need review; old SCIM accounts may need administrator-assisted recovery. Unscoped offline queues remain on disk but are not automatically replayed.
 
+- `SECURITY.md` and `CONTRIBUTING.md` added (branch `docs/release-prep-community-files`, worktree `../biblisann-wt/release-prep-community-files`, not committed yet); redoc.html lint warning fixed; `make check` green with `PATH=/usr/bin:$PATH`.
+
 ## Next
 
 0. Review the remaining operational limits above.
