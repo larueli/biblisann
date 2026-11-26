@@ -12,6 +12,9 @@ func TestHandler(t *testing.T) {
 		"index.html":      {Data: []byte("<html>app</html>")},
 		"assets/app-1.js": {Data: []byte("js")},
 		"sw.js":           {Data: []byte("sw")},
+		"docs/index.html": {Data: []byte("<html>docs</html>")},
+		"docs/x.html":     {Data: []byte("x")},
+		"empty/x.html":    {Data: []byte("x")},
 	}
 	h := NewHandler(root)
 	tests := []struct {
@@ -26,6 +29,10 @@ func TestHandler(t *testing.T) {
 		{"service worker revalidates", "GET", "/sw.js", 200, "no-cache"},
 		{"missing file is 404", "GET", "/assets/missing.js", 404, ""},
 		{"traversal is cleaned to the SPA fallback", "GET", "/../../etc/passwd", 200, "no-cache"},
+		{"directory with an index serves it", "GET", "/docs/", 200, "no-cache"},
+		{"directory without slash redirects", "GET", "/docs", 301, ""},
+		{"directory without an index is not listed", "GET", "/empty/", 404, ""},
+		{"assets directory is not listed", "GET", "/assets/", 404, ""},
 		{"post refused", "POST", "/", 405, ""},
 	}
 	for _, tt := range tests {

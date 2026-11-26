@@ -36,7 +36,14 @@ func NewHandler(root fs.FS) http.Handler {
 		}
 		if st, err := fs.Stat(root, name); err != nil || (st.IsDir() && name != ".") {
 			if err == nil {
-				http.NotFound(w, r) // no directory listings
+				// A directory answers only with its own index.html (the API docs page at /docs/);
+				// there are never directory listings.
+				if _, idxErr := fs.Stat(root, name+"/index.html"); idxErr != nil {
+					http.NotFound(w, r)
+					return
+				}
+				setCacheHeaders(w, name+"/index.html")
+				files.ServeHTTP(w, r)
 				return
 			}
 			if name != "index.html" && path.Ext(name) != "" {
