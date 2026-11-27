@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -105,16 +106,21 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-func pageParams(r *http.Request) (start, count int) {
-	start, _ = strconv.Atoi(r.URL.Query().Get("startIndex"))
-	count, err := strconv.Atoi(r.URL.Query().Get("count"))
+func pageParams(r *http.Request) (int64, int32, int32) {
+	query := r.URL.Query()
+	start, _ := strconv.ParseInt(query.Get("startIndex"), 10, 64)
 	if start < 1 {
 		start = 1
 	}
+	offset := start - 1
+	if offset > math.MaxInt32 {
+		offset = math.MaxInt32
+	}
+	count, err := strconv.ParseInt(query.Get("count"), 10, 32)
 	if err != nil || count < 0 || count > 200 {
 		count = 100
 	}
-	return start, count
+	return offset + 1, int32(count), int32(offset)
 }
 
 // eqFilter extracts the value of a simple `attr eq "value"` filter; other filters are refused.
@@ -221,9 +227,9 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "invalidFilter", `only: userName eq "value"`)
 		return
 	}
-	start, count := pageParams(r)
+	start, limit, offset := pageParams(r)
 	total, _ := h.q.ScimCountUsers(r.Context(), name)
-	rows, err := h.q.ScimListUsers(r.Context(), dbsqlc.ScimListUsersParams{Column1: name, Limit: int32(count), Offset: int32(start - 1)})
+	rows, err := h.q.ScimListUsers(r.Context(), dbsqlc.ScimListUsersParams{Column1: name, Limit: limit, Offset: offset})
 	if err != nil {
 		writeErr(w, 500, "", "internal error")
 		return
@@ -463,9 +469,9 @@ func (h *Handler) listGroups(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "invalidFilter", `only: displayName eq "value"`)
 		return
 	}
-	start, count := pageParams(r)
+	start, limit, offset := pageParams(r)
 	total, _ := h.q.ScimCountGroups(r.Context(), name)
-	rows, err := h.q.ScimListGroups(r.Context(), dbsqlc.ScimListGroupsParams{Column1: name, Limit: int32(count), Offset: int32(start - 1)})
+	rows, err := h.q.ScimListGroups(r.Context(), dbsqlc.ScimListGroupsParams{Column1: name, Limit: limit, Offset: offset})
 	if err != nil {
 		writeErr(w, 500, "", "internal error")
 		return
