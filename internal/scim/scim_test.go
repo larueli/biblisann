@@ -105,6 +105,26 @@ func TestSCIMUsersAndGroups(t *testing.T) {
 	if st != 201 || len(g["members"].([]any)) != 1 {
 		t.Fatalf("create group %d %v", st, g)
 	}
+	for _, resource := range []string{"Users", "Groups"} {
+		t.Run(resource+" pagination", func(t *testing.T) {
+			e := *e
+			e.t = t
+			for _, page := range []struct {
+				query     string
+				wantStart float64
+			}{
+				{query: "startIndex=2147483648", wantStart: 2147483648},
+				{query: "startIndex=2147483649", wantStart: 2147483648},
+				{query: "startIndex=9223372036854775808", wantStart: 2147483648},
+				{query: "startIndex=-1&count=0", wantStart: 1},
+			} {
+				status, list := e.do("GET", "/scim/v2/"+resource+"?"+page.query, nil)
+				if status != http.StatusOK || list["startIndex"] != page.wantStart || list["itemsPerPage"] != float64(0) {
+					t.Errorf("%s: unexpected status %d or page %v", page.query, status, list)
+				}
+			}
+		})
+	}
 	gid := g["id"].(string)
 	st, g = e.do("PATCH", "/scim/v2/Groups/"+gid, map[string]any{"Operations": []map[string]any{{"op": "remove", "path": `members[value eq "` + id + `"]`}}})
 	if st != 200 || g["members"] != nil {

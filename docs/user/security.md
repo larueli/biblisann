@@ -24,6 +24,8 @@ API clients see `403` with the detail `step_up_required`; the answer to `GET /v1
 
 An administrator creates a provisioning token in Settings (*Create provisioning token (SCIM)*, shown once) and gives it, with `<BASE_URL>/scim/v2`, to the identity provider. Users are created without a password (they sign in through OIDC); "delete" in the provider deactivates the account.
 
+The Users and Groups list endpoints cap the one-based `startIndex` at 2,147,483,648, the last index supported by the database offset. Requests beyond that limit return the page at the cap.
+
 New SCIM-created accounts without credentials or sessions can link automatically on their first
 sign-in with a matching, verified provider email. Accounts provisioned before this protection was
 added cannot be identified safely as such; an administrator must help their owner regain local

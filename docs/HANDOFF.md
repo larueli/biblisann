@@ -20,6 +20,9 @@ Slices 0, 1, 2 and 3 are implemented on `main` (committed directly on `main` at 
 
 ## In progress
 
+- GitHub security alerts were triaged on `fix/github-security-alerts` in the primary checkout at the owner's request. CodeQL #2 and #3 are addressed by bounding SCIM pagination offsets for Users and Groups. CodeQL #1 is a false positive because the startup logger uses `Config.LogValue`, which excludes the reported secrets.
+- The eight open Dependabot alerts match installed versions, but their vulnerable paths are inapplicable here. Workbox passes fixed build-time globs to minimatch (#12). Stoplight Elements ships a prebuilt client-only HashRouter viewer of the generated OpenAPI document (#8, #9). The shipped bundle contains Lodash 4.18.1 and excludes the Postman dynamic-variable generators and Sentry SDK flagged by the lockfile (#4–#7, #10). GitHub reported no open secret-scanning alerts. Alert states were left untouched.
+
 - Security-audit fixes were made in the primary checkout at the owner's explicit request (ADR 0027). Imports use a shared transaction, backup downloads use step-up, traces omit request details, and release verification guidance is narrowed. Independent review and `make check` passed.
 - Remaining limits: imported covers are stored best-effort after the database commit; registration capacity can be unavailable for the 24-hour client grace period. The exact image-signature identity must be confirmed on the first real release and republish.
 - `BIBLISANN_DATA_DIR` replaces `BIBLISANN_COVERS_DIR`: local covers live under its `covers` subdirectory. Startup rejects the old setting; migration is in `docs/user/configuration.md`.
