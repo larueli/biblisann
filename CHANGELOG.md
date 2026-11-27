@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/larueli/biblisann/compare/v0.1.0...v0.1.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **release:** use version-only tags ([#8](https://github.com/larueli/biblisann/issues/8)) ([f9b1d0f](https://github.com/larueli/biblisann/commit/f9b1d0f8c452ef7f7aa43dba8853da67db9dff88))
+* **scim:** bound pagination offsets ([#10](https://github.com/larueli/biblisann/issues/10)) ([cb0c01c](https://github.com/larueli/biblisann/commit/cb0c01c9fb15e851c1e31d0bc20ea2861d09b067))
+
 ## 0.1.0 (2026-11-26)
 
 
