@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "simple",
   "include-v-in-tag": true,
+  "include-component-in-tag": false,
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
   "changelog-path": "CHANGELOG.md",
@@ -50,7 +51,6 @@
   "packages": {
     ".": {
       "package-name": "biblisann",
-      "release-as": "0.1.0",
       "extra-files": [
         "deploy/helm/biblisann/Chart.yaml"
       ]

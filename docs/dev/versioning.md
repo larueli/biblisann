@@ -55,9 +55,7 @@ Image tags: `X.Y.Z` (every release), `sha-<short>`, and the floating tags `X.Y`,
 
 To republish an existing tag (for example after a registry outage), run the `publish` workflow manually with the tag. To force a version (for example `1.0.0`), add a commit with a `Release-As: 1.0.0` footer.
 
-### First release pin (temporary)
-
-`release-please-config.json` carries `"release-as": "0.1.0"` on the `.` package so the first release is `0.1.0` whatever the commit history says. **Remove that line right after the `0.1.0` release is cut** (in the PR that follows the merge of the release PR). Left in place, it keeps forcing `0.1.0` on every later release PR.
+The release configuration excludes the component name from tags, so Release Please emits `vX.Y.Z`, matching the publisher. The first-release version pin was removed after `0.1.0`; subsequent versions follow commit history.
 
 ## Version in the binary
 
